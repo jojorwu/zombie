@@ -1,0 +1,29 @@
+{
+  "simulation": {
+    "map_width": 60,
+    "map_height": 40,
+    "tile_size": 16,
+    "day_length_ticks": 600,
+    "num_survivors": 20,
+    "num_zombies": 30,
+    "num_animals": 10,
+    "num_vehicles": 4,
+    "fps": 30
+  },
+  "evolution": {
+    "mutation_rate": 0.1,
+    "mutation_scale": 0.2,
+    "elite_fraction": 0.2
+  },
+  "survivor": {
+    "max_health": 100.0,
+    "max_hunger": 100.0,
+    "max_thirst": 100.0,
+    "max_sleep": 100.0,
+    "max_energy": 100.0,
+    "hunger_decay": 0.05,
+    "thirst_decay": 0.08,
+    "sleep_decay": 0.03,
+    "view_radius": 8
+  }
+}

@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+best_brain.pth
+test_brain.pth

@@ -21,6 +21,7 @@ class RendererUI:
         self.fog_of_war_enabled = False
         self.speed_multiplier = 1
         self.paused = False
+        self.view_z = 0  # Active height level (0, 1, 2)
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -32,6 +33,10 @@ class RendererUI:
                     self.paused = not self.paused
                 elif event.key == pygame.K_f:
                     self.fog_of_war_enabled = not self.fog_of_war_enabled
+                elif event.key == pygame.K_z:
+                    self.view_z = min(self.sim.world.num_levels - 1, self.view_z + 1)
+                elif event.key == pygame.K_x:
+                    self.view_z = max(0, self.view_z - 1)
                 elif event.key == pygame.K_1:
                     self.speed_multiplier = 1
                 elif event.key == pygame.K_2:
@@ -42,6 +47,7 @@ class RendererUI:
                     self.speed_multiplier = 20
                 elif event.key == pygame.K_TAB:
                     self.sim.selected_survivor_idx = (self.sim.selected_survivor_idx + 1) % len(self.sim.survivors)
+                    self.view_z = self.sim.survivors[self.sim.selected_survivor_idx].z
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = pygame.mouse.get_pos()
                 tx, ty = mx // self.tile_size, my // self.tile_size
@@ -49,11 +55,12 @@ class RendererUI:
                     best_idx = 0
                     min_d = 999.0
                     for idx, s in enumerate(self.sim.survivors):
-                        d = (s.x - tx)**2 + (s.y - ty)**2
+                        d = (s.x - tx)**2 + (s.y - ty)**2 + (s.z - self.view_z)**2 * 10
                         if d < min_d:
                             min_d = d
                             best_idx = idx
                     self.sim.selected_survivor_idx = best_idx
+                    self.view_z = self.sim.survivors[best_idx].z
 
     def render(self):
         self.screen.fill((20, 20, 20))
@@ -61,17 +68,19 @@ class RendererUI:
         visible_tiles = None
         sel_survivor = self.sim.survivors[self.sim.selected_survivor_idx]
         if self.fog_of_war_enabled and sel_survivor.is_alive:
-            visible_tiles = self.sim.world.compute_fog_of_war(sel_survivor.x, sel_survivor.y, radius=8)
+            visible_tiles = self.sim.world.compute_fog_of_war(sel_survivor.x, sel_survivor.y, radius=8, z=sel_survivor.z)
 
         light = self.sim.world.get_light_level()
+        cur_z = self.view_z
+
         for y in range(self.sim.world.height):
             for x in range(self.sim.world.width):
                 if visible_tiles is not None and (x, y) not in visible_tiles:
                     color = (10, 10, 10)
                 else:
-                    ttype = self.sim.world.grid[y, x]
-                    if ttype == TileType.BUILDING_FLOOR and (x, y) in self.sim.world.building_grid:
-                        btype = self.sim.world.building_grid[(x, y)]
+                    ttype = self.sim.world.grid[cur_z, y, x]
+                    if ttype == TileType.BUILDING_FLOOR and (x, y, cur_z) in self.sim.world.building_grid:
+                        btype = self.sim.world.building_grid[(x, y, cur_z)]
                         base_color = BUILDING_COLORS.get(btype, TILE_COLORS[ttype])
                     else:
                         base_color = TILE_COLORS[ttype]
@@ -85,7 +94,7 @@ class RendererUI:
                 pygame.draw.rect(self.screen, color, rect)
 
         for item in self.sim.items:
-            if not item.collected:
+            if not item.collected and item.z == cur_z:
                 ix, iy = int(item.x), int(item.y)
                 if visible_tiles is None or (ix, iy) in visible_tiles:
                     px = int(item.x * self.tile_size)
@@ -94,14 +103,15 @@ class RendererUI:
                     pygame.draw.circle(self.screen, color, (px, py), 3)
 
         for v in self.sim.vehicles:
-            vx, vy = int(v.x), int(v.y)
-            if visible_tiles is None or (vx, vy) in visible_tiles:
-                px = int(v.x * self.tile_size) - 6
-                py = int(v.y * self.tile_size) - 6
-                pygame.draw.rect(self.screen, (70, 130, 180), (px, py, 12, 12))
+            if v.z == cur_z:
+                vx, vy = int(v.x), int(v.y)
+                if visible_tiles is None or (vx, vy) in visible_tiles:
+                    px = int(v.x * self.tile_size) - 6
+                    py = int(v.y * self.tile_size) - 6
+                    pygame.draw.rect(self.screen, (70, 130, 180), (px, py, 12, 12))
 
         for a in self.sim.animals:
-            if a.is_alive:
+            if a.is_alive and a.z == cur_z:
                 ax, ay = int(a.x), int(a.y)
                 if visible_tiles is None or (ax, ay) in visible_tiles:
                     px = int(a.x * self.tile_size)
@@ -109,7 +119,7 @@ class RendererUI:
                     pygame.draw.circle(self.screen, (255, 192, 203), (px, py), 4)
 
         for z in self.sim.zombies:
-            if z.is_alive:
+            if z.is_alive and z.z == cur_z:
                 zx, zy = int(z.x), int(z.y)
                 if visible_tiles is None or (zx, zy) in visible_tiles:
                     px = int(z.x * self.tile_size)
@@ -117,7 +127,7 @@ class RendererUI:
                     pygame.draw.circle(self.screen, (178, 34, 34), (px, py), 5)
 
         for idx, s in enumerate(self.sim.survivors):
-            if s.is_alive:
+            if s.is_alive and s.z == cur_z:
                 sx, sy = int(s.x), int(s.y)
                 if visible_tiles is None or (sx, sy) in visible_tiles:
                     px = int(s.x * self.tile_size)
@@ -138,6 +148,7 @@ class RendererUI:
 
         draw_text("Zombie Neuroevolution (GRU)", self.bold_font, (255, 215, 0))
         draw_text(f"Gen: {self.sim.evolution_manager.generation}  Tick: {self.sim.world.current_tick}")
+        draw_text(f"View Level: {self.view_z + 1} / {self.sim.world.num_levels} [Z/X]")
         draw_text(f"Light level: {light:.2f}")
         draw_text(f"Speed: {self.speed_multiplier}x  (0=Fast Train)")
         draw_text(f"Fog of War [F]: {'ON' if self.fog_of_war_enabled else 'OFF'}")
@@ -150,6 +161,7 @@ class RendererUI:
 
         s = sel_survivor
         if s.is_alive:
+            draw_text(f"Floor/Level: {s.z + 1} / {self.sim.world.num_levels}")
             draw_text(f"Health: {s.health:.1f} / 100")
             draw_text(f"Hunger: {s.hunger:.1f} / 100")
             draw_text(f"Thirst: {s.thirst:.1f} / 100")
@@ -173,6 +185,7 @@ class RendererUI:
         draw_text("Hotkeys:", self.bold_font)
         draw_text(" [SPACE] Pause / Resume")
         draw_text(" [F] Toggle Fog of War")
+        draw_text(" [Z/X] Change View Height Level")
         draw_text(" [1/2/5/0] Speed Multipliers")
         draw_text(" [TAB] Switch Survivor")
         draw_text(" [Mouse Click] Select Survivor")

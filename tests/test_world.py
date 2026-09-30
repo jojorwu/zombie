@@ -7,10 +7,11 @@ from src.world import World, TileType
 
 class TestWorld(unittest.TestCase):
     def test_world_generation(self):
-        world = World(width=40, height=30, day_length_ticks=100)
+        world = World(width=40, height=30, day_length_ticks=100, num_levels=3)
         self.assertEqual(world.width, 40)
         self.assertEqual(world.height, 30)
-        self.assertEqual(world.grid.shape, (30, 40))
+        self.assertEqual(world.num_levels, 3)
+        self.assertEqual(world.grid.shape, (3, 30, 40))
 
     def test_day_night_cycle(self):
         world = World(width=20, height=20, day_length_ticks=100)

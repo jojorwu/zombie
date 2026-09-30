@@ -2,7 +2,14 @@ import json
 import argparse
 import time
 import os
+import sys
 from src.simulation import SimulationEngine
+
+def get_resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.abspath(relative_path)
 
 def main():
     parser = argparse.ArgumentParser(description="Zombie AI Neuroevolution Simulation")
@@ -11,7 +18,11 @@ def main():
     parser.add_argument("--ticks", type=int, default=1000, help="Number of ticks to run in headless mode")
     args = parser.parse_args()
 
-    with open(args.config, "r") as f:
+    config_path = get_resource_path(args.config) if not os.path.isabs(args.config) and not os.path.exists(args.config) else args.config
+    if not os.path.exists(config_path):
+        config_path = get_resource_path("config.json")
+
+    with open(config_path, "r") as f:
         config = json.load(f)
 
     sim = SimulationEngine(config)

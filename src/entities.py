@@ -10,18 +10,22 @@ class ResourceItem:
     MEDKIT = "medkit"
     WEAPON = "weapon"
 
+from src.world import TileType
+
 class ItemEntity:
-    def __init__(self, x, y, item_type, amount=1):
+    def __init__(self, x, y, item_type, amount=1, z=0):
         self.x = float(x)
         self.y = float(y)
+        self.z = int(z)
         self.item_type = item_type
         self.amount = amount
         self.collected = False
 
 class Vehicle:
-    def __init__(self, x, y, fuel=100.0, max_fuel=100.0):
+    def __init__(self, x, y, fuel=100.0, max_fuel=100.0, z=0):
         self.x = float(x)
         self.y = float(y)
+        self.z = int(z)
         self.fuel = fuel
         self.max_fuel = max_fuel
         self.speed = 0.3
@@ -31,9 +35,10 @@ class Vehicle:
         return self.driver is not None
 
 class Animal:
-    def __init__(self, x, y, hp=30.0):
+    def __init__(self, x, y, hp=30.0, z=0):
         self.x = float(x)
         self.y = float(y)
+        self.z = int(z)
         self.hp = hp
         self.max_hp = hp
         self.is_alive = True
@@ -46,13 +51,14 @@ class Animal:
         angle = random.uniform(0, 2 * math.pi)
         nx = self.x + math.cos(angle) * self.speed
         ny = self.y + math.sin(angle) * self.speed
-        if world.is_walkable(nx, ny):
+        if world.is_walkable(nx, ny, self.z):
             self.x, self.y = nx, ny
 
 class Zombie:
-    def __init__(self, x, y, hp=50.0):
+    def __init__(self, x, y, hp=50.0, z=0):
         self.x = float(x)
         self.y = float(y)
+        self.z = int(z)
         self.hp = hp
         self.max_hp = hp
         self.is_alive = True
@@ -70,30 +76,41 @@ class Zombie:
 
         for survivor in survivors:
             if survivor.is_alive and not survivor.in_vehicle:
-                dist = math.hypot(survivor.x - self.x, survivor.y - self.y)
+                dist = math.hypot(survivor.x - self.x, survivor.y - self.y) + abs(survivor.z - self.z) * 3.0
                 if dist < closest_dist:
                     closest_dist = dist
-                    self.target = (survivor.x, survivor.y)
+                    self.target = (survivor.x, survivor.y, survivor.z)
 
         # Move towards target or wander
         if self.target:
-            tx, ty = self.target
+            tx, ty, tz = self.target
             angle = math.atan2(ty - self.y, tx - self.x)
             nx = self.x + math.cos(angle) * self.speed
             ny = self.y + math.sin(angle) * self.speed
-            if world.is_walkable(nx, ny):
+
+            nz = self.z
+            ix, iy = int(self.x), int(self.y)
+            if 0 <= ix < world.width and 0 <= iy < world.height:
+                if tz > self.z and world.grid[self.z, iy, ix] == TileType.STAIRS:
+                    nz = min(world.num_levels - 1, self.z + 1)
+                elif tz < self.z and world.grid[self.z, iy, ix] == TileType.STAIRS:
+                    nz = max(0, self.z - 1)
+
+            if world.is_walkable(nx, ny, nz):
+                self.x, self.y, self.z = nx, ny, nz
+            elif world.is_walkable(nx, ny, self.z):
                 self.x, self.y = nx, ny
         else:
             if random.random() < 0.2:
                 angle = random.uniform(0, 2 * math.pi)
                 nx = self.x + math.cos(angle) * self.speed
                 ny = self.y + math.sin(angle) * self.speed
-                if world.is_walkable(nx, ny):
+                if world.is_walkable(nx, ny, self.z):
                     self.x, self.y = nx, ny
 
-        # Attack adjacent survivor
+        # Attack adjacent survivor on same z level
         for survivor in survivors:
-            if survivor.is_alive and not survivor.in_vehicle:
+            if survivor.is_alive and not survivor.in_vehicle and survivor.z == self.z:
                 dist = math.hypot(survivor.x - self.x, survivor.y - self.y)
                 if dist < 0.8:
                     survivor.take_damage(self.damage)
@@ -125,9 +142,10 @@ class CraftingSystem:
         return True
 
 class Survivor:
-    def __init__(self, x, y):
+    def __init__(self, x, y, z=0):
         self.x = float(x)
         self.y = float(y)
+        self.z = int(z)
         self.health = 100.0
         self.hunger = 100.0
         self.thirst = 100.0
@@ -182,7 +200,7 @@ class Survivor:
 
         self.score += 0.1
 
-    def move(self, dx, dy, world):
+    def move(self, dx, dy, world, dz=0):
         if not self.is_alive:
             return
         speed = 0.15
@@ -195,10 +213,17 @@ class Survivor:
 
         nx = self.x + dx * speed
         ny = self.y + dy * speed
-        if world.is_walkable(nx, ny):
+        target_z = max(0, min(world.num_levels - 1, int(round(self.z + dz))))
+
+        if world.is_walkable(nx, ny, target_z):
+            self.x, self.y = nx, ny
+            self.z = target_z
+            if self.in_vehicle:
+                self.in_vehicle.x, self.in_vehicle.y, self.in_vehicle.z = self.x, self.y, self.z
+        elif world.is_walkable(nx, ny, self.z):
             self.x, self.y = nx, ny
             if self.in_vehicle:
-                self.in_vehicle.x, self.in_vehicle.y = self.x, self.y
+                self.in_vehicle.x, self.in_vehicle.y, self.in_vehicle.z = self.x, self.y, self.z
 
     def perform_action(self, action, world, items, vehicles, zombies, animals, survivors):
         # Actions:
@@ -209,12 +234,14 @@ class Survivor:
         # 4 = Enter/Exit Vehicle
         # 5 = Sleep
         # 6 = Attack Zombie/Animal/Survivor
+        # 7 = Stairs Up (Go up floor)
+        # 8 = Stairs Down (Go down floor)
         if not self.is_alive:
             return
 
         if action == 1:  # Gather nearby items
             for item in items:
-                if not item.collected and math.hypot(item.x - self.x, item.y - self.y) < 1.2:
+                if not item.collected and item.z == self.z and math.hypot(item.x - self.x, item.y - self.y) < 1.2:
                     item.collected = True
                     self.inventory[item.item_type] = self.inventory.get(item.item_type, 0) + item.amount
                     self.score += 5.0
@@ -233,7 +260,7 @@ class Survivor:
                 self.in_vehicle = None
             else:
                 for v in vehicles:
-                    if not v.is_occupied() and math.hypot(v.x - self.x, v.y - self.y) < 1.5:
+                    if not v.is_occupied() and v.z == self.z and math.hypot(v.x - self.x, v.y - self.y) < 1.5:
                         if self.inventory.get(ResourceItem.FUEL, 0) > 0 and v.fuel < v.max_fuel:
                             fuel_needed = v.max_fuel - v.fuel
                             have_fuel = self.inventory[ResourceItem.FUEL] * 20.0
@@ -257,10 +284,9 @@ class Survivor:
                 attack_range = 1.5
                 damage = 60.0
 
-            # Attack Zombie
             attacked = False
             for z in zombies:
-                if z.is_alive and math.hypot(z.x - self.x, z.y - self.y) <= attack_range:
+                if z.is_alive and z.z == self.z and math.hypot(z.x - self.x, z.y - self.y) <= attack_range:
                     z.hp -= damage
                     if z.hp <= 0:
                         z.is_alive = False
@@ -269,10 +295,9 @@ class Survivor:
                     attacked = True
                     break
 
-            # Attack Animal
             if not attacked:
                 for a in animals:
-                    if a.is_alive and math.hypot(a.x - self.x, a.y - self.y) <= attack_range:
+                    if a.is_alive and a.z == self.z and math.hypot(a.x - self.x, a.y - self.y) <= attack_range:
                         a.hp -= damage
                         if a.hp <= 0:
                             a.is_alive = False
@@ -281,12 +306,23 @@ class Survivor:
                         attacked = True
                         break
 
-            # Attack Other Survivor
             if not attacked:
                 for other in survivors:
-                    if other is not self and other.is_alive and math.hypot(other.x - self.x, other.y - self.y) <= attack_range:
+                    if other is not self and other.is_alive and other.z == self.z and math.hypot(other.x - self.x, other.y - self.y) <= attack_range:
                         other.take_damage(damage)
                         if not other.is_alive:
                             self.kills += 1
                             self.score += 30.0
                         break
+
+        elif action == 7:  # Stairs Up
+            if self.z < world.num_levels - 1 and world.is_walkable(self.x, self.y, self.z + 1):
+                self.z += 1
+                if self.in_vehicle:
+                    self.in_vehicle.z = self.z
+
+        elif action == 8:  # Stairs Down
+            if self.z > 0 and world.is_walkable(self.x, self.y, self.z - 1):
+                self.z -= 1
+                if self.in_vehicle:
+                    self.in_vehicle.z = self.z

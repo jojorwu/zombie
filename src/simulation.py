@@ -42,41 +42,46 @@ class SimulationEngine:
 
         walkable_coords = []
         building_floors = []
-        for y in range(self.world.height):
-            for x in range(self.world.width):
-                if self.world.is_walkable(x, y):
-                    walkable_coords.append((x, y))
-                    if self.world.grid[y, x] == TileType.BUILDING_FLOOR:
-                        building_floors.append((x, y))
+        for z in range(self.world.num_levels):
+            for y in range(self.world.height):
+                for x in range(self.world.width):
+                    if self.world.is_walkable(x, y, z):
+                        walkable_coords.append((x, y, z))
+                        if self.world.grid[z, y, x] == TileType.BUILDING_FLOOR:
+                            building_floors.append((x, y, z))
 
         random.shuffle(walkable_coords)
         random.shuffle(building_floors)
 
-        # Spawn Survivors
+        # Ground-preferred coordinates for vehicles/animals
+        ground_walkable = [(x, y, z) for x, y, z in walkable_coords if z == 0]
+        random.shuffle(ground_walkable)
+
+        # Spawn Survivors (across height levels)
         for i in range(min(self.sim_cfg["num_survivors"], len(walkable_coords))):
             coord = walkable_coords.pop()
-            s = Survivor(coord[0] + 0.5, coord[1] + 0.5)
+            s = Survivor(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
             self.survivors.append(s)
 
-        # Spawn Zombies
+        # Spawn Zombies (across height levels)
         for _ in range(min(self.sim_cfg["num_zombies"], len(walkable_coords))):
             coord = walkable_coords.pop()
-            z = Zombie(coord[0] + 0.5, coord[1] + 0.5)
-            self.zombies.append(z)
+            z_ent = Zombie(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
+            self.zombies.append(z_ent)
 
         # Spawn Animals
-        for _ in range(min(self.sim_cfg["num_animals"], len(walkable_coords))):
-            coord = walkable_coords.pop()
-            a = Animal(coord[0] + 0.5, coord[1] + 0.5)
+        for _ in range(min(self.sim_cfg["num_animals"], len(ground_walkable))):
+            coord = ground_walkable.pop()
+            a = Animal(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
             self.animals.append(a)
 
         # Spawn Vehicles
-        for _ in range(min(self.sim_cfg["num_vehicles"], len(walkable_coords))):
-            coord = walkable_coords.pop()
-            v = Vehicle(coord[0] + 0.5, coord[1] + 0.5, fuel=random.uniform(30.0, 80.0))
+        for _ in range(min(self.sim_cfg["num_vehicles"], len(ground_walkable))):
+            coord = ground_walkable.pop()
+            v = Vehicle(coord[0] + 0.5, coord[1] + 0.5, fuel=random.uniform(30.0, 80.0), z=coord[2])
             self.vehicles.append(v)
 
-        # Spawn specialized loot in buildings
+        # Spawn specialized loot in buildings across floors
         for b in self.world.buildings:
             bx, by, bw, bh, btype = b["x"], b["y"], b["w"], b["h"], b["type"]
             loot_type = ResourceItem.FOOD
@@ -89,37 +94,40 @@ class SimulationEngine:
             elif btype == BuildingType.RESIDENTIAL:
                 loot_type = ResourceItem.FOOD if random.random() < 0.7 else ResourceItem.WATER
 
-            lx, ly = bx + 2, by + 1
-            if self.world.is_walkable(lx, ly):
-                self.items.append(ItemEntity(lx + 0.5, ly + 0.5, loot_type, amount=random.randint(1, 3)))
+            for floor_z in range(min(3, self.world.num_levels)):
+                lx, ly = bx + 2, by + 1
+                if self.world.is_walkable(lx, ly, floor_z):
+                    self.items.append(ItemEntity(lx + 0.5, ly + 0.5, loot_type, amount=random.randint(1, 3), z=floor_z))
 
-        # Spawn random outdoor items
+        # Spawn random outdoor/indoor items
         item_types = [ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL]
         for _ in range(min(30, len(walkable_coords))):
             coord = walkable_coords.pop()
             itype = random.choice(item_types)
-            item = ItemEntity(coord[0] + 0.5, coord[1] + 0.5, itype, amount=random.randint(1, 2))
+            item = ItemEntity(coord[0] + 0.5, coord[1] + 0.5, itype, amount=random.randint(1, 2), z=coord[2])
             self.items.append(item)
 
     def tick(self):
         self.world.update_day_night()
 
         alive_count = 0
-        for i, survivor in enumerate(self.survivors):
-            if not survivor.is_alive:
-                continue
+        import torch
+        with torch.inference_mode():
+            for i, survivor in enumerate(self.survivors):
+                if not survivor.is_alive:
+                    continue
 
-            alive_count += 1
-            survivor.update_needs()
+                alive_count += 1
+                survivor.update_needs()
 
-            brain = self.brains[i]
-            prev_hidden = self.hidden_states[i]
-            inputs = extract_survivor_inputs(survivor, self.world, self.items, self.vehicles, self.zombies, self.animals)
-            dx, dy, action, new_hidden = brain.get_action_and_movement(inputs, prev_hidden)
-            self.hidden_states[i] = new_hidden
+                brain = self.brains[i]
+                prev_hidden = self.hidden_states[i]
+                inputs = extract_survivor_inputs(survivor, self.world, self.items, self.vehicles, self.zombies, self.animals)
+                dx, dy, action, new_hidden = brain.get_action_and_movement(inputs, prev_hidden)
+                self.hidden_states[i] = new_hidden
 
-            survivor.move(dx, dy, self.world)
-            survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors)
+                survivor.move(dx, dy, self.world)
+                survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors)
 
         for zombie in self.zombies:
             zombie.update(self.world, self.survivors, self.vehicles)
@@ -131,9 +139,10 @@ class SimulationEngine:
             active_items = [item for item in self.items if not item.collected]
             if len(active_items) < 20:
                 rx, ry = random.randint(0, self.world.width - 1), random.randint(0, self.world.height - 1)
-                if self.world.is_walkable(rx, ry):
+                rz = random.randint(0, self.world.num_levels - 1)
+                if self.world.is_walkable(rx, ry, rz):
                     itype = random.choice([ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL])
-                    self.items.append(ItemEntity(rx + 0.5, ry + 0.5, itype, amount=random.randint(1, 2)))
+                    self.items.append(ItemEntity(rx + 0.5, ry + 0.5, itype, amount=random.randint(1, 2), z=rz))
 
         if alive_count == 0 or self.world.current_tick >= 1200:
             self.end_generation()

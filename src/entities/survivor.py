@@ -43,7 +43,6 @@ class Survivor:
         if not self.is_alive:
             return
         self.time_survived += 1
-        # Circadian decay rates calibrated for 24-hour in-game day (3,600 ticks)
         self.hunger -= 0.025
         self.thirst -= 0.035
         self.sleep -= 0.025
@@ -58,7 +57,6 @@ class Survivor:
             self.sleep = 0
             self.energy = max(0.0, self.energy - 0.2)
 
-        # Auto consume food/water if severely depleted
         if self.hunger < 35:
             food_items = [ResourceItem.MRE, ResourceItem.CANNED_FOOD, ResourceItem.BREAD, ResourceItem.MEAT, ResourceItem.APPLE, ResourceItem.FOOD]
             for f_item in food_items:
@@ -133,33 +131,38 @@ class Survivor:
             return
 
         if action == 1:
-            gathered = False
-            for item in items:
-                if not item.collected and item.z == self.z and math.hypot(item.x - self.x, item.y - self.y) < 1.5:
+            from utils.p_np_math import PolynomialKnapsackSolver
+            nearby_items = [
+                item for item in items
+                if not item.collected and item.z == self.z and math.hypot(item.x - self.x, item.y - self.y) < 1.5
+            ]
+
+            if nearby_items:
+                optimal_subset = PolynomialKnapsackSolver.optimize_inventory(nearby_items, max_capacity=15)
+                for item in optimal_subset:
                     item.collected = True
                     self.inventory[item.item_type] = self.inventory.get(item.item_type, 0) + item.amount
                     self.score += 5.0
-                    gathered = True
+            else:
+                if world:
+                    z_idx = world.z_to_idx(self.z)
+                    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        fx, fy = int(self.x + dx), int(self.y + dy)
+                        if 0 <= fx < world.width and 0 <= fy < world.height:
+                            ftile = world.grid[z_idx, fy, fx]
+                            if ftile in (TileType.CABINET, TileType.REFRIGERATOR, TileType.KITCHEN_COUNTER, TileType.TABLE):
+                                if ftile == TileType.REFRIGERATOR:
+                                    found_item = random.choice([ResourceItem.MEAT, ResourceItem.BREAD, ResourceItem.WATER_BOTTLE, ResourceItem.APPLE])
+                                elif ftile == TileType.CABINET:
+                                    found_item = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CAN_OPENER, ResourceItem.PISTOL_AMMO, ResourceItem.MEDKIT])
+                                else:
+                                    found_item = random.choice([ResourceItem.CHEF_KNIFE, ResourceItem.FRYING_PAN, ResourceItem.POT, ResourceItem.CUTTING_BOARD])
 
-            if not gathered and world:
-                z_idx = world.z_to_idx(self.z)
-                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    fx, fy = int(self.x + dx), int(self.y + dy)
-                    if 0 <= fx < world.width and 0 <= fy < world.height:
-                        ftile = world.grid[z_idx, fy, fx]
-                        if ftile in (TileType.CABINET, TileType.REFRIGERATOR, TileType.KITCHEN_COUNTER, TileType.TABLE):
-                            if ftile == TileType.REFRIGERATOR:
-                                found_item = random.choice([ResourceItem.MEAT, ResourceItem.BREAD, ResourceItem.WATER_BOTTLE, ResourceItem.APPLE])
-                            elif ftile == TileType.CABINET:
-                                found_item = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CAN_OPENER, ResourceItem.PISTOL_AMMO, ResourceItem.MEDKIT])
-                            else:
-                                found_item = random.choice([ResourceItem.CHEF_KNIFE, ResourceItem.FRYING_PAN, ResourceItem.POT, ResourceItem.CUTTING_BOARD])
-
-                            self.inventory[found_item] = self.inventory.get(found_item, 0) + 1
-                            self.score += 10.0
-                            if noise_events is not None:
-                                noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=5.0, source_type="searching"))
-                            break
+                                self.inventory[found_item] = self.inventory.get(found_item, 0) + 1
+                                self.score += 10.0
+                                if noise_events is not None:
+                                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=5.0, source_type="searching"))
+                                break
 
         elif action == 2:
             if CraftingSystem.craft(self.inventory, ResourceItem.MEDKIT):

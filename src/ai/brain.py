@@ -81,15 +81,14 @@ def batch_get_action_and_movement(brains, inputs_list, prev_hiddens):
     valid_hiddens = []
     for h in prev_hiddens:
         if h is None:
-            valid_hiddens.append(brains[0].init_hidden())
-        else:
-            if h.dim() == 3:
-                h = h.squeeze(1)
-            elif h.dim() == 1:
-                h = h.unsqueeze(0)
-            if h.device != DEVICE:
-                h = h.to(DEVICE)
-            valid_hiddens.append(h)
+            h = brains[0].init_hidden()
+        if h.dim() == 3:
+            h = h.squeeze(1)
+        elif h.dim() == 1:
+            h = h.unsqueeze(0)
+        if h.device != DEVICE:
+            h = h.to(DEVICE)
+        valid_hiddens.append(h)
 
     h_cat = torch.cat(valid_hiddens, dim=0).to(DEVICE)
 

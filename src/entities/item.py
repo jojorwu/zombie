@@ -1,4 +1,7 @@
+from typing import Dict, Any
+
 class ResourceItem:
+    """Enumeration of all collectible resources, tools, food items, and weapons in the game."""
     # Generic Resources
     FOOD = "food"
     WATER = "water"
@@ -8,13 +11,13 @@ class ResourceItem:
     MEDKIT = "medkit"
     WEAPON = "weapon"
 
-    # 4 Melee Weapons
+    # Melee Weapons
     KNIFE = "knife"
     AXE = "axe"
     BASEBALL_BAT = "baseball_bat"
     CROWBAR = "crowbar"
 
-    # 3 Firearms
+    # Firearms
     PISTOL = "pistol"
     SHOTGUN = "shotgun"
     RIFLE = "rifle"
@@ -24,14 +27,14 @@ class ResourceItem:
     SHOTGUN_SHELLS = "shotgun_shells"
     RIFLE_AMMO = "rifle_ammo"
 
-    # 5 Specific Foods
+    # Specific Foods
     CANNED_FOOD = "canned_food"
     BREAD = "bread"
     APPLE = "apple"
     MEAT = "meat"
     MRE = "mre"
 
-    # 6 Kitchen Items
+    # Kitchen Items
     FRYING_PAN = "frying_pan"
     POT = "pot"
     CHEF_KNIFE = "chef_knife"
@@ -41,7 +44,7 @@ class ResourceItem:
 
 
 # Detailed Properties for Weapons & Tools
-WEAPON_STATS = {
+WEAPON_STATS: Dict[str, Dict[str, Any]] = {
     # Melee
     ResourceItem.KNIFE: {"damage": 25.0, "range": 1.2, "noise": 3.0, "type": "melee"},
     ResourceItem.CHEF_KNIFE: {"damage": 22.0, "range": 1.2, "noise": 3.0, "type": "melee"},
@@ -59,10 +62,11 @@ WEAPON_STATS = {
 
 
 class ItemEntity:
-    def __init__(self, x, y, item_type, amount=1, z=0):
-        self.x = float(x)
-        self.y = float(y)
-        self.z = int(z)
-        self.item_type = item_type
-        self.amount = amount
-        self.collected = False
+    """Represents an item entity spawned in the world grid at specific coordinates."""
+    def __init__(self, x: float, y: float, item_type: str, amount: int = 1, z: int = 0) -> None:
+        self.x: float = float(x)
+        self.y: float = float(y)
+        self.z: int = int(z)
+        self.item_type: str = item_type
+        self.amount: int = amount
+        self.collected: bool = False

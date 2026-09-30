@@ -132,10 +132,24 @@ class SimulationEngine:
             elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
                 possible_loot = [ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL]
 
-            for floor_z in range(self.world.z_min, self.world.z_max + 1):
+            b_bottom = b.get("bottom_floor", 0)
+            b_top = b.get("top_floor", 0)
+
+            for floor_z in range(b_bottom, b_top + 1):
                 lx, ly = bx + 2, by + 1
                 if self.world.is_walkable(lx, ly, floor_z):
-                    loot_type = random.choice(possible_loot)
+                    if floor_z < 0:
+                        # Basement specialized rare loot
+                        if btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION):
+                            base_loot = [ResourceItem.RIFLE, ResourceItem.SHOTGUN, ResourceItem.RIFLE_AMMO, ResourceItem.SHOTGUN_SHELLS, ResourceItem.CROWBAR]
+                        elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
+                            base_loot = [ResourceItem.FUEL, ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.METAL]
+                        else:
+                            base_loot = [ResourceItem.CANNED_FOOD, ResourceItem.MRE, ResourceItem.MEDKIT, ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE]
+                        loot_type = random.choice(base_loot)
+                    else:
+                        loot_type = random.choice(possible_loot)
+
                     amt = random.randint(2, 6) if "ammo" in loot_type else random.randint(1, 2)
                     self.items.append(ItemEntity(lx + 0.5, ly + 0.5, loot_type, amount=amt, z=floor_z))
 

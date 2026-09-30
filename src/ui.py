@@ -392,7 +392,8 @@ class RendererUI:
 
         s = sel_survivor
         if s.is_alive:
-            draw_text(f"Floor/Level: {s.z + 1} / {self.sim.world.num_levels}")
+            floor_name = f"Basement B{abs(self.view_z)}" if self.view_z < 0 else (f"Ground Floor" if self.view_z == 0 else f"Floor {self.view_z + 1}")
+            draw_text(f"View Floor: {floor_name} (Z={self.view_z})")
             draw_stat_bar("Health", s.health, 100.0, (220, 50, 50))
             draw_stat_bar("Hunger", s.hunger, 100.0, (220, 160, 40))
             draw_stat_bar("Thirst", s.thirst, 100.0, (40, 180, 220))

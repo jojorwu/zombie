@@ -311,8 +311,27 @@ class World:
         if chunk:
             chunk.buildings.append(self.buildings[-1])
 
-        top_floor = random.randint(min(1, self.z_max), max(0, self.z_max))
-        bottom_floor = random.randint(min(0, self.z_min), max(0, self.z_min))
+        # Determine basement generation probability:
+        # Residential & Police Station: 20%
+        # Warehouse & Gun Store: 40%
+        # Others: 0%
+        has_basement = False
+        if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.20:
+            has_basement = True
+        elif btype in (BuildingType.WAREHOUSE, BuildingType.GUN_STORE) and random.random() < 0.40:
+            has_basement = True
+
+        bottom_floor = -1 if (has_basement and self.z_min <= -1) else 0
+
+        # Upper floors generation up to self.z_max
+        if btype in (BuildingType.HOSPITAL, BuildingType.POLICE_STATION, BuildingType.DORMITORY, BuildingType.SCHOOL):
+            top_floor = min(self.z_max, max(1, random.randint(1, max(1, self.z_max))))
+        else:
+            top_floor = min(self.z_max, random.randint(0, max(0, self.z_max)))
+
+        self.buildings[-1]["has_basement"] = has_basement
+        self.buildings[-1]["top_floor"] = top_floor
+        self.buildings[-1]["bottom_floor"] = bottom_floor
 
         for z in range(bottom_floor, top_floor + 1):
             z_idx = self.z_to_idx(z)
@@ -577,7 +596,10 @@ class World:
         current_day_total = (y - 1) * 360 + (m - 1) * 30 + d
         return current_day_total >= self.water_cutoff_day
 
-    def get_light_level(self):
+    def get_light_level(self, z=0):
+        if z < 0:
+            # Basements receive 0 natural sunlight (pitch black when power is out / unlit)
+            return 0.08 if not self.is_power_out() else 0.03
         y, m, d, hh, mm = self.get_time_components()
         progress = (hh * 60 + mm) / 1440.0
         sine_val = math.sin((progress - 0.25) * 2 * math.pi)

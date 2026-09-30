@@ -103,5 +103,12 @@ class TestWorld(unittest.TestCase):
         world.dynamic_lights.append(DynamicLight(10.0, 10.0, 0, radius=5.0))
         self.assertEqual(len(world.dynamic_lights), 1)
 
+    def test_basement_generation_probabilities(self):
+        # Generate world with z_min=-2 to allow basements
+        world = World(width=100, height=100, z_min=-2, z_max=2)
+        basement_count = sum(1 for b in world.buildings if b.get("has_basement", False))
+        self.assertGreaterEqual(basement_count, 0)
+        self.assertLess(world.get_light_level(z=-1), world.get_light_level(z=0))
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,10 +1,12 @@
 import random
 import math
+import time
 from concurrent.futures import ThreadPoolExecutor
 from src.world import World, TileType, BuildingType
 from src.entities import Survivor, Zombie, Animal, Vehicle, ItemEntity, ResourceItem, EntityFactory
 from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager
 from src.modding.manager import LuaModManager
+from utils.memory_monitor_utility import MemoryMonitorUtility
 
 SIM_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
@@ -12,6 +14,7 @@ class SimulationEngine:
     def __init__(self, config):
         self.mod_manager = LuaModManager()
         self.factory = EntityFactory()
+        self.memory_monitor = MemoryMonitorUtility()
         self.config = config
         self.sim_cfg = config["simulation"]
         self.evo_cfg = config["evolution"]
@@ -43,6 +46,21 @@ class SimulationEngine:
     def reset_generation(self):
         import gc
         import torch
+
+        # Release existing entities to pool
+        if hasattr(self, 'zombies'):
+            for z in self.zombies:
+                self.factory.release_zombie(z)
+        if hasattr(self, 'items'):
+            for item in self.items:
+                self.factory.release_item(item)
+        if hasattr(self, 'scent_trails'):
+            for st in self.scent_trails:
+                self.factory.release_scent_trail(st)
+        if hasattr(self, 'noise_events'):
+            for ne in self.noise_events:
+                self.factory.release_noise_event(ne)
+
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -95,13 +113,13 @@ class SimulationEngine:
             v = Vehicle(coord[0] + 0.5, coord[1] + 0.5, fuel=random.uniform(30.0, 80.0), z=coord[2])
             self.vehicles.append(v)
 
-        # 3. Spawn Zombies via EntityFactory Pool
+        # 3. Spawn Zombies
         for _ in range(min(self.sim_cfg["num_zombies"], len(walkable_coords))):
             coord = walkable_coords.pop()
             z_ent = self.factory.create_zombie(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
             self.zombies.append(z_ent)
 
-        # 4. Contextual Realistic Item & Loot Spawning
+        # 4. Spawn Items & Loot
         for tc in trash_coords:
             itype = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE, ResourceItem.METAL, ResourceItem.FRYING_PAN])
             self.items.append(self.factory.create_item(tc[0] + 0.5, tc[1] + 0.5, itype, amount=random.randint(1, 2), z=tc[2]))
@@ -172,19 +190,25 @@ class SimulationEngine:
             self.survivors.append(s)
 
     def tick(self):
+        t0 = time.time()
         self.world.update_day_night()
         self.mod_manager.trigger_event("on_tick", self.world.current_tick)
 
-        # Update active noise events
+        # Update active noise events & recycle expired
+        active_noises = []
         for ne in self.noise_events:
             ne.update()
-        self.noise_events = [ne for ne in self.noise_events if ne.lifetime > 0 and ne.volume > 0.0]
+            if ne.lifetime <= 0 or ne.volume <= 0.0:
+                self.factory.release_noise_event(ne)
+            else:
+                active_noises.append(ne)
+        self.noise_events = active_noises
 
         # Update dynamic chunk activation for entities
         entity_positions = [(s.x, s.y) for s in self.survivors if s.is_alive]
         entity_positions.extend([(z.x, z.y) for z in self.zombies if z.is_alive])
         if entity_positions:
-            self.world.chunk_manager.update_active_chunks_async(entity_positions, view_distance_chunks=2)
+            self.world.chunk_manager.update_active_chunks(entity_positions, view_distance_chunks=2)
 
         alive_indices = [i for i, s in enumerate(self.survivors) if s.is_alive]
         alive_count = len(alive_indices)
@@ -213,10 +237,15 @@ class SimulationEngine:
                 if self.world.current_tick % 5 == 0:
                     self.scent_trails.append(self.factory.create_scent_trail(s.x, s.y, s.z, intensity=100.0))
 
-        # Update scent trails
+        # Update scent trails & recycle expired
+        active_scents = []
         for st in self.scent_trails:
             st.update(world=self.world)
-        self.scent_trails = [st for st in self.scent_trails if st.intensity > 0.0]
+            if st.intensity <= 0.0:
+                self.factory.release_scent_trail(st)
+            else:
+                active_scents.append(st)
+        self.scent_trails = active_scents
 
         # Multi-threaded Zombie update step across active threads
         active_zombies = [z for z in self.zombies if z.is_alive]
@@ -245,6 +274,8 @@ class SimulationEngine:
                 if self.world.is_walkable(rx, ry, rz):
                     itype = random.choice([ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL])
                     self.items.append(self.factory.create_item(rx + 0.5, ry + 0.5, itype, amount=random.randint(1, 2), z=rz))
+
+        self.memory_monitor.record_tick_time(time.time() - t0)
 
         if alive_count == 0 or self.world.current_tick >= 1200:
             self.end_generation()

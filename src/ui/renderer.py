@@ -241,8 +241,13 @@ class RendererUI:
         wind_spd = self.sim.world.weather.wind_speed
         has_rain = self.sim.world.weather.rain_front is not None
 
+        # Memory monitor stats
+        self.sim.memory_monitor.update_fps()
+        mem_stats = self.sim.memory_monitor.get_memory_stats(self.sim.factory)
+
         draw_text("Zombie AI Neuroevolution", self.bold_font, theme["title"])
         draw_text(f"Render Engine: {'Native Rust Vulkan' if HAS_RUST_VULKAN else 'OpenGL/SDL2'}", color=(0, 255, 200))
+        draw_text(f"RAM Usage: {mem_stats['ram_rss_mb']} MB | CPU: {mem_stats['cpu_percent']}%", color=(255, 215, 0))
         draw_text(f"Theme: {self.active_theme} [T to Switch]", color=theme["accent"])
         draw_text(f"Date: {self.sim.world.get_time_string()}")
         draw_text(f"Gen: {self.sim.evolution_manager.generation}  Tick: {self.sim.world.current_tick}")

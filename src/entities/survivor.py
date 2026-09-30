@@ -1,5 +1,6 @@
 import math
 import random
+import threading
 from src.world import TileType, DynamicLight
 from src.entities.item import ResourceItem, WEAPON_STATS
 from src.entities.sensory import NoiseEvent
@@ -7,6 +8,7 @@ from src.entities.crafting import CraftingSystem
 
 class Survivor:
     def __init__(self, x, y, z=0):
+        self._lock = threading.Lock()
         self.x = float(x)
         self.y = float(y)
         self.z = int(z)
@@ -31,10 +33,11 @@ class Survivor:
         self.kills = 0
 
     def take_damage(self, amount):
-        self.health -= amount
-        if self.health <= 0:
-            self.health = 0
-            self.is_alive = False
+        with self._lock:
+            self.health -= amount
+            if self.health <= 0:
+                self.health = 0
+                self.is_alive = False
 
     def update_needs(self):
         if not self.is_alive:
@@ -57,11 +60,9 @@ class Survivor:
 
         # Auto consume food/water if severely depleted
         if self.hunger < 35:
-            # Check specific foods first
             food_items = [ResourceItem.MRE, ResourceItem.CANNED_FOOD, ResourceItem.BREAD, ResourceItem.MEAT, ResourceItem.APPLE, ResourceItem.FOOD]
             for f_item in food_items:
                 if self.inventory.get(f_item, 0) > 0:
-                    # If canned food, check for can opener/chef knife or crowbar
                     if f_item == ResourceItem.CANNED_FOOD:
                         if self.inventory.get(ResourceItem.CAN_OPENER, 0) > 0 or self.inventory.get(ResourceItem.CHEF_KNIFE, 0) > 0 or self.inventory.get(ResourceItem.KNIFE, 0) > 0:
                             self.inventory[f_item] -= 1
@@ -92,18 +93,15 @@ class Survivor:
                 base_speed = self.in_vehicle.speed
                 self.in_vehicle.fuel -= 0.05
             else:
-                base_speed = 0.05  # Slow without fuel
+                base_speed = 0.05
 
-        # Factor in wind speed/direction and rain wetness
         tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
 
-        # Calculate movement vector dot product with wind vector
         wind_vx = math.cos(world.weather.wind_angle)
         wind_vy = math.sin(world.weather.wind_angle)
         move_dot_wind = dx * wind_vx + dy * wind_vy
-        wind_factor = 1.0 + (move_dot_wind * (world.weather.wind_speed / 200.0))  # Tailward boost vs headwind resistance
+        wind_factor = 1.0 + (move_dot_wind * (world.weather.wind_speed / 200.0))
 
-        # Check wetness in rain
         is_raining = world.weather.is_in_rain(self.x, self.y)
         rain_factor = 0.85 if (is_raining and not self.in_vehicle) else 1.0
 
@@ -134,7 +132,7 @@ class Survivor:
         if not self.is_alive:
             return
 
-        if action == 1:  # Gather nearby items & search adjacent furniture containers
+        if action == 1:
             gathered = False
             for item in items:
                 if not item.collected and item.z == self.z and math.hypot(item.x - self.x, item.y - self.y) < 1.5:
@@ -143,7 +141,6 @@ class Survivor:
                     self.score += 5.0
                     gathered = True
 
-            # Search adjacent furniture containers (Cabinets, Refrigerators, Counters)
             if not gathered and world:
                 z_idx = world.z_to_idx(self.z)
                 for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
@@ -151,7 +148,6 @@ class Survivor:
                     if 0 <= fx < world.width and 0 <= fy < world.height:
                         ftile = world.grid[z_idx, fy, fx]
                         if ftile in (TileType.CABINET, TileType.REFRIGERATOR, TileType.KITCHEN_COUNTER, TileType.TABLE):
-                            # Spawn searched container loot on survivor
                             if ftile == TileType.REFRIGERATOR:
                                 found_item = random.choice([ResourceItem.MEAT, ResourceItem.BREAD, ResourceItem.WATER_BOTTLE, ResourceItem.APPLE])
                             elif ftile == TileType.CABINET:
@@ -165,19 +161,19 @@ class Survivor:
                                 noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=5.0, source_type="searching"))
                             break
 
-        elif action == 2:  # Craft Medkit
+        elif action == 2:
             if CraftingSystem.craft(self.inventory, ResourceItem.MEDKIT):
                 self.score += 10.0
                 if noise_events is not None:
                     noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=8.0, source_type="crafting"))
 
-        elif action == 3:  # Craft Weapon
+        elif action == 3:
             if CraftingSystem.craft(self.inventory, ResourceItem.WEAPON):
                 self.score += 10.0
                 if noise_events is not None:
                     noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=8.0, source_type="crafting"))
 
-        elif action == 4:  # Enter/Exit Vehicle
+        elif action == 4:
             if self.in_vehicle:
                 self.in_vehicle.driver = None
                 self.in_vehicle = None
@@ -194,11 +190,11 @@ class Survivor:
                         v.driver = self
                         break
 
-        elif action == 5:  # Sleep
+        elif action == 5:
             self.sleep = min(100.0, self.sleep + 1.0)
             self.energy = min(100.0, self.energy + 1.0)
 
-        elif action == 6:  # Attack closest zombie, animal, or rival survivor
+        elif action == 6:
             best_weapon = None
             is_firearm = False
             ammo_type = None
@@ -271,19 +267,19 @@ class Survivor:
                             noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=noise_vol, source_type="attack"))
                         break
 
-        elif action == 7:  # Stairs Up
+        elif action == 7:
             if self.z < world.num_levels - 1 and world.is_walkable(self.x, self.y, self.z + 1):
                 self.z += 1
                 if self.in_vehicle:
                     self.in_vehicle.z = self.z
 
-        elif action == 8:  # Stairs Down
+        elif action == 8:
             if self.z > 0 and world.is_walkable(self.x, self.y, self.z - 1):
                 self.z -= 1
                 if self.in_vehicle:
                     self.in_vehicle.z = self.z
 
-        elif action == 9:  # Push / Move Furniture
+        elif action == 9:
             from utils.tile_interaction_utility import TileInteractionUtility
             pushed = False
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
@@ -295,7 +291,7 @@ class Survivor:
                         noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=12.0, source_type="pushing_furniture"))
                     break
 
-        elif action == 10:  # Dismantle Furniture
+        elif action == 10:
             from utils.tile_interaction_utility import TileInteractionUtility
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 fx, fy = int(self.x + dx), int(self.y + dy)

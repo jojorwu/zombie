@@ -40,6 +40,8 @@ class BrainNet(nn.Module):
             inp_tensor = torch.tensor(inputs, dtype=torch.float32, device=DEVICE)
             if inp_tensor.dim() == 1:
                 inp_tensor = inp_tensor.unsqueeze(0)
+            if prev_hidden.dim() == 3:
+                prev_hidden = prev_hidden.squeeze(1)
             if prev_hidden.device != DEVICE:
                 prev_hidden = prev_hidden.to(DEVICE)
             outputs, new_hidden = self.forward(inp_tensor, prev_hidden)
@@ -80,9 +82,13 @@ def batch_get_action_and_movement(brains, inputs_list, prev_hiddens):
     for h in prev_hiddens:
         if h is None:
             valid_hiddens.append(brains[0].init_hidden())
-        elif h.device != DEVICE:
-            valid_hiddens.append(h.to(DEVICE))
         else:
+            if h.dim() == 3:
+                h = h.squeeze(1)
+            elif h.dim() == 1:
+                h = h.unsqueeze(0)
+            if h.device != DEVICE:
+                h = h.to(DEVICE)
             valid_hiddens.append(h)
 
     h_cat = torch.cat(valid_hiddens, dim=0).to(DEVICE)
@@ -166,14 +172,12 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
     for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
         fx, fy = sx + dx, sy + dy
         if 0 <= fx < world.width and 0 <= fy < world.height:
-            if world.grid[z_idx, fy, fx] in TileInteractionUtility.MOVABLE_FURNITURE:
+            if world.grid[z_idx, fy, fx] in TileInteractionUtility.MOVABLE_FURNITURE_TILES:
                 has_furniture_adj = 1.0
                 break
 
     inputs[23] = has_furniture_adj
     inputs[24] = min(1.0, (survivor.inventory.get("wood", 0) + survivor.inventory.get("metal", 0)) / 10.0)
-
-    PNP_ENGINE.polynomial_bound(len(zombies) + 1)
 
     return inputs
 

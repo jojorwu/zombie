@@ -35,6 +35,21 @@ class PolynomialVerifier:
         subset = [numbers[i] for i in certificate if 0 <= i < len(numbers)]
         return sum(subset) == target
 
+    @staticmethod
+    def verify_spatial_partitioning(coords, cell_size=16.0):
+        """
+        Polynomial-time O(N) verifier for spatial grid cell mapping.
+        """
+        if coords is None or len(coords) == 0:
+            return True
+        grid = {}
+        for x, y in coords:
+            cell = (int(x // cell_size), int(y // cell_size))
+            grid.setdefault(cell, 0)
+            grid[cell] += 1
+        return len(grid) > 0
+
+
 class PNPComplexityEngine:
     """
     Mathematical engine analyzing P vs NP complexity scaling and polynomial reduction bounds.

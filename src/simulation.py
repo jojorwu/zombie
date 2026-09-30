@@ -1,6 +1,6 @@
 import random
 import math
-from src.world import World, TileType, TILE_COLORS
+from src.world import World, TileType, BuildingType
 from src.entities import Survivor, Zombie, Animal, Vehicle, ItemEntity, ResourceItem
 from src.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager
 
@@ -24,6 +24,7 @@ class SimulationEngine:
         )
 
         self.brains = self.evolution_manager.create_initial_brains()
+        self.hidden_states = [brain.init_hidden() for brain in self.brains]
         self.selected_survivor_idx = 0
         self.best_historical_score = 0.0
 
@@ -37,39 +38,67 @@ class SimulationEngine:
         self.vehicles = []
         self.items = []
 
+        self.hidden_states = [brain.init_hidden() for brain in self.brains]
+
         walkable_coords = []
+        building_floors = []
         for y in range(self.world.height):
             for x in range(self.world.width):
                 if self.world.is_walkable(x, y):
                     walkable_coords.append((x, y))
+                    if self.world.grid[y, x] == TileType.BUILDING_FLOOR:
+                        building_floors.append((x, y))
 
         random.shuffle(walkable_coords)
+        random.shuffle(building_floors)
 
+        # Spawn Survivors
         for i in range(min(self.sim_cfg["num_survivors"], len(walkable_coords))):
             coord = walkable_coords.pop()
             s = Survivor(coord[0] + 0.5, coord[1] + 0.5)
             self.survivors.append(s)
 
+        # Spawn Zombies
         for _ in range(min(self.sim_cfg["num_zombies"], len(walkable_coords))):
             coord = walkable_coords.pop()
             z = Zombie(coord[0] + 0.5, coord[1] + 0.5)
             self.zombies.append(z)
 
+        # Spawn Animals
         for _ in range(min(self.sim_cfg["num_animals"], len(walkable_coords))):
             coord = walkable_coords.pop()
             a = Animal(coord[0] + 0.5, coord[1] + 0.5)
             self.animals.append(a)
 
+        # Spawn Vehicles
         for _ in range(min(self.sim_cfg["num_vehicles"], len(walkable_coords))):
             coord = walkable_coords.pop()
             v = Vehicle(coord[0] + 0.5, coord[1] + 0.5, fuel=random.uniform(30.0, 80.0))
             self.vehicles.append(v)
 
+        # Spawn specialized loot in buildings
+        for b in self.world.buildings:
+            bx, by, bw, bh, btype = b["x"], b["y"], b["w"], b["h"], b["type"]
+            loot_type = ResourceItem.FOOD
+            if btype == BuildingType.HOSPITAL:
+                loot_type = ResourceItem.MEDKIT
+            elif btype == BuildingType.GUN_STORE or btype == BuildingType.POLICE_STATION:
+                loot_type = ResourceItem.WEAPON if random.random() < 0.6 else ResourceItem.METAL
+            elif btype == BuildingType.GAS_STATION:
+                loot_type = ResourceItem.FUEL
+            elif btype == BuildingType.RESIDENTIAL:
+                loot_type = ResourceItem.FOOD if random.random() < 0.7 else ResourceItem.WATER
+
+            lx, ly = bx + 2, by + 1
+            if self.world.is_walkable(lx, ly):
+                self.items.append(ItemEntity(lx + 0.5, ly + 0.5, loot_type, amount=random.randint(1, 3)))
+
+        # Spawn random outdoor items
         item_types = [ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL]
-        for _ in range(min(40, len(walkable_coords))):
+        for _ in range(min(30, len(walkable_coords))):
             coord = walkable_coords.pop()
             itype = random.choice(item_types)
-            item = ItemEntity(coord[0] + 0.5, coord[1] + 0.5, itype, amount=random.randint(1, 3))
+            item = ItemEntity(coord[0] + 0.5, coord[1] + 0.5, itype, amount=random.randint(1, 2))
             self.items.append(item)
 
     def tick(self):
@@ -84,8 +113,10 @@ class SimulationEngine:
             survivor.update_needs()
 
             brain = self.brains[i]
+            prev_hidden = self.hidden_states[i]
             inputs = extract_survivor_inputs(survivor, self.world, self.items, self.vehicles, self.zombies, self.animals)
-            dx, dy, action = brain.get_action_and_movement(inputs)
+            dx, dy, action, new_hidden = brain.get_action_and_movement(inputs, prev_hidden)
+            self.hidden_states[i] = new_hidden
 
             survivor.move(dx, dy, self.world)
             survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors)

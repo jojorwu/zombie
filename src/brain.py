@@ -5,49 +5,40 @@ import torch.nn as nn
 import numpy as np
 
 class BrainNet(nn.Module):
-    def __init__(self, input_size=18, hidden_size=24, output_size=9):
+    def __init__(self, input_size=18, hidden_size=32, output_size=9):
         super(BrainNet, self).__init__()
+        self.hidden_size = hidden_size
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, output_size)
+        self.gru = nn.GRUCell(hidden_size, hidden_size)
+        self.fc_out = nn.Linear(hidden_size, output_size)
 
-    def forward(self, x):
+    def forward(self, x, h):
         out = self.fc1(x)
         out = self.relu(out)
-        out = self.fc2(out)
-        out = self.relu(out)
-        out = self.fc3(out)
-        return out
+        h_next = self.gru(out, h)
+        out = self.fc_out(h_next)
+        return out, h_next
 
-    def get_action_and_movement(self, inputs):
+    def init_hidden(self):
+        return torch.zeros(1, self.hidden_size, dtype=torch.float32)
+
+    def get_action_and_movement(self, inputs, prev_hidden=None):
         self.eval()
+        if prev_hidden is None:
+            prev_hidden = self.init_hidden()
+
         with torch.no_grad():
             inp_tensor = torch.tensor(inputs, dtype=torch.float32).unsqueeze(0)
-            outputs = self.forward(inp_tensor).squeeze(0).numpy()
+            outputs, new_hidden = self.forward(inp_tensor, prev_hidden)
+            outputs = outputs.squeeze(0).numpy()
 
         dx = float(np.tanh(outputs[0]))
         dy = float(np.tanh(outputs[1]))
-        action_idx = int(np.argmax(outputs[2:]))  # logits 2..8 map to action 0..6
-        return dx, dy, action_idx
+        action_idx = int(np.argmax(outputs[2:]))
+        return dx, dy, action_idx, new_hidden
 
 def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
-    """
-    Inputs vector (length 18):
-    0: Health (0..1)
-    1: Hunger (0..1)
-    2: Thirst (0..1)
-    3: Sleep (0..1)
-    4: Light level (0..1)
-    5: In vehicle (0 or 1)
-    6: Has weapon (0 or 1)
-    7: Has medkit (0 or 1)
-    8,9: Closest Zombie dx, dy (normalized)
-    10,11: Closest Item dx, dy (normalized)
-    12,13: Closest Vehicle dx, dy (normalized)
-    14,15: Closest Animal dx, dy (normalized)
-    16,17: Tile Walkable ahead / center offset
-    """
     inputs = np.zeros(18, dtype=np.float32)
     inputs[0] = survivor.health / 100.0
     inputs[1] = survivor.hunger / 100.0

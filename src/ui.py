@@ -1,7 +1,7 @@
 import sys
 import pygame
 import numpy as np
-from src.world import TileType, TILE_COLORS
+from src.world import TileType, TILE_COLORS, BUILDING_COLORS, BuildingType
 from src.entities import ResourceItem
 
 class RendererUI:
@@ -14,7 +14,7 @@ class RendererUI:
         pygame.init()
         pygame.font.init()
         self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption("Zombie Neuroevolution Simulation")
+        pygame.display.set_caption("Zombie Neuroevolution Simulation (GRU Memory)")
         self.font = pygame.font.SysFont("Arial", 14)
         self.bold_font = pygame.font.SysFont("Arial", 16, bold=True)
 
@@ -69,7 +69,13 @@ class RendererUI:
                 if visible_tiles is not None and (x, y) not in visible_tiles:
                     color = (10, 10, 10)
                 else:
-                    base_color = TILE_COLORS[self.sim.world.grid[y, x]]
+                    ttype = self.sim.world.grid[y, x]
+                    if ttype == TileType.BUILDING_FLOOR and (x, y) in self.sim.world.building_grid:
+                        btype = self.sim.world.building_grid[(x, y)]
+                        base_color = BUILDING_COLORS.get(btype, TILE_COLORS[ttype])
+                    else:
+                        base_color = TILE_COLORS[ttype]
+
                     color = (
                         int(base_color[0] * light),
                         int(base_color[1] * light),
@@ -130,7 +136,7 @@ class RendererUI:
             self.screen.blit(img, (sidebar_x + 10, y_offset))
             y_offset += 20
 
-        draw_text("Zombie Simulation Control", self.bold_font, (255, 215, 0))
+        draw_text("Zombie Neuroevolution (GRU)", self.bold_font, (255, 215, 0))
         draw_text(f"Gen: {self.sim.evolution_manager.generation}  Tick: {self.sim.world.current_tick}")
         draw_text(f"Light level: {light:.2f}")
         draw_text(f"Speed: {self.speed_multiplier}x  (0=Fast Train)")
@@ -150,6 +156,12 @@ class RendererUI:
             draw_text(f"Sleep: {s.sleep:.1f} / 100")
             draw_text(f"Kills: {s.kills}  Score: {s.score:.1f}")
             draw_text(f"In Vehicle: {'Yes' if s.in_vehicle else 'No'}")
+
+            # Show GRU hidden memory state mean activation
+            cur_hidden = self.sim.hidden_states[self.sim.selected_survivor_idx]
+            hidden_norm = float(cur_hidden.norm().item())
+            draw_text(f"GRU Memory Activation: {hidden_norm:.2f}")
+
             y_offset += 5
             draw_text("Inventory:", self.bold_font)
             for item_k, item_v in s.inventory.items():

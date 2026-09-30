@@ -7,7 +7,7 @@ import numpy as np
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class BrainNet(nn.Module):
-    def __init__(self, input_size=23, hidden_size=32, output_size=11):
+    def __init__(self, input_size=25, hidden_size=32, output_size=13):
         super(BrainNet, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -66,14 +66,14 @@ def batch_get_action_and_movement(brains, inputs_list, prev_hiddens):
     return results
 
 def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
-    inputs = np.zeros(23, dtype=np.float32)
+    inputs = np.zeros(25, dtype=np.float32)
     inputs[0] = survivor.health / 100.0
     inputs[1] = survivor.hunger / 100.0
     inputs[2] = survivor.thirst / 100.0
     inputs[3] = survivor.sleep / 100.0
     inputs[4] = world.get_light_level()
     inputs[5] = 1.0 if survivor.in_vehicle else 0.0
-    inputs[6] = 1.0 if survivor.inventory.get("weapon", 0) > 0 else 0.0
+    inputs[6] = 1.0 if survivor.inventory.get("weapon", 0) > 0 or survivor.inventory.get("pistol", 0) > 0 else 0.0
     inputs[7] = 1.0 if survivor.inventory.get("medkit", 0) > 0 else 0.0
 
     def find_closest_vectorized(entities, max_dist=15.0):
@@ -96,6 +96,20 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
     inputs[20] = 1.0 if world.is_walkable(survivor.x + 0.5, survivor.y, survivor.z) else 0.0
     inputs[21] = 1.0 if world.is_walkable(survivor.x, survivor.y + 0.5, survivor.z) else 0.0
     inputs[22] = float(survivor.z) / 20.0
+
+    # New Features: Adjacent movable furniture proximity & wood/metal inventory count
+    from utils.tile_interaction_utility import TileInteractionUtility
+    z_idx = world.z_to_idx(survivor.z)
+    has_furniture_adj = 0.0
+    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+        fx, fy = int(survivor.x + dx), int(survivor.y + dy)
+        if 0 <= fx < world.width and 0 <= fy < world.height:
+            if world.grid[z_idx, fy, fx] in TileInteractionUtility.MOVABLE_FURNITURE:
+                has_furniture_adj = 1.0
+                break
+
+    inputs[23] = has_furniture_adj
+    inputs[24] = min(1.0, (survivor.inventory.get("wood", 0) + survivor.inventory.get("metal", 0)) / 10.0)
 
     return inputs
 

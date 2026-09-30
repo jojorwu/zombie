@@ -681,3 +681,27 @@ class Survivor:
                 self.z -= 1
                 if self.in_vehicle:
                     self.in_vehicle.z = self.z
+
+        elif action == 9:  # Push / Move Furniture to Barricade or Unblock
+            from utils.tile_interaction_utility import TileInteractionUtility
+            # Try pushing furniture in front of survivor
+            pushed = False
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                fx, fy = int(self.x + dx), int(self.y + dy)
+                if TileInteractionUtility.push_furniture(world, fx, fy, self.z, dx, dy):
+                    self.score += 8.0
+                    pushed = True
+                    if noise_events is not None:
+                        noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=12.0, source_type="pushing_furniture"))
+                    break
+
+        elif action == 10:  # Dismantle Furniture for Wood/Metal
+            from utils.tile_interaction_utility import TileInteractionUtility
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                fx, fy = int(self.x + dx), int(self.y + dy)
+                success, w_amt, m_amt = TileInteractionUtility.dismantle_furniture(world, fx, fy, self.z, self.inventory)
+                if success:
+                    self.score += 12.0
+                    if noise_events is not None:
+                        noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=15.0, source_type="dismantling"))
+                    break

@@ -414,7 +414,7 @@ class RendererUI:
             draw_text("SURVIVOR DEAD", color=(255, 69, 0))
 
         y_offset += 15
-        draw_text("Hotkeys:", self.bold_font, theme["header"])
+        draw_text("Hotkeys & Actions:", self.bold_font, theme["header"])
         draw_text(" [M / ESC] Main Menu & Settings")
         draw_text(" [T] Switch UI Theme")
         draw_text(" [SPACE] Pause / Resume")
@@ -422,6 +422,7 @@ class RendererUI:
         draw_text(" [Z/X] Change Height Level")
         draw_text(" [1/2/5/0] Speed Multipliers")
         draw_text(" [TAB] Switch Survivor")
-        draw_text(" [Mouse Click] Select Survivor")
+        draw_text(" [Action 9] Move Furniture")
+        draw_text(" [Action 10] Dismantle Furniture")
 
         pygame.display.flip()

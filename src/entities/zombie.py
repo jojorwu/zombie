@@ -2,6 +2,10 @@ import math
 import random
 from src.world import TileType
 
+_OPAQUE_VIS_TILES = {TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL, TileType.FURNITURE}
+_WALL_TILES = {TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL}
+
+
 class ZombieState:
     IDLE = "idle"
     INVESTIGATE = "investigate"
@@ -34,13 +38,15 @@ class Zombie:
         dy = (ty - self.y) / steps
         cx, cy = self.x, self.y
         z_idx = world.z_to_idx(self.z)
+        w, h = world.width, world.height
+        grid_z = world.grid[z_idx]
+
         for _ in range(steps):
             cx += dx
             cy += dy
             ix, iy = int(cx), int(cy)
-            if 0 <= ix < world.width and 0 <= iy < world.height:
-                tile = world.grid[z_idx, iy, ix]
-                if tile in (TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL, TileType.FURNITURE):
+            if 0 <= ix < w and 0 <= iy < h:
+                if grid_z[iy, ix] in _OPAQUE_VIS_TILES:
                     return False
         return True
 
@@ -48,9 +54,11 @@ class Zombie:
         base_range = max(3.0, 14.0 * world.get_light_level())
         closest_surv = None
         min_d = base_range
+        zx, zy, zz = self.x, self.y, self.z
+
         for s in survivors:
             if s.is_alive and not s.in_vehicle:
-                d = math.hypot(s.x - self.x, s.y - self.y) + abs(s.z - self.z) * 3.0
+                d = math.hypot(s.x - zx, s.y - zy) + abs(s.z - zz) * 3.0
                 if d <= min_d and self.has_line_of_sight(s.x, s.y, s.z, world):
                     min_d = d
                     closest_surv = s
@@ -61,23 +69,28 @@ class Zombie:
             return None
         best_event = None
         max_audible = 0.0
+        zx, zy, zz = self.x, self.y, self.z
+
         for ne in noise_events:
-            dist = math.hypot(ne.x - self.x, ne.y - self.y) + abs(ne.z - self.z) * 2.0
+            dist = math.hypot(ne.x - zx, ne.y - zy) + abs(ne.z - zz) * 2.0
             if dist <= ne.volume:
                 attenuated_vol = ne.volume
-                if world and abs(ne.z - self.z) <= 1:
+                if world and abs(ne.z - zz) <= 1:
                     steps = max(1, int(dist))
-                    dx = (self.x - ne.x) / steps
-                    dy = (self.y - ne.y) / steps
+                    dx = (zx - ne.x) / steps
+                    dy = (zy - ne.y) / steps
                     cx, cy = ne.x, ne.y
-                    z_idx = world.z_to_idx(self.z)
+                    z_idx = world.z_to_idx(zz)
+                    w, h = world.width, world.height
+                    grid_z = world.grid[z_idx]
+
                     for _ in range(steps):
                         cx += dx
                         cy += dy
                         ix, iy = int(cx), int(cy)
-                        if 0 <= ix < world.width and 0 <= iy < world.height:
-                            tile = world.grid[z_idx, iy, ix]
-                            if tile in (TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL):
+                        if 0 <= ix < w and 0 <= iy < h:
+                            tile = grid_z[iy, ix]
+                            if tile in _WALL_TILES:
                                 attenuated_vol *= 0.35
                             elif tile == TileType.DOOR:
                                 attenuated_vol *= 0.65
@@ -93,9 +106,11 @@ class Zombie:
             return None
         best_trail = None
         max_scent = 0.0
+        zx, zy, zz = self.x, self.y, self.z
+
         for st in scent_trails:
-            if st.z == self.z and st.intensity > 10.0:
-                d = math.hypot(st.x - self.x, st.y - self.y)
+            if st.z == zz and st.intensity > 10.0:
+                d = math.hypot(st.x - zx, st.y - zy)
                 if d < 10.0:
                     scent_score = st.intensity / (d + 1.0)
                     if scent_score > max_scent:
@@ -104,7 +119,6 @@ class Zombie:
         return best_trail
 
     def compute_flocking_vector(self, all_zombies, neighbor_radius=6.0, spatial_grid=None):
-        """Horde / Flocking behavior using fast spatial grid bucketing."""
         if not all_zombies:
             return 0.0, 0.0
 
@@ -112,17 +126,18 @@ class Zombie:
         align_x, align_y = 0.0, 0.0
         count = 0
         rad_sq = neighbor_radius * neighbor_radius
+        zx, zy, zz = self.x, self.y, self.z
 
         if spatial_grid is not None:
-            cx, cy, cz = int(self.x // neighbor_radius), int(self.y // neighbor_radius), self.z
+            cx, cy = int(zx // neighbor_radius), int(zy // neighbor_radius)
             for dcx in (-1, 0, 1):
                 for dcy in (-1, 0, 1):
-                    neighbors = spatial_grid.get((cx + dcx, cy + dcy, cz), None)
+                    neighbors = spatial_grid.get((cx + dcx, cy + dcy, zz), None)
                     if neighbors:
                         for other in neighbors:
                             if other is not self and other.is_alive:
-                                dx = other.x - self.x
-                                dy = other.y - self.y
+                                dx = other.x - zx
+                                dy = other.y - zy
                                 d_sq = dx * dx + dy * dy
                                 if 0.01 < d_sq < rad_sq:
                                     d = math.sqrt(d_sq)
@@ -133,9 +148,9 @@ class Zombie:
                                     align_y += dy
         else:
             for other in all_zombies:
-                if other is not self and other.is_alive and other.z == self.z:
-                    dx = other.x - self.x
-                    dy = other.y - self.y
+                if other is not self and other.is_alive and other.z == zz:
+                    dx = other.x - zx
+                    dy = other.y - zy
                     if abs(dx) < neighbor_radius and abs(dy) < neighbor_radius:
                         d_sq = dx * dx + dy * dy
                         if 0.01 < d_sq < rad_sq:

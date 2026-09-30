@@ -13,13 +13,13 @@ class TestBrain(unittest.TestCase):
         survivor = Survivor(5, 5)
         world = World(20, 20)
         inputs = extract_survivor_inputs(survivor, world, [], [], [], [])
-        self.assertEqual(len(inputs), 18)
+        self.assertEqual(len(inputs), 23)
 
         hidden = brain.init_hidden()
         dx, dy, action, new_hidden = brain.get_action_and_movement(inputs, hidden)
         self.assertTrue(-1.0 <= dx <= 1.0)
         self.assertTrue(-1.0 <= dy <= 1.0)
-        self.assertTrue(0 <= action <= 6)
+        self.assertTrue(0 <= action <= 8)
         self.assertEqual(new_hidden.shape, hidden.shape)
 
     def test_genetic_evolution(self):

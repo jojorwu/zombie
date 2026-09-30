@@ -4,14 +4,19 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class BrainNet(nn.Module):
-    def __init__(self, input_size=18, hidden_size=32, output_size=9):
+    def __init__(self, input_size=23, hidden_size=32, output_size=11):
         super(BrainNet, self).__init__()
+        self.input_size = input_size
         self.hidden_size = hidden_size
+        self.output_size = output_size
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.relu = nn.ReLU()
         self.gru = nn.GRUCell(hidden_size, hidden_size)
         self.fc_out = nn.Linear(hidden_size, output_size)
+        self.to(DEVICE)
 
     def forward(self, x, h):
         out = self.fc1(x)
@@ -21,25 +26,29 @@ class BrainNet(nn.Module):
         return out, h_next
 
     def init_hidden(self):
-        return torch.zeros(1, self.hidden_size, dtype=torch.float32)
+        return torch.zeros(1, self.hidden_size, dtype=torch.float32, device=DEVICE)
 
     def get_action_and_movement(self, inputs, prev_hidden=None):
         self.eval()
         if prev_hidden is None:
             prev_hidden = self.init_hidden()
 
-        with torch.no_grad():
-            inp_tensor = torch.tensor(inputs, dtype=torch.float32).unsqueeze(0)
+        with torch.inference_mode():
+            inp_tensor = torch.tensor(inputs, dtype=torch.float32, device=DEVICE)
+            if inp_tensor.dim() == 1:
+                inp_tensor = inp_tensor.unsqueeze(0)
+            if prev_hidden.device != DEVICE:
+                prev_hidden = prev_hidden.to(DEVICE)
             outputs, new_hidden = self.forward(inp_tensor, prev_hidden)
-            outputs = outputs.squeeze(0).numpy()
+            out_arr = outputs.squeeze(0).cpu().numpy()
 
-        dx = float(np.tanh(outputs[0]))
-        dy = float(np.tanh(outputs[1]))
-        action_idx = int(np.argmax(outputs[2:]))
+        dx = float(np.tanh(out_arr[0]))
+        dy = float(np.tanh(out_arr[1]))
+        action_idx = int(np.argmax(out_arr[2:]))
         return dx, dy, action_idx, new_hidden
 
 def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
-    inputs = np.zeros(18, dtype=np.float32)
+    inputs = np.zeros(23, dtype=np.float32)
     inputs[0] = survivor.health / 100.0
     inputs[1] = survivor.hunger / 100.0
     inputs[2] = survivor.thirst / 100.0
@@ -49,27 +58,26 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
     inputs[6] = 1.0 if survivor.inventory.get("weapon", 0) > 0 else 0.0
     inputs[7] = 1.0 if survivor.inventory.get("medkit", 0) > 0 else 0.0
 
-    def find_closest(entities, max_dist=15.0):
-        closest_dx, closest_dy = 0.0, 0.0
-        min_d = max_dist
-        for e in entities:
-            if hasattr(e, 'is_alive') and not e.is_alive:
-                continue
-            if hasattr(e, 'collected') and e.collected:
-                continue
-            d = math.hypot(e.x - survivor.x, e.y - survivor.y)
-            if d < min_d:
-                min_d = d
-                closest_dx = (e.x - survivor.x) / max_dist
-                closest_dy = (e.y - survivor.y) / max_dist
-        return closest_dx, closest_dy
+    def find_closest_vectorized(entities, max_dist=15.0):
+        active_entities = [e for e in entities if getattr(e, 'is_alive', True) and not getattr(e, 'collected', False)]
+        if not active_entities:
+            return 0.0, 0.0, 0.0
+        coords = np.array([[e.x, e.y, getattr(e, 'z', 0)] for e in active_entities], dtype=np.float32)
+        surv_pos = np.array([survivor.x, survivor.y, survivor.z], dtype=np.float32)
+        diffs = coords - surv_pos
+        dists = np.hypot(diffs[:, 0], diffs[:, 1]) + np.abs(diffs[:, 2]) * 2.0
+        min_idx = np.argmin(dists)
+        if dists[min_idx] < max_dist:
+            return float(diffs[min_idx, 0] / max_dist), float(diffs[min_idx, 1] / max_dist), float(diffs[min_idx, 2] / 20.0)
+        return 0.0, 0.0, 0.0
 
-    inputs[8], inputs[9] = find_closest(zombies)
-    inputs[10], inputs[11] = find_closest(items)
-    inputs[12], inputs[13] = find_closest(vehicles)
-    inputs[14], inputs[15] = find_closest(animals)
-    inputs[16] = 1.0 if world.is_walkable(survivor.x + 0.5, survivor.y) else 0.0
-    inputs[17] = 1.0 if world.is_walkable(survivor.x, survivor.y + 0.5) else 0.0
+    inputs[8], inputs[9], inputs[10] = find_closest_vectorized(zombies)
+    inputs[11], inputs[12], inputs[13] = find_closest_vectorized(items)
+    inputs[14], inputs[15], inputs[16] = find_closest_vectorized(vehicles)
+    inputs[17], inputs[18], inputs[19] = find_closest_vectorized(animals)
+    inputs[20] = 1.0 if world.is_walkable(survivor.x + 0.5, survivor.y, survivor.z) else 0.0
+    inputs[21] = 1.0 if world.is_walkable(survivor.x, survivor.y + 0.5, survivor.z) else 0.0
+    inputs[22] = float(survivor.z) / 20.0
 
     return inputs
 

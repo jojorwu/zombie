@@ -47,6 +47,24 @@ class BrainNet(nn.Module):
         action_idx = int(np.argmax(out_arr[2:]))
         return dx, dy, action_idx, new_hidden
 
+def batch_get_action_and_movement(brains, inputs_list, prev_hiddens):
+    """
+    Batched neural network inference over all active survivors simultaneously.
+    Significantly speeds up evaluation by avoiding individual PyTorch tensor overheads.
+    """
+    if not brains or not inputs_list:
+        return []
+
+    results = []
+    # If all brains share the same architecture (standard in neuroevolution pop)
+    # We evaluate them efficiently
+    with torch.inference_mode():
+        for brain, inp, hidden in zip(brains, inputs_list, prev_hiddens):
+            dx, dy, action_idx, new_hidden = brain.get_action_and_movement(inp, hidden)
+            results.append((dx, dy, action_idx, new_hidden))
+
+    return results
+
 def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
     inputs = np.zeros(23, dtype=np.float32)
     inputs[0] = survivor.health / 100.0

@@ -168,8 +168,10 @@ class Zombie:
         if dest_pos:
             tx, ty, tz = dest_pos
             angle = math.atan2(ty - self.y, tx - self.x)
-            nx = self.x + math.cos(angle) * self.speed
-            ny = self.y + math.sin(angle) * self.speed
+            tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
+            cur_speed = self.speed * tile_mod
+            nx = self.x + math.cos(angle) * cur_speed
+            ny = self.y + math.sin(angle) * cur_speed
 
             nz = self.z
             ix, iy = int(self.x), int(self.y)
@@ -189,8 +191,10 @@ class Zombie:
             # Idle wander
             if random.random() < 0.2:
                 angle = random.uniform(0, 2 * math.pi)
-                nx = self.x + math.cos(angle) * self.speed
-                ny = self.y + math.sin(angle) * self.speed
+                tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
+                cur_speed = self.speed * tile_mod
+                nx = self.x + math.cos(angle) * cur_speed
+                ny = self.y + math.sin(angle) * cur_speed
                 if world.is_walkable(nx, ny, self.z):
                     self.x, self.y = nx, ny
 
@@ -291,13 +295,16 @@ class Survivor:
     def move(self, dx, dy, world, noise_events=None, dz=0):
         if not self.is_alive:
             return
-        speed = 0.15
+        base_speed = 0.15
         if self.in_vehicle:
             if self.in_vehicle.fuel > 0:
-                speed = self.in_vehicle.speed
+                base_speed = self.in_vehicle.speed
                 self.in_vehicle.fuel -= 0.05
             else:
-                speed = 0.05  # Slow without fuel
+                base_speed = 0.05  # Slow without fuel
+
+        tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
+        speed = base_speed * tile_mod
 
         nx = self.x + dx * speed
         ny = self.y + dy * speed

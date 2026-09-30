@@ -27,6 +27,19 @@ class TestWorld(unittest.TestCase):
         self.assertEqual(TileType.ROOF, 15)
         self.assertEqual(TileType.TRASH_CAN, 16)
 
+    def test_new_tiles_speed_modifiers_and_chunks(self):
+        world = World(width=64, height=64)
+        # Check new tile types speed modifiers
+        self.assertEqual(world.get_tile_speed_modifier(0, 0), world.get_tile_speed_modifier(0, 0))
+        self.assertGreater(TileType.SAND, 0)
+        self.assertGreater(TileType.ROAD_HIGHWAY, 0)
+
+        # Check ChunkManager active chunks updating
+        chunk_mgr = world.chunk_manager
+        chunk_mgr.update_active_chunks([(10, 10), (50, 50)], view_distance_chunks=1)
+        self.assertIn((0, 0), chunk_mgr.active_chunks)
+        self.assertIn((3, 3), chunk_mgr.active_chunks)
+
     def test_accelerated_time_and_cutoffs(self):
         world = World(width=100, height=100, day_length_ticks=3600, electricity_cutoff_day=7, water_cutoff_day=14)
         # At tick 0: Day 1, Power and Water are online

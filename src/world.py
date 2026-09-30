@@ -22,6 +22,17 @@ class TileType:
     TRASH_CAN = 16
     CONTAINER_BOX = 17
     MAILBOX = 18
+    # New realistic road and terrain tile variants
+    ROAD_HIGHWAY = 19
+    SIDEWALK = 20
+    CROSSWALK = 21
+    DIRT_ROAD = 22
+    FOREST_DENSE = 23
+    FOREST_SPARSE = 24
+    DEAD_TREE = 25
+    GRASS_DENSE = 26
+    GRASS_DRY = 27
+    SAND = 28
 
 class BuildingType:
     SUPERMARKET = "supermarket"
@@ -33,6 +44,8 @@ class BuildingType:
     RESIDENTIAL = "residential"
     DORMITORY = "dormitory"
     SCHOOL = "school"
+    WAREHOUSE = "warehouse"
+    FACTORY = "factory"
 
 TILE_COLORS = {
     TileType.GRASS: (34, 139, 34),
@@ -54,6 +67,17 @@ TILE_COLORS = {
     TileType.TRASH_CAN: (80, 90, 80),
     TileType.CONTAINER_BOX: (180, 130, 70),
     TileType.MAILBOX: (70, 130, 180),
+    # Visual colors for new tile variants
+    TileType.ROAD_HIGHWAY: (50, 50, 55),
+    TileType.SIDEWALK: (180, 180, 185),
+    TileType.CROSSWALK: (220, 220, 220),
+    TileType.DIRT_ROAD: (139, 105, 20),
+    TileType.FOREST_DENSE: (0, 70, 0),
+    TileType.FOREST_SPARSE: (46, 139, 87),
+    TileType.DEAD_TREE: (100, 80, 60),
+    TileType.GRASS_DENSE: (0, 110, 0),
+    TileType.GRASS_DRY: (189, 183, 107),
+    TileType.SAND: (238, 214, 139),
 }
 
 BUILDING_COLORS = {
@@ -66,6 +90,8 @@ BUILDING_COLORS = {
     BuildingType.RESIDENTIAL: (210, 180, 140),
     BuildingType.DORMITORY: (190, 160, 120),
     BuildingType.SCHOOL: (200, 190, 170),
+    BuildingType.WAREHOUSE: (120, 110, 100),
+    BuildingType.FACTORY: (140, 130, 110),
 }
 
 TILE_WALKABLE = {
@@ -88,6 +114,35 @@ TILE_WALKABLE = {
     TileType.TRASH_CAN: True,
     TileType.CONTAINER_BOX: True,
     TileType.MAILBOX: True,
+    TileType.ROAD_HIGHWAY: True,
+    TileType.SIDEWALK: True,
+    TileType.CROSSWALK: True,
+    TileType.DIRT_ROAD: True,
+    TileType.FOREST_DENSE: True,
+    TileType.FOREST_SPARSE: True,
+    TileType.DEAD_TREE: False,
+    TileType.GRASS_DENSE: True,
+    TileType.GRASS_DRY: True,
+    TileType.SAND: True,
+}
+
+TILE_SPEED_MODIFIERS = {
+    TileType.ROAD_HIGHWAY: 1.25,
+    TileType.ROAD: 1.1,
+    TileType.CROSSWALK: 1.1,
+    TileType.SIDEWALK: 1.05,
+    TileType.PARKING: 1.05,
+    TileType.BRIDGE: 1.0,
+    TileType.BUILDING_FLOOR: 1.0,
+    TileType.UNDERGROUND_FLOOR: 1.0,
+    TileType.GRASS: 0.95,
+    TileType.GRASS_DRY: 0.9,
+    TileType.DIRT_ROAD: 0.9,
+    TileType.FOREST_SPARSE: 0.85,
+    TileType.SAND: 0.8,
+    TileType.GRASS_DENSE: 0.75,
+    TileType.FOREST: 0.75,
+    TileType.FOREST_DENSE: 0.6,
 }
 
 class Chunk:
@@ -103,9 +158,11 @@ class ChunkManager:
         self.num_chunks_x = int(math.ceil(world_width / chunk_size))
         self.num_chunks_y = int(math.ceil(world_height / chunk_size))
         self.chunks = {}
+        self.active_chunks = set()
         for cy in range(self.num_chunks_y):
             for cx in range(self.num_chunks_x):
                 self.chunks[(cx, cy)] = Chunk(cx, cy, chunk_size)
+                self.active_chunks.add((cx, cy))
 
     def get_chunk_coords(self, world_x, world_y):
         cx = int(world_x) // self.chunk_size
@@ -118,6 +175,23 @@ class ChunkManager:
     def get_chunk_at(self, world_x, world_y):
         cx, cy = self.get_chunk_coords(world_x, world_y)
         return self.get_chunk(cx, cy)
+
+    def update_active_chunks(self, entity_positions, view_distance_chunks=2):
+        """
+        Dynamically loads / activates chunks around active entities and unloads / deactivates far chunks.
+        Prevents memory leaks and reduces unnecessary computation for inactive regions.
+        """
+        new_active = set()
+        for x, y in entity_positions:
+            cx, cy = self.get_chunk_coords(x, y)
+            for dy in range(-view_distance_chunks, view_distance_chunks + 1):
+                for dx in range(-view_distance_chunks, view_distance_chunks + 1):
+                    target_cx, target_cy = cx + dx, cy + dy
+                    if (target_cx, target_cy) in self.chunks:
+                        new_active.add((target_cx, target_cy))
+
+        self.active_chunks = new_active
+        return self.active_chunks
 
 class World:
     def __init__(self, width=1000, height=1000, day_length_ticks=3600, z_min=0, z_max=2,
@@ -206,7 +280,31 @@ class World:
             self.grid[self.z_to_idx(z)].fill(TileType.UNDERGROUND_WALL)
 
         # ----------------------------------------------------
-        # PHASE 1: Roads, Bridges, Rivers, Forests & Parking
+        # PHASE 1: City District Zoning Setup
+        # Assign chunks to realistic districts:
+        # 0: Commercial / City Center (Downtown)
+        # 1: Residential Neighborhoods
+        # 2: Industrial & Warehouse District
+        # 3: Parks, Rivers & Nature Reserve
+        # ----------------------------------------------------
+        chunk_districts = {}
+        center_cx = self.chunk_manager.num_chunks_x // 2
+        center_cy = self.chunk_manager.num_chunks_y // 2
+
+        for cy in range(self.chunk_manager.num_chunks_y):
+            for cx in range(self.chunk_manager.num_chunks_x):
+                dist_from_center = math.hypot(cx - center_cx, cy - center_cy)
+                if dist_from_center <= max(2, self.chunk_manager.num_chunks_x * 0.25):
+                    chunk_districts[(cx, cy)] = "commercial"
+                elif cx < self.chunk_manager.num_chunks_x * 0.4 and cy < self.chunk_manager.num_chunks_y * 0.4:
+                    chunk_districts[(cx, cy)] = "industrial"
+                elif cx >= self.chunk_manager.num_chunks_x * 0.6 and cy >= self.chunk_manager.num_chunks_y * 0.6:
+                    chunk_districts[(cx, cy)] = "park"
+                else:
+                    chunk_districts[(cx, cy)] = "residential"
+
+        # ----------------------------------------------------
+        # PHASE 2: Rivers, Nature, Forests & Terrain Variations
         # ----------------------------------------------------
         num_rivers = random.randint(1, 2)
         for _ in range(num_rivers):
@@ -217,82 +315,113 @@ class World:
                     self.grid[g_idx, ry, rx] = TileType.WATER
                     if rx + 1 < self.width:
                         self.grid[g_idx, ry, rx + 1] = TileType.WATER
+                    if rx - 1 >= 0 and random.random() < 0.3:
+                        self.grid[g_idx, ry, rx - 1] = TileType.SAND
+                    if rx + 2 < self.width and random.random() < 0.3:
+                        self.grid[g_idx, ry, rx + 2] = TileType.SAND
                 ry += 1
                 rx += random.choice([-1, 0, 1])
 
-        num_forests = random.randint(4, 7)
-        for _ in range(num_forests):
-            cx = random.randint(2, self.width - 3)
-            cy = random.randint(2, self.height - 3)
-            radius = random.randint(3, 6)
-            for y in range(max(0, cy - radius), min(self.height, cy + radius + 1)):
-                for x in range(max(0, cx - radius), min(self.width, cx + radius + 1)):
-                    if (x - cx)**2 + (y - cy)**2 <= radius**2:
-                        if self.grid[g_idx, y, x] != TileType.WATER:
-                            self.grid[g_idx, y, x] = TileType.FOREST
+        # Generate forests & vegetation in park & residential zones
+        for cy in range(self.chunk_manager.num_chunks_y):
+            for cx in range(self.chunk_manager.num_chunks_x):
+                district = chunk_districts[(cx, cy)]
+                base_x, base_y = cx * 16, cy * 16
+                if district == "park":
+                    for y in range(base_y, min(self.height, base_y + 16)):
+                        for x in range(base_x, min(self.width, base_x + 16)):
+                            if self.grid[g_idx, y, x] == TileType.GRASS:
+                                r = random.random()
+                                if r < 0.35:
+                                    self.grid[g_idx, y, x] = TileType.FOREST_DENSE
+                                elif r < 0.65:
+                                    self.grid[g_idx, y, x] = TileType.FOREST_SPARSE
+                                elif r < 0.8:
+                                    self.grid[g_idx, y, x] = TileType.GRASS_DENSE
+                                elif r < 0.88:
+                                    self.grid[g_idx, y, x] = TileType.DEAD_TREE
+                elif district == "residential":
+                    for y in range(base_y, min(self.height, base_y + 16)):
+                        for x in range(base_x, min(self.width, base_x + 16)):
+                            if self.grid[g_idx, y, x] == TileType.GRASS and random.random() < 0.15:
+                                self.grid[g_idx, y, x] = TileType.GRASS_DRY
 
-        # City Main Roads & Bridges
+        # ----------------------------------------------------
+        # PHASE 3: Realistic Road Network (Highways, Avenues, Sidewalks, Crosswalks)
+        # ----------------------------------------------------
         for x in range(0, self.width):
             for y in range(0, self.height):
-                if x % 8 == 0 or y % 8 == 0:
+                cx, cy = x // 16, y // 16
+                district = chunk_districts.get((cx, cy), "residential")
+
+                # Major Highways every 16 tiles
+                if x % 16 == 0 or y % 16 == 0:
+                    if self.grid[g_idx, y, x] == TileType.WATER:
+                        self.grid[g_idx, y, x] = TileType.BRIDGE
+                    elif district == "park" or district == "industrial":
+                        self.grid[g_idx, y, x] = TileType.DIRT_ROAD if district == "industrial" else TileType.ROAD
+                    else:
+                        self.grid[g_idx, y, x] = TileType.ROAD_HIGHWAY
+
+                # Secondary Avenues and Sidewalks inside districts
+                elif x % 8 == 0 or y % 8 == 0:
                     if self.grid[g_idx, y, x] == TileType.WATER:
                         self.grid[g_idx, y, x] = TileType.BRIDGE
                     else:
                         self.grid[g_idx, y, x] = TileType.ROAD
 
+        # Add Sidewalks alongside urban roads and Crosswalks at intersections
+        for y in range(1, self.height - 1):
+            for x in range(1, self.width - 1):
+                if self.grid[g_idx, y, x] in (TileType.ROAD, TileType.ROAD_HIGHWAY):
+                    # Intersections -> Crosswalks
+                    if (x % 8 == 0 and y % 16 == 0) or (x % 16 == 0 and y % 8 == 0):
+                        self.grid[g_idx, y, x] = TileType.CROSSWALK
+
+                    # Sidewalk placement adjacent to grass/buildings
+                    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        adj_x, adj_y = x + dx, y + dy
+                        if 0 <= adj_x < self.width and 0 <= adj_y < self.height:
+                            if self.grid[g_idx, adj_y, adj_x] in (TileType.GRASS, TileType.GRASS_DRY):
+                                self.grid[g_idx, adj_y, adj_x] = TileType.SIDEWALK
+
         # ----------------------------------------------------
-        # PHASE 2: Small Details (Trash Cans, Mailboxes, Crates)
+        # PHASE 4: District-Matched Building Placement & Props
+        # ----------------------------------------------------
+        commercial_types = [BuildingType.SUPERMARKET, BuildingType.STORE, BuildingType.GAS_STATION, BuildingType.HOSPITAL, BuildingType.POLICE_STATION, BuildingType.GUN_STORE]
+        residential_types = [BuildingType.RESIDENTIAL, BuildingType.DORMITORY, BuildingType.SCHOOL]
+        industrial_types = [BuildingType.WAREHOUSE, BuildingType.FACTORY, BuildingType.GAS_STATION]
+
+        for cy in range(self.chunk_manager.num_chunks_y):
+            for cx in range(self.chunk_manager.num_chunks_x):
+                district = chunk_districts[(cx, cy)]
+                if district == "park":
+                    continue
+
+                bx = cx * 16 + 2
+                by = cy * 16 + 2
+                if bx + 6 < self.width and by + 6 < self.height:
+                    if district == "commercial":
+                        btype = random.choice(commercial_types)
+                    elif district == "industrial":
+                        btype = random.choice(industrial_types)
+                    else:
+                        btype = random.choice(residential_types)
+
+                    self.build_chunk_building(bx, by, 5, 5, btype)
+
+        # ----------------------------------------------------
+        # PHASE 5: Detail Props (Trash Cans, Mailboxes, Containers)
         # ----------------------------------------------------
         for y in range(1, self.height - 1):
             for x in range(1, self.width - 1):
-                if self.grid[g_idx, y, x] == TileType.ROAD:
-                    if random.random() < 0.03 and self.grid[g_idx, y, x + 1] == TileType.GRASS:
+                if self.grid[g_idx, y, x] in (TileType.ROAD, TileType.SIDEWALK):
+                    if random.random() < 0.02 and self.grid[g_idx, y, x + 1] == TileType.SIDEWALK:
                         self.grid[g_idx, y, x + 1] = TileType.TRASH_CAN
-                    elif random.random() < 0.03 and self.grid[g_idx, y + 1, x] == TileType.GRASS:
+                    elif random.random() < 0.02 and self.grid[g_idx, y + 1, x] == TileType.SIDEWALK:
                         self.grid[g_idx, y + 1, x] = TileType.MAILBOX
-                    elif random.random() < 0.02 and self.grid[g_idx, y - 1, x] == TileType.GRASS:
+                    elif random.random() < 0.015 and self.grid[g_idx, y - 1, x] == TileType.SIDEWALK:
                         self.grid[g_idx, y - 1, x] = TileType.CONTAINER_BOX
-
-        # ----------------------------------------------------
-        # PHASE 3: Commercial & Specialized Buildings
-        # (Supermarket, Stores, Gas Station, Hospital, Police)
-        # ----------------------------------------------------
-        commercial_types = [
-            BuildingType.SUPERMARKET,
-            BuildingType.STORE,
-            BuildingType.GAS_STATION,
-            BuildingType.HOSPITAL,
-            BuildingType.POLICE_STATION
-        ]
-
-        # Place commercial buildings fitted in chunks
-        for cy in range(self.chunk_manager.num_chunks_y):
-            for cx in range(self.chunk_manager.num_chunks_x):
-                if (cx + cy) % 2 == 0:
-                    bx = cx * 16 + 2
-                    by = cy * 16 + 2
-                    if bx + 6 < self.width and by + 6 < self.height:
-                        btype = random.choice(commercial_types)
-                        self.build_chunk_building(bx, by, 5, 5, btype)
-
-        # ----------------------------------------------------
-        # PHASE 4: Residential & Institutional Buildings
-        # (Houses, Dormitories, Schools)
-        # ----------------------------------------------------
-        residential_types = [
-            BuildingType.RESIDENTIAL,
-            BuildingType.DORMITORY,
-            BuildingType.SCHOOL
-        ]
-
-        for cy in range(self.chunk_manager.num_chunks_y):
-            for cx in range(self.chunk_manager.num_chunks_x):
-                if (cx + cy) % 2 != 0:
-                    bx = cx * 16 + 2
-                    by = cy * 16 + 2
-                    if bx + 6 < self.width and by + 6 < self.height:
-                        btype = random.choice(residential_types)
-                        self.build_chunk_building(bx, by, 5, 5, btype)
 
     def is_walkable(self, x, y, z=0):
         ix, iy = int(x), int(y)
@@ -301,6 +430,14 @@ class World:
             tile = self.grid[z_idx, iy, ix]
             return TILE_WALKABLE.get(tile, False)
         return False
+
+    def get_tile_speed_modifier(self, x, y, z=0):
+        ix, iy = int(x), int(y)
+        z_idx = self.z_to_idx(z)
+        if 0 <= z_idx < self.num_levels and 0 <= ix < self.width and 0 <= iy < self.height:
+            tile = self.grid[z_idx, iy, ix]
+            return TILE_SPEED_MODIFIERS.get(tile, 1.0)
+        return 1.0
 
     def update_day_night(self):
         self.current_tick += 1

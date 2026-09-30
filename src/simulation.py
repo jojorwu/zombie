@@ -37,6 +37,13 @@ class SimulationEngine:
         self.reset_generation()
 
     def reset_generation(self):
+        # Explicit memory cleanup on generation reset
+        import gc
+        import torch
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         self.world.generate_world()
         self.survivors = []
         self.zombies = []
@@ -136,21 +143,29 @@ class SimulationEngine:
             ne.update()
         self.noise_events = [ne for ne in self.noise_events if ne.lifetime > 0 and ne.volume > 0.0]
 
-        alive_count = 0
-        import torch
-        with torch.inference_mode():
-            for i, survivor in enumerate(self.survivors):
-                if not survivor.is_alive:
-                    continue
+        # Update dynamic chunk activation for entities
+        entity_positions = [(s.x, s.y) for s in self.survivors if s.is_alive]
+        entity_positions.extend([(z.x, z.y) for z in self.zombies if z.is_alive])
+        if entity_positions:
+            self.world.chunk_manager.update_active_chunks(entity_positions, view_distance_chunks=2)
 
-                alive_count += 1
+        alive_indices = [i for i, s in enumerate(self.survivors) if s.is_alive]
+        alive_count = len(alive_indices)
+
+        if alive_count > 0:
+            active_brains = [self.brains[i] for i in alive_indices]
+            active_inputs = [extract_survivor_inputs(self.survivors[i], self.world, self.items, self.vehicles, self.zombies, self.animals) for i in alive_indices]
+            active_hiddens = [self.hidden_states[i] for i in alive_indices]
+
+            from src.brain import batch_get_action_and_movement
+            step_outputs = batch_get_action_and_movement(active_brains, active_inputs, active_hiddens)
+
+            for idx, orig_i in enumerate(alive_indices):
+                survivor = self.survivors[orig_i]
                 survivor.update_needs()
 
-                brain = self.brains[i]
-                prev_hidden = self.hidden_states[i]
-                inputs = extract_survivor_inputs(survivor, self.world, self.items, self.vehicles, self.zombies, self.animals)
-                dx, dy, action, new_hidden = brain.get_action_and_movement(inputs, prev_hidden)
-                self.hidden_states[i] = new_hidden
+                dx, dy, action, new_hidden = step_outputs[idx]
+                self.hidden_states[orig_i] = new_hidden
 
                 survivor.move(dx, dy, self.world, noise_events=self.noise_events)
                 survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors, noise_events=self.noise_events)

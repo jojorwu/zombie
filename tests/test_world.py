@@ -88,5 +88,20 @@ class TestWorld(unittest.TestCase):
         # Check furniture tile non-walkability
         self.assertFalse(world.is_walkable(0, 0) and world.grid[g_idx, 0, 0] == TileType.REFRIGERATOR)
 
+    def test_weather_wind_rain_and_dynamic_lights(self):
+        world = World(width=150, height=150)
+        self.assertIsNotNone(world.weather)
+        self.assertGreaterEqual(world.weather.wind_speed, 0.0)
+
+        # Force rain front spawn
+        world.weather.rain_front = {"x": 10.0, "y": 10.0, "w": 100.0, "h": 100.0, "vx": 0.1, "vy": 0.1, "lifetime": 100}
+        self.assertTrue(world.weather.is_in_rain(20, 20))
+        self.assertFalse(world.weather.is_in_rain(120, 120))
+
+        # Check dynamic lighting addition
+        from src.world import DynamicLight
+        world.dynamic_lights.append(DynamicLight(10.0, 10.0, 0, radius=5.0))
+        self.assertEqual(len(world.dynamic_lights), 1)
+
 if __name__ == "__main__":
     unittest.main()

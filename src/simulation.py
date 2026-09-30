@@ -204,7 +204,7 @@ class SimulationEngine:
 
         # Update scent trails
         for st in self.scent_trails:
-            st.update()
+            st.update(world=self.world)
         self.scent_trails = [st for st in self.scent_trails if st.intensity > 0.0]
 
         for zombie in self.zombies:

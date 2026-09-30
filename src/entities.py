@@ -130,8 +130,17 @@ class ScentTrail:
         self.z = int(z)
         self.intensity = intensity
 
-    def update(self):
-        self.intensity -= 1.0  # Fades over time
+    def update(self, world=None):
+        decay = 1.0
+        if world and world.weather.is_in_rain(self.x, self.y):
+            decay = 4.0  # Rain rapidly washes away scent trails
+        self.intensity -= decay
+
+        if world and world.weather.wind_speed > 5.0:
+            # Drift scent trail along wind vector
+            drift_speed = (world.weather.wind_speed / 100.0) * 0.05
+            self.x += math.cos(world.weather.wind_angle) * drift_speed
+            self.y += math.sin(world.weather.wind_angle) * drift_speed
 
 class Zombie:
     def __init__(self, x, y, hp=50.0, z=0):
@@ -464,8 +473,20 @@ class Survivor:
             else:
                 base_speed = 0.05  # Slow without fuel
 
+        # Factor in wind speed/direction and rain wetness
         tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
-        speed = base_speed * tile_mod
+
+        # Calculate movement vector dot product with wind vector
+        wind_vx = math.cos(world.weather.wind_angle)
+        wind_vy = math.sin(world.weather.wind_angle)
+        move_dot_wind = dx * wind_vx + dy * wind_vy
+        wind_factor = 1.0 + (move_dot_wind * (world.weather.wind_speed / 200.0))  # Tailward boost vs headwind resistance
+
+        # Check wetness in rain
+        is_raining = world.weather.is_in_rain(self.x, self.y)
+        rain_factor = 0.85 if (is_raining and not self.in_vehicle) else 1.0
+
+        speed = base_speed * tile_mod * wind_factor * rain_factor
 
         nx = self.x + dx * speed
         ny = self.y + dy * speed
@@ -597,6 +618,14 @@ class Survivor:
 
             if is_firearm and ammo_type:
                 self.inventory[ammo_type] -= 1  # Consume ammo round
+
+                # Wind deflection on bullet ballistics
+                wind_deflect_x = math.cos(world.weather.wind_angle) * (world.weather.wind_speed / 100.0) * 0.5
+                wind_deflect_y = math.sin(world.weather.wind_angle) * (world.weather.wind_speed / 100.0) * 0.5
+
+                # Spawn muzzle flash dynamic light source
+                from src.world import DynamicLight
+                world.dynamic_lights.append(DynamicLight(self.x, self.y, self.z, radius=12.0, color=(255, 200, 100), intensity=1.5, lifetime=2))
 
             if self.in_vehicle and self.in_vehicle.fuel > 0:
                 attack_range = 1.5

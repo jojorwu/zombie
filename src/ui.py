@@ -268,6 +268,28 @@ class RendererUI:
         def to_screen(wx, wy):
             return int((wx - min_x) * self.tile_size), int((wy - min_y) * self.tile_size)
 
+        # Draw dynamic light sources (muzzle flashes, lightning)
+        for dl in getattr(self.sim.world, 'dynamic_lights', []):
+            if dl.z == cur_z and min_x <= dl.x <= max_x and min_y <= dl.y <= max_y:
+                lx_p, ly_p = to_screen(dl.x, dl.y)
+                lr_p = int(dl.radius * self.tile_size)
+                pygame.draw.circle(self.screen, dl.color, (lx_p, ly_p), max(4, lr_p), 2)
+
+        # Draw localized slanted rain particles over 100x100 tile storm zone
+        rf = self.sim.world.weather.rain_front
+        if rf and cur_z >= 0:
+            rx_start = max(min_x, int(rf["x"]))
+            rx_end = min(max_x, int(rf["x"] + rf["w"]))
+            ry_start = max(min_y, int(rf["y"]))
+            ry_end = min(max_y, int(rf["y"] + rf["h"]))
+
+            slant_x = int(math.cos(self.sim.world.weather.wind_angle) * 8)
+            for ry in range(ry_start, ry_end, 2):
+                for rx in range(rx_start, rx_end, 2):
+                    if (rx + ry + self.sim.world.current_tick) % 7 == 0:
+                        px, py = to_screen(rx, ry)
+                        pygame.draw.line(self.screen, (150, 200, 255), (px, py), (px + slant_x, py + 8), 1)
+
         # Draw acoustic Noise Events on current level
         for ne in getattr(self.sim, 'noise_events', []):
             if ne.z == cur_z and min_x <= ne.x <= max_x and min_y <= ne.y <= max_y:
@@ -347,12 +369,18 @@ class RendererUI:
         chase_cnt = sum(1 for z in self.sim.zombies if z.is_alive and getattr(z, 'state', None) == 'chase')
         invest_cnt = sum(1 for z in self.sim.zombies if z.is_alive and getattr(z, 'state', None) == 'investigate')
 
+        wind_deg = int(math.degrees(self.sim.world.weather.wind_angle) % 360)
+        wind_spd = self.sim.world.weather.wind_speed
+        has_rain = self.sim.world.weather.rain_front is not None
+
         draw_text("Zombie AI Neuroevolution", self.bold_font, theme["title"])
         draw_text(f"Theme: {self.active_theme} [T to Switch]", color=theme["accent"])
         draw_text(f"Date: {self.sim.world.get_time_string()}")
         draw_text(f"Gen: {self.sim.evolution_manager.generation}  Tick: {self.sim.world.current_tick}")
         draw_text(f"View Level Z: {self.view_z}  Light: {light:.2f}")
         draw_text(f"Power: {'BLACKOUT' if self.sim.world.is_power_out() else 'ONLINE'} | Water: {'CUT OFF' if self.sim.world.is_water_out() else 'ONLINE'}")
+        draw_text(f"Wind: {wind_spd:.1f} km/h ({wind_deg}°)", color=(180, 220, 255))
+        draw_text(f"Weather: {'LOCAL RAINSTORM' if has_rain else 'CLEAR SKIES'}", color=(0, 255, 255) if has_rain else (255, 215, 0))
         draw_text(f"Active Noises: {len(getattr(self.sim, 'noise_events', []))}")
         draw_text(f"Zombies: Chase={chase_cnt} Hear/Invest={invest_cnt}")
         draw_text(f"Speed: {self.speed_multiplier}x  Status: {'PAUSED' if self.paused else 'RUNNING'}")

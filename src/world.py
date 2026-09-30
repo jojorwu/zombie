@@ -218,6 +218,61 @@ class ChunkManager:
         self.active_chunks = new_active
         return self.active_chunks
 
+class WeatherManager:
+    """Simulates dynamic wind directions/speeds and localized 100x100 moving rainstorms."""
+    def __init__(self, world_width, world_height):
+        self.world_width = world_width
+        self.world_height = world_height
+        self.wind_angle = random.uniform(0, 2 * math.pi)  # Radians
+        self.wind_speed = random.uniform(10.0, 50.0)      # km/h
+        self.rain_front = None                            # dict: {x, y, w: 100, h: 100, vx, vy, lifetime}
+        self.next_rain_tick = 3600 * 3                    # 3-day interval
+
+    def update(self, current_tick):
+        # Gradually shift wind direction & speed
+        self.wind_angle += random.uniform(-0.02, 0.02)
+        self.wind_speed = max(0.0, min(100.0, self.wind_speed + random.uniform(-0.5, 0.5)))
+
+        # Trigger rain front every ~3 in-game days (10,800 ticks)
+        if current_tick >= self.next_rain_tick and self.rain_front is None:
+            self.rain_front = {
+                "x": float(random.randint(0, max(1, self.world_width - 100))),
+                "y": float(random.randint(0, max(1, self.world_height - 100))),
+                "w": 100,
+                "h": 100,
+                "vx": math.cos(self.wind_angle) * 0.2,
+                "vy": math.sin(self.wind_angle) * 0.2,
+                "lifetime": 1200  # ~8 in-game hours
+            }
+            self.next_rain_tick = current_tick + 3600 * 3
+
+        if self.rain_front:
+            self.rain_front["x"] = max(0.0, min(self.world_width - 100, self.rain_front["x"] + self.rain_front["vx"]))
+            self.rain_front["y"] = max(0.0, min(self.world_height - 100, self.rain_front["y"] + self.rain_front["vy"]))
+            self.rain_front["lifetime"] -= 1
+            if self.rain_front["lifetime"] <= 0:
+                self.rain_front = None
+
+    def is_in_rain(self, x, y):
+        if not self.rain_front:
+            return False
+        rf = self.rain_front
+        return (rf["x"] <= x <= rf["x"] + rf["w"]) and (rf["y"] <= y <= rf["y"] + rf["h"])
+
+class DynamicLight:
+    """Represents a localized dynamic point/cone light source (muzzle flash, flashlight, headlight, lightning)."""
+    def __init__(self, x, y, z, radius=8.0, color=(255, 255, 200), intensity=1.0, lifetime=1):
+        self.x = float(x)
+        self.y = float(y)
+        self.z = int(z)
+        self.radius = float(radius)
+        self.color = color
+        self.intensity = float(intensity)
+        self.lifetime = lifetime
+
+    def update(self):
+        self.lifetime -= 1
+
 class World:
     def __init__(self, width=1000, height=1000, day_length_ticks=3600, z_min=0, z_max=2,
                  electricity_cutoff_day=7, water_cutoff_day=14, electricity_enabled=True, water_enabled=True):
@@ -234,6 +289,8 @@ class World:
         self.water_enabled = water_enabled
         self.current_tick = 0
         self.chunk_manager = ChunkManager(self.width, self.height, chunk_size=16)
+        self.weather = WeatherManager(self.width, self.height)
+        self.dynamic_lights = []
         self.grid = np.zeros((self.num_levels, self.height, self.width), dtype=int)
         self.building_grid = {}  # (x, y, z) -> BuildingType
         self.buildings = []  # List of building info dicts
@@ -472,6 +529,19 @@ class World:
 
     def update_day_night(self):
         self.current_tick += 1
+        self.weather.update(self.current_tick)
+
+        # Update dynamic lights
+        for dl in self.dynamic_lights:
+            dl.update()
+        self.dynamic_lights = [dl for dl in self.dynamic_lights if dl.lifetime > 0]
+
+        # Random lightning flash during rainstorms
+        if self.weather.rain_front and random.random() < 0.03:
+            rf = self.weather.rain_front
+            lx = rf["x"] + random.uniform(0, 100)
+            ly = rf["y"] + random.uniform(0, 100)
+            self.dynamic_lights.append(DynamicLight(lx, ly, z=0, radius=25.0, color=(200, 220, 255), intensity=2.0, lifetime=2))
 
     def get_time_components(self):
         # 1 real hour (108,000 ticks) = 1 month (30 days)

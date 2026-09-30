@@ -86,7 +86,7 @@ class SimulationEngine:
             z_ent = Zombie(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
             self.zombies.append(z_ent)
 
-        # 4. Spawn Items & Trash Can loot
+        # 4. Spawn Items & Detail Loot (Trash Cans, Mailboxes, Containers, Building Loot)
         for tc in trash_coords:
             itype = random.choice([ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.METAL])
             self.items.append(ItemEntity(tc[0] + 0.5, tc[1] + 0.5, itype, amount=random.randint(1, 3), z=tc[2]))
@@ -94,13 +94,15 @@ class SimulationEngine:
         for b in self.world.buildings:
             bx, by, bw, bh, btype = b["x"], b["y"], b["w"], b["h"], b["type"]
             loot_type = ResourceItem.FOOD
-            if btype == BuildingType.HOSPITAL:
+            if btype in (BuildingType.HOSPITAL,):
                 loot_type = ResourceItem.MEDKIT
-            elif btype == BuildingType.GUN_STORE or btype == BuildingType.POLICE_STATION:
+            elif btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION):
                 loot_type = ResourceItem.WEAPON if random.random() < 0.6 else ResourceItem.METAL
             elif btype == BuildingType.GAS_STATION:
                 loot_type = ResourceItem.FUEL
-            elif btype == BuildingType.RESIDENTIAL:
+            elif btype in (BuildingType.SUPERMARKET, BuildingType.STORE):
+                loot_type = ResourceItem.FOOD if random.random() < 0.5 else ResourceItem.WATER
+            elif btype in (BuildingType.RESIDENTIAL, BuildingType.DORMITORY, BuildingType.SCHOOL):
                 loot_type = ResourceItem.FOOD if random.random() < 0.7 else ResourceItem.WATER
 
             for floor_z in range(self.world.z_min, self.world.z_max + 1):

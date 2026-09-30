@@ -6,8 +6,30 @@ import unittest
 from utils.p_np_math import PolynomialVerifier, PNPComplexityEngine
 from utils.mod_utility import ModUtility
 from utils.dev_utility import DevUtility
+from utils.pathfinding_utility import PathfindingUtility
+from src.pathfinding import AStar3D
+from src.world import World, TileType, ChunkManager
 
 class TestUtilitiesAndMath(unittest.TestCase):
+    def test_3d_astar_pathfinding(self):
+        world = World(width=30, height=30, z_min=0, z_max=2)
+        # Ensure path is clear
+        world.grid[:, 5, 5:15] = TileType.GRASS
+        astar = AStar3D(world)
+        path = astar.find_path((5.0, 5.0, 0), (14.0, 5.0, 0))
+        self.assertGreater(len(path), 0)
+
+    def test_pathfinding_utility(self):
+        util = PathfindingUtility(width=30, height=30)
+        res = util.benchmark_pathfinding(num_runs=10)
+        self.assertIn("avg_time_ms", res)
+
+    def test_chunk_manager(self):
+        cm = ChunkManager(world_width=60, world_height=40, chunk_size=16)
+        chunk = cm.get_chunk_at(20, 20)
+        self.assertIsNotNone(chunk)
+        self.assertEqual(chunk.chunk_x, 1)
+        self.assertEqual(chunk.chunk_y, 1)
     def test_p_np_verifier(self):
         clauses = [(1, 2, -3), (-1, 2, 3)]
         assignment = {1: True, 2: True, 3: False}

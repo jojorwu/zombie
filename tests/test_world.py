@@ -20,6 +20,13 @@ class TestWorld(unittest.TestCase):
         self.assertEqual(g_idx, 20)
         self.assertTrue(world.is_walkable(0, 0, z=0) or not world.is_walkable(0, 0, z=0))
 
+    def test_world_parking_roof_trash_features(self):
+        world = World(width=50, height=40, z_min=0, z_max=2)
+        # Verify tile types exist in definitions
+        self.assertEqual(TileType.PARKING, 14)
+        self.assertEqual(TileType.ROOF, 15)
+        self.assertEqual(TileType.TRASH_CAN, 16)
+
     def test_day_night_cycle(self):
         world = World(width=20, height=20, day_length_ticks=100)
         world.current_tick = 25  # Noon peak

@@ -44,48 +44,53 @@ class SimulationEngine:
         self.hidden_states = [brain.init_hidden() for brain in self.brains]
 
         walkable_coords = []
-        building_floors = []
+        parking_coords = []
+        trash_coords = []
+
         for z in range(self.world.z_min, self.world.z_max + 1):
             z_idx = self.world.z_to_idx(z)
             for y in range(self.world.height):
                 for x in range(self.world.width):
                     if self.world.is_walkable(x, y, z):
-                        walkable_coords.append((x, y, z))
-                        if self.world.grid[z_idx, y, x] in (TileType.BUILDING_FLOOR, TileType.UNDERGROUND_FLOOR):
-                            building_floors.append((x, y, z))
+                        coord = (x, y, z)
+                        walkable_coords.append(coord)
+                        tile = self.world.grid[z_idx, y, x]
+                        if tile == TileType.PARKING:
+                            parking_coords.append(coord)
+                        elif tile == TileType.TRASH_CAN:
+                            trash_coords.append(coord)
 
         random.shuffle(walkable_coords)
-        random.shuffle(building_floors)
+        random.shuffle(parking_coords)
+        random.shuffle(trash_coords)
 
-        # Ground-preferred coordinates for vehicles/animals
         ground_walkable = [(x, y, z) for x, y, z in walkable_coords if z == 0]
         random.shuffle(ground_walkable)
 
-        # Spawn Survivors (across height levels)
-        for i in range(min(self.sim_cfg["num_survivors"], len(walkable_coords))):
-            coord = walkable_coords.pop()
-            s = Survivor(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
-            self.survivors.append(s)
-
-        # Spawn Zombies (across height levels)
-        for _ in range(min(self.sim_cfg["num_zombies"], len(walkable_coords))):
-            coord = walkable_coords.pop()
-            z_ent = Zombie(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
-            self.zombies.append(z_ent)
-
-        # Spawn Animals
+        # 1. Spawn Animals (Животные)
         for _ in range(min(self.sim_cfg["num_animals"], len(ground_walkable))):
             coord = ground_walkable.pop()
             a = Animal(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
             self.animals.append(a)
 
-        # Spawn Vehicles
-        for _ in range(min(self.sim_cfg["num_vehicles"], len(ground_walkable))):
-            coord = ground_walkable.pop()
+        # 2. Spawn Vehicles (Транспорт - preferring parking lots)
+        vehicle_spawns = parking_coords if parking_coords else ground_walkable
+        for _ in range(min(self.sim_cfg["num_vehicles"], len(vehicle_spawns))):
+            coord = vehicle_spawns.pop()
             v = Vehicle(coord[0] + 0.5, coord[1] + 0.5, fuel=random.uniform(30.0, 80.0), z=coord[2])
             self.vehicles.append(v)
 
-        # Spawn specialized loot in buildings across floors
+        # 3. Spawn Zombies (Зомби)
+        for _ in range(min(self.sim_cfg["num_zombies"], len(walkable_coords))):
+            coord = walkable_coords.pop()
+            z_ent = Zombie(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
+            self.zombies.append(z_ent)
+
+        # 4. Spawn Items & Trash Can loot
+        for tc in trash_coords:
+            itype = random.choice([ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.METAL])
+            self.items.append(ItemEntity(tc[0] + 0.5, tc[1] + 0.5, itype, amount=random.randint(1, 3), z=tc[2]))
+
         for b in self.world.buildings:
             bx, by, bw, bh, btype = b["x"], b["y"], b["w"], b["h"], b["type"]
             loot_type = ResourceItem.FOOD
@@ -103,13 +108,18 @@ class SimulationEngine:
                 if self.world.is_walkable(lx, ly, floor_z):
                     self.items.append(ItemEntity(lx + 0.5, ly + 0.5, loot_type, amount=random.randint(1, 3), z=floor_z))
 
-        # Spawn random outdoor/indoor items
         item_types = [ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL]
         for _ in range(min(30, len(walkable_coords))):
             coord = walkable_coords.pop()
             itype = random.choice(item_types)
             item = ItemEntity(coord[0] + 0.5, coord[1] + 0.5, itype, amount=random.randint(1, 2), z=coord[2])
             self.items.append(item)
+
+        # 5. Spawn Survivors (Выжившие - AT THE VERY END!)
+        for i in range(min(self.sim_cfg["num_survivors"], len(walkable_coords))):
+            coord = walkable_coords.pop()
+            s = Survivor(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
+            self.survivors.append(s)
 
     def tick(self):
         self.world.update_day_night()

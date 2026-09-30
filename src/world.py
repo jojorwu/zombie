@@ -17,6 +17,9 @@ class TileType:
     UNDERGROUND_WALL = 11
     UNDERGROUND_FLOOR = 12
     LADDER = 13
+    PARKING = 14
+    ROOF = 15
+    TRASH_CAN = 16
 
 class BuildingType:
     RESIDENTIAL = "residential"
@@ -40,6 +43,9 @@ TILE_COLORS = {
     TileType.UNDERGROUND_WALL: (50, 50, 55),
     TileType.UNDERGROUND_FLOOR: (90, 90, 100),
     TileType.LADDER: (218, 165, 32),
+    TileType.PARKING: (70, 70, 75),
+    TileType.ROOF: (160, 140, 120),
+    TileType.TRASH_CAN: (80, 90, 80),
 }
 
 BUILDING_COLORS = {
@@ -65,6 +71,9 @@ TILE_WALKABLE = {
     TileType.UNDERGROUND_WALL: False,
     TileType.UNDERGROUND_FLOOR: True,
     TileType.LADDER: True,
+    TileType.PARKING: True,
+    TileType.ROOF: True,
+    TileType.TRASH_CAN: True,
 }
 
 class World:
@@ -184,10 +193,22 @@ class World:
                                         self.grid[z_idx, y, x] = TileType.BUILDING_FLOOR
                                 self.building_grid[(x, y, z)] = btype
 
-                        # Doors & furniture
+                        # Doors, furniture, and rooftops
                         if z == 0:
                             self.grid[z_idx, by + bh - 1, bx + 2] = TileType.DOOR
                             self.grid[z_idx, by + 1, bx + 1] = TileType.FURNITURE
+                            # Generate adjacent Parking Lot & Trash Can
+                            if bx + bw + 1 < self.width and by + bh < self.height:
+                                for px in range(bx + bw, min(self.width, bx + bw + 2)):
+                                    for py in range(by, min(self.height, by + bh)):
+                                        if self.grid[z_idx, py, px] in (TileType.GRASS, TileType.ROAD):
+                                            self.grid[z_idx, py, px] = TileType.PARKING
+                                self.grid[z_idx, by + bh - 1, bx + bw] = TileType.TRASH_CAN
+                        elif z == top_floor and z > 0:
+                            # Rooftop terrace
+                            for ry in range(by + 1, by + bh - 1):
+                                for rx in range(bx + 1, bx + bw - 1):
+                                    self.grid[z_idx, ry, rx] = TileType.ROOF
                         elif z < top_floor:
                             self.grid[z_idx, by + 1, bx + 1] = TileType.FURNITURE
 

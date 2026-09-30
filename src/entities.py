@@ -181,15 +181,37 @@ class Zombie:
                     closest_surv = s
         return closest_surv
 
-    def check_hearing(self, noise_events):
+    def check_hearing(self, noise_events, world=None):
+        """
+        Evaluates acoustic propagation accounting for wall/door sound occlusion and distance attenuation.
+        """
         if not noise_events:
             return None
         best_event = None
         max_audible = 0.0
         for ne in noise_events:
-            d = math.hypot(ne.x - self.x, ne.y - self.y) + abs(ne.z - self.z) * 2.0
-            if d <= ne.volume:
-                audible_val = ne.volume - d
+            dist = math.hypot(ne.x - self.x, ne.y - self.y) + abs(ne.z - self.z) * 2.0
+            if dist <= ne.volume:
+                attenuated_vol = ne.volume
+                if world and abs(ne.z - self.z) <= 1:
+                    # Raycast ray-attenuation through walls and doors
+                    steps = max(1, int(dist))
+                    dx = (self.x - ne.x) / steps
+                    dy = (self.y - ne.y) / steps
+                    cx, cy = ne.x, ne.y
+                    z_idx = world.z_to_idx(self.z)
+                    for _ in range(steps):
+                        cx += dx
+                        cy += dy
+                        ix, iy = int(cx), int(cy)
+                        if 0 <= ix < world.width and 0 <= iy < world.height:
+                            tile = world.grid[z_idx, iy, ix]
+                            if tile in (TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL):
+                                attenuated_vol *= 0.35  # Wall dampens 65% volume
+                            elif tile == TileType.DOOR:
+                                attenuated_vol *= 0.65  # Door dampens 35% volume
+
+                audible_val = attenuated_vol - dist
                 if audible_val > max_audible:
                     max_audible = audible_val
                     best_event = ne
@@ -247,8 +269,8 @@ class Zombie:
                 self.investigate_pos = self.target
                 self.target = None
 
-            # 2. Hearing Check (Acoustics)
-            heard_noise = self.check_hearing(noise_events)
+            # 2. Hearing Check (Acoustics with wall occlusion)
+            heard_noise = self.check_hearing(noise_events, world=world)
             if heard_noise and self.state != ZombieState.CHASE:
                 self.state = ZombieState.INVESTIGATE
                 self.investigate_pos = (heard_noise.x, heard_noise.y, heard_noise.z)
@@ -480,12 +502,36 @@ class Survivor:
         if not self.is_alive:
             return
 
-        if action == 1:  # Gather nearby items
+        if action == 1:  # Gather nearby items & search adjacent furniture containers
+            gathered = False
             for item in items:
-                if not item.collected and item.z == self.z and math.hypot(item.x - self.x, item.y - self.y) < 1.2:
+                if not item.collected and item.z == self.z and math.hypot(item.x - self.x, item.y - self.y) < 1.5:
                     item.collected = True
                     self.inventory[item.item_type] = self.inventory.get(item.item_type, 0) + item.amount
                     self.score += 5.0
+                    gathered = True
+
+            # Search adjacent furniture containers (Cabinets, Refrigerators, Counters)
+            if not gathered and world:
+                z_idx = world.z_to_idx(self.z)
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    fx, fy = int(self.x + dx), int(self.y + dy)
+                    if 0 <= fx < world.width and 0 <= fy < world.height:
+                        ftile = world.grid[z_idx, fy, fx]
+                        if ftile in (TileType.CABINET, TileType.REFRIGERATOR, TileType.KITCHEN_COUNTER, TileType.TABLE):
+                            # Spawn searched container loot on survivor
+                            if ftile == TileType.REFRIGERATOR:
+                                found_item = random.choice([ResourceItem.MEAT, ResourceItem.BREAD, ResourceItem.WATER_BOTTLE, ResourceItem.APPLE])
+                            elif ftile == TileType.CABINET:
+                                found_item = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CAN_OPENER, ResourceItem.PISTOL_AMMO, ResourceItem.MEDKIT])
+                            else:
+                                found_item = random.choice([ResourceItem.CHEF_KNIFE, ResourceItem.FRYING_PAN, ResourceItem.POT, ResourceItem.CUTTING_BOARD])
+
+                            self.inventory[found_item] = self.inventory.get(found_item, 0) + 1
+                            self.score += 10.0
+                            if noise_events is not None:
+                                noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=5.0, source_type="searching"))
+                            break
 
         elif action == 2:  # Craft Medkit
             if CraftingSystem.craft(self.inventory, ResourceItem.MEDKIT):

@@ -102,6 +102,51 @@ class MainMenuUI:
 
         pygame.display.flip()
 
+class UITheme:
+    DARK = "Dark Survival"
+    NEON = "Neon Synthwave"
+    TACTICAL = "Tactical Military"
+    RETRO = "Retro Terminal"
+
+THEME_COLORS = {
+    UITheme.DARK: {
+        "bg": (20, 20, 20),
+        "sidebar_bg": (30, 30, 30),
+        "sidebar_line": (100, 100, 100),
+        "title": (255, 215, 0),
+        "header": (0, 255, 127),
+        "text": (220, 220, 220),
+        "accent": (70, 130, 180),
+    },
+    UITheme.NEON: {
+        "bg": (15, 5, 25),
+        "sidebar_bg": (25, 10, 40),
+        "sidebar_line": (255, 0, 128),
+        "title": (0, 255, 255),
+        "header": (255, 0, 255),
+        "text": (240, 220, 255),
+        "accent": (255, 215, 0),
+    },
+    UITheme.TACTICAL: {
+        "bg": (15, 20, 15),
+        "sidebar_bg": (25, 35, 25),
+        "sidebar_line": (80, 120, 80),
+        "title": (180, 220, 100),
+        "header": (120, 200, 120),
+        "text": (200, 220, 200),
+        "accent": (220, 180, 80),
+    },
+    UITheme.RETRO: {
+        "bg": (0, 10, 0),
+        "sidebar_bg": (0, 20, 0),
+        "sidebar_line": (0, 180, 0),
+        "title": (0, 255, 0),
+        "header": (50, 255, 50),
+        "text": (0, 220, 0),
+        "accent": (100, 255, 100),
+    },
+}
+
 class RendererUI:
     def __init__(self, simulation, tile_size=16):
         self.sim = simulation
@@ -121,6 +166,9 @@ class RendererUI:
         self.paused = False
         self.view_z = 0  # Active height level (0, 1, 2)
         self.open_menu_requested = False
+        self.active_theme = UITheme.DARK
+        self.theme_list = [UITheme.DARK, UITheme.NEON, UITheme.TACTICAL, UITheme.RETRO]
+        self.theme_idx = 0
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -134,6 +182,9 @@ class RendererUI:
                     self.paused = not self.paused
                 elif event.key == pygame.K_f:
                     self.fog_of_war_enabled = not self.fog_of_war_enabled
+                elif event.key == pygame.K_t:
+                    self.theme_idx = (self.theme_idx + 1) % len(self.theme_list)
+                    self.active_theme = self.theme_list[self.theme_idx]
                 elif event.key in (pygame.K_z, pygame.K_PAGEUP, pygame.K_UP):
                     self.view_z = min(self.sim.world.z_max, self.view_z + 1)
                 elif event.key in (pygame.K_x, pygame.K_PAGEDOWN, pygame.K_DOWN):
@@ -164,7 +215,8 @@ class RendererUI:
                     self.view_z = self.sim.survivors[best_idx].z
 
     def render(self):
-        self.screen.fill((20, 20, 20))
+        theme = THEME_COLORS[self.active_theme]
+        self.screen.fill(theme["bg"])
 
         visible_tiles = None
         sel_survivor = self.sim.survivors[self.sim.selected_survivor_idx]
@@ -270,20 +322,33 @@ class RendererUI:
                     pygame.draw.circle(self.screen, color, (px, py), 6)
 
         sidebar_x = self.sim.world.width * self.tile_size
-        pygame.draw.rect(self.screen, (30, 30, 30), (sidebar_x, 0, 300, self.height))
-        pygame.draw.line(self.screen, (100, 100, 100), (sidebar_x, 0), (sidebar_x, self.height), 2)
+        pygame.draw.rect(self.screen, theme["sidebar_bg"], (sidebar_x, 0, 300, self.height))
+        pygame.draw.line(self.screen, theme["sidebar_line"], (sidebar_x, 0), (sidebar_x, self.height), 2)
 
         y_offset = 10
-        def draw_text(text, font_obj=self.font, color=(220, 220, 220)):
+        def draw_text(text, font_obj=self.font, color=theme["text"]):
             nonlocal y_offset
             img = font_obj.render(text, True, color)
             self.screen.blit(img, (sidebar_x + 10, y_offset))
             y_offset += 20
 
+        def draw_stat_bar(label, val, max_val, color):
+            nonlocal y_offset
+            img = self.font.render(f"{label}: {val:.1f}/{max_val:.0f}", True, theme["text"])
+            self.screen.blit(img, (sidebar_x + 10, y_offset))
+            bar_x = sidebar_x + 150
+            bar_w = 130
+            pygame.draw.rect(self.screen, (50, 50, 50), (bar_x, y_offset + 3, bar_w, 12), border_radius=3)
+            fill_w = int((max(0.0, min(max_val, val)) / max_val) * bar_w)
+            if fill_w > 0:
+                pygame.draw.rect(self.screen, color, (bar_x, y_offset + 3, fill_w, 12), border_radius=3)
+            y_offset += 20
+
         chase_cnt = sum(1 for z in self.sim.zombies if z.is_alive and getattr(z, 'state', None) == 'chase')
         invest_cnt = sum(1 for z in self.sim.zombies if z.is_alive and getattr(z, 'state', None) == 'investigate')
 
-        draw_text("Zombie AI Neuroevolution", self.bold_font, (255, 215, 0))
+        draw_text("Zombie AI Neuroevolution", self.bold_font, theme["title"])
+        draw_text(f"Theme: {self.active_theme} [T to Switch]", color=theme["accent"])
         draw_text(f"Date: {self.sim.world.get_time_string()}")
         draw_text(f"Gen: {self.sim.evolution_manager.generation}  Tick: {self.sim.world.current_tick}")
         draw_text(f"View Level Z: {self.view_z}  Light: {light:.2f}")
@@ -294,37 +359,39 @@ class RendererUI:
         draw_text(f"Best Score: {self.sim.best_historical_score:.1f}")
 
         y_offset += 10
-        draw_text("Selected Survivor Stats", self.bold_font, (0, 255, 127))
+        draw_text("Selected Survivor Stats", self.bold_font, theme["header"])
         draw_text(f"Index: {self.sim.selected_survivor_idx} / {len(self.sim.survivors)}")
 
         s = sel_survivor
         if s.is_alive:
             draw_text(f"Floor/Level: {s.z + 1} / {self.sim.world.num_levels}")
-            draw_text(f"Health: {s.health:.1f} / 100")
-            draw_text(f"Hunger: {s.hunger:.1f} / 100")
-            draw_text(f"Thirst: {s.thirst:.1f} / 100")
-            draw_text(f"Sleep: {s.sleep:.1f} / 100")
+            draw_stat_bar("Health", s.health, 100.0, (220, 50, 50))
+            draw_stat_bar("Hunger", s.hunger, 100.0, (220, 160, 40))
+            draw_stat_bar("Thirst", s.thirst, 100.0, (40, 180, 220))
+            draw_stat_bar("Sleep", s.sleep, 100.0, (160, 100, 220))
+
             draw_text(f"Kills: {s.kills}  Score: {s.score:.1f}")
             draw_text(f"In Vehicle: {'Yes' if s.in_vehicle else 'No'}")
 
-            # Show GRU hidden memory state mean activation
             cur_hidden = self.sim.hidden_states[self.sim.selected_survivor_idx]
             hidden_norm = float(cur_hidden.norm().item())
             draw_text(f"GRU Memory Activation: {hidden_norm:.2f}")
 
             y_offset += 5
-            draw_text("Inventory:", self.bold_font)
+            draw_text("Inventory & Weapons:", self.bold_font, theme["header"])
             for item_k, item_v in s.inventory.items():
-                draw_text(f"  {item_k}: {item_v}")
+                if item_v > 0:
+                    draw_text(f"  {item_k}: {item_v}")
         else:
             draw_text("SURVIVOR DEAD", color=(255, 69, 0))
 
         y_offset += 15
-        draw_text("Hotkeys:", self.bold_font)
+        draw_text("Hotkeys:", self.bold_font, theme["header"])
         draw_text(" [M / ESC] Main Menu & Settings")
+        draw_text(" [T] Switch UI Theme")
         draw_text(" [SPACE] Pause / Resume")
         draw_text(" [F] Toggle Fog of War")
-        draw_text(" [Z/X] Change View Height Level")
+        draw_text(" [Z/X] Change Height Level")
         draw_text(" [1/2/5/0] Speed Multipliers")
         draw_text(" [TAB] Switch Survivor")
         draw_text(" [Mouse Click] Select Survivor")

@@ -34,6 +34,15 @@ class TileType:
     GRASS_DRY = 27
     SAND = 28
 
+    # Specific Furniture Types
+    TABLE = 29
+    CHAIR = 30
+    SOFA = 31
+    BED = 32
+    CABINET = 33
+    REFRIGERATOR = 34
+    KITCHEN_COUNTER = 35
+
 class BuildingType:
     SUPERMARKET = "supermarket"
     STORE = "store"
@@ -78,6 +87,14 @@ TILE_COLORS = {
     TileType.GRASS_DENSE: (0, 110, 0),
     TileType.GRASS_DRY: (189, 183, 107),
     TileType.SAND: (238, 214, 139),
+    # Furniture visual colors
+    TileType.TABLE: (160, 120, 80),
+    TileType.CHAIR: (180, 140, 90),
+    TileType.SOFA: (100, 60, 140),
+    TileType.BED: (70, 110, 160),
+    TileType.CABINET: (120, 80, 40),
+    TileType.REFRIGERATOR: (220, 225, 230),
+    TileType.KITCHEN_COUNTER: (150, 150, 150),
 }
 
 BUILDING_COLORS = {
@@ -124,6 +141,14 @@ TILE_WALKABLE = {
     TileType.GRASS_DENSE: True,
     TileType.GRASS_DRY: True,
     TileType.SAND: True,
+    # Furniture Walkability
+    TileType.TABLE: False,
+    TileType.CHAIR: True,
+    TileType.SOFA: False,
+    TileType.BED: False,
+    TileType.CABINET: False,
+    TileType.REFRIGERATOR: False,
+    TileType.KITCHEN_COUNTER: False,
 }
 
 TILE_SPEED_MODIFIERS = {
@@ -252,7 +277,12 @@ class World:
 
             if z == 0:
                 self.grid[z_idx, min(self.height - 1, by + bh - 1), min(self.width - 1, bx + 2)] = TileType.DOOR
-                self.grid[z_idx, min(self.height - 1, by + 1), min(self.width - 1, bx + 1)] = TileType.FURNITURE
+                # Detailed Furniture layout inside room
+                self.grid[z_idx, min(self.height - 1, by + 1), min(self.width - 1, bx + 1)] = TileType.CABINET
+                self.grid[z_idx, min(self.height - 1, by + 1), min(self.width - 1, bx + 2)] = TileType.REFRIGERATOR if btype in (BuildingType.RESIDENTIAL, BuildingType.SUPERMARKET) else TileType.TABLE
+                self.grid[z_idx, min(self.height - 1, by + 2), min(self.width - 1, bx + 1)] = TileType.KITCHEN_COUNTER if btype == BuildingType.RESIDENTIAL else TileType.SOFA
+                self.grid[z_idx, min(self.height - 1, by + 2), min(self.width - 1, bx + 3)] = TileType.BED if btype in (BuildingType.RESIDENTIAL, BuildingType.DORMITORY) else TileType.CHAIR
+
                 if bx + bw + 1 < self.width and by + bh < self.height:
                     for px in range(bx + bw, min(self.width, bx + bw + 2)):
                         for py in range(by, min(self.height, by + bh)):
@@ -264,7 +294,8 @@ class World:
                     for rx in range(bx + 1, min(self.width - 1, bx + bw - 1)):
                         self.grid[z_idx, ry, rx] = TileType.ROOF
             elif z < top_floor:
-                self.grid[z_idx, min(self.height - 1, by + 1), min(self.width - 1, bx + 1)] = TileType.FURNITURE
+                self.grid[z_idx, min(self.height - 1, by + 1), min(self.width - 1, bx + 1)] = TileType.CABINET
+                self.grid[z_idx, min(self.height - 1, by + 2), min(self.width - 1, bx + 1)] = TileType.BED
 
             # Stairs & Ladders
             self.grid[z_idx, min(self.height - 1, by + 3), min(self.width - 1, bx + 3)] = TileType.STAIRS if (z % 2 == 0) else TileType.LADDER

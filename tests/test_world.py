@@ -72,5 +72,21 @@ class TestWorld(unittest.TestCase):
         self.assertIn((10, 10), visible)
         self.assertGreater(len(visible), 1)
 
+    def test_furniture_tiles_and_sound_occlusion(self):
+        world = World(width=30, height=30)
+        g_idx = world.z_to_idx(0)
+        world.grid[g_idx, 5, 10] = TileType.BUILDING_WALL
+
+        from src.entities import Zombie, NoiseEvent
+        zombie = Zombie(8.0, 5.0, z=0)
+        noise_event = [NoiseEvent(5.0, 5.0, 0, volume=20.0)]
+
+        # Check sound attenuation through wall
+        heard = zombie.check_hearing(noise_event, world=world)
+        self.assertIsNotNone(heard)
+
+        # Check furniture tile non-walkability
+        self.assertFalse(world.is_walkable(0, 0) and world.grid[g_idx, 0, 0] == TileType.REFRIGERATOR)
+
 if __name__ == "__main__":
     unittest.main()

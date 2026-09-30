@@ -13,9 +13,13 @@ class SimulationEngine:
         self.evo_cfg = config["evolution"]
 
         self.world = World(
-            width=self.sim_cfg["map_width"],
-            height=self.sim_cfg["map_height"],
-            day_length_ticks=self.sim_cfg["day_length_ticks"]
+            width=self.sim_cfg.get("map_width", 1000),
+            height=self.sim_cfg.get("map_height", 1000),
+            day_length_ticks=self.sim_cfg.get("day_length_ticks", 3600),
+            electricity_cutoff_day=self.sim_cfg.get("electricity_cutoff_day", 7),
+            water_cutoff_day=self.sim_cfg.get("water_cutoff_day", 14),
+            electricity_enabled=self.sim_cfg.get("electricity_enabled", True),
+            water_enabled=self.sim_cfg.get("water_enabled", True)
         )
 
         self.evolution_manager = GeneticEvolutionManager(

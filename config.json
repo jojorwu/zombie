@@ -1,9 +1,13 @@
 {
   "simulation": {
-    "map_width": 60,
-    "map_height": 40,
+    "map_width": 1000,
+    "map_height": 1000,
+    "electricity_cutoff_day": 7,
+    "water_cutoff_day": 14,
+    "electricity_enabled": true,
+    "water_enabled": true,
     "tile_size": 16,
-    "day_length_ticks": 600,
+    "day_length_ticks": 3600,
     "num_survivors": 20,
     "num_zombies": 30,
     "num_animals": 10,

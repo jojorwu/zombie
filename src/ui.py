@@ -73,13 +73,14 @@ class MainMenuUI:
 
         y_offset += 20
         draw_text("World & Simulation Settings:", self.bold_font, (255, 255, 255), center_x=False)
-        draw_text(f"  Map Width: {self.sim_cfg.get('map_width', 60)} tiles", color=(200, 220, 255), center_x=False)
-        draw_text(f"  Map Height: {self.sim_cfg.get('map_height', 40)} tiles", color=(200, 220, 255), center_x=False)
+        draw_text(f"  Map Width: {self.sim_cfg.get('map_width', 1000)} x {self.sim_cfg.get('map_height', 1000)} tiles", color=(200, 220, 255), center_x=False)
+        draw_text(f"  Power Cutoff: Day {self.sim_cfg.get('electricity_cutoff_day', 7)}  ({'ON' if self.sim_cfg.get('electricity_enabled', True) else 'OFF'})", color=(255, 215, 0), center_x=False)
+        draw_text(f"  Water Cutoff: Day {self.sim_cfg.get('water_cutoff_day', 14)}  ({'ON' if self.sim_cfg.get('water_enabled', True) else 'OFF'})", color=(0, 200, 255), center_x=False)
         draw_text(f"  Survivors Count: {self.sim_cfg.get('num_survivors', 20)}  [LEFT / RIGHT Arrows]", color=(0, 255, 127), center_x=False)
         draw_text(f"  Zombies Count: {self.sim_cfg.get('num_zombies', 30)}  [UP / DOWN Arrows]", color=(255, 99, 71), center_x=False)
         draw_text(f"  Animals Count: {self.sim_cfg.get('num_animals', 10)}", color=(255, 192, 203), center_x=False)
         draw_text(f"  Vehicles Count: {self.sim_cfg.get('num_vehicles', 4)}", color=(100, 149, 237), center_x=False)
-        draw_text(f"  Day Length Ticks: {self.sim_cfg.get('day_length_ticks', 600)}", color=(220, 220, 220), center_x=False)
+        draw_text(f"  Time Scale: 1 real hour = 1 month (24h/day = {self.sim_cfg.get('day_length_ticks', 3600)} ticks)", color=(220, 220, 220), center_x=False)
 
         # Draw Start Button
         y_offset = 460
@@ -170,8 +171,26 @@ class RendererUI:
         cur_z = self.view_z
         z_idx = self.sim.world.z_to_idx(cur_z)
 
-        for y in range(self.sim.world.height):
-            for x in range(self.sim.world.width):
+        # Viewport Camera Culling for 1000x1000 Large Map Performance
+        map_draw_width = (self.width - 300) // self.tile_size
+        map_draw_height = self.height // self.tile_size
+
+        cam_x = sel_survivor.x if sel_survivor.is_alive else self.sim.world.width / 2.0
+        cam_y = sel_survivor.y if sel_survivor.is_alive else self.sim.world.height / 2.0
+
+        min_x = max(0, int(cam_x - map_draw_width // 2))
+        max_x = min(self.sim.world.width, min_x + map_draw_width)
+        min_x = max(0, max_x - map_draw_width)
+
+        min_y = max(0, int(cam_y - map_draw_height // 2))
+        max_y = min(self.sim.world.height, min_y + map_draw_height)
+        min_y = max(0, max_y - map_draw_height)
+
+        for y in range(min_y, max_y):
+            for x in range(min_x, max_x):
+                screen_px = (x - min_x) * self.tile_size
+                screen_py = (y - min_y) * self.tile_size
+
                 if visible_tiles is not None and (x, y) not in visible_tiles:
                     color = (10, 10, 10)
                 else:
@@ -187,56 +206,53 @@ class RendererUI:
                         int(base_color[1] * (light if cur_z >= 0 else 0.8)),
                         int(base_color[2] * (light if cur_z >= 0 else 0.8))
                     )
-                rect = (x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
+                rect = (screen_px, screen_py, self.tile_size, self.tile_size)
                 pygame.draw.rect(self.screen, color, rect)
+
+        def to_screen(wx, wy):
+            return int((wx - min_x) * self.tile_size), int((wy - min_y) * self.tile_size)
 
         # Draw acoustic Noise Events on current level
         for ne in getattr(self.sim, 'noise_events', []):
-            if ne.z == cur_z:
-                nx_p = int(ne.x * self.tile_size)
-                ny_p = int(ne.y * self.tile_size)
+            if ne.z == cur_z and min_x <= ne.x <= max_x and min_y <= ne.y <= max_y:
+                nx_p, ny_p = to_screen(ne.x, ne.y)
                 r_p = int(ne.volume * self.tile_size)
                 pygame.draw.circle(self.screen, (255, 100, 0), (nx_p, ny_p), max(3, r_p), 1)
 
         for item in self.sim.items:
-            if not item.collected and item.z == cur_z:
+            if not item.collected and item.z == cur_z and min_x <= item.x <= max_x and min_y <= item.y <= max_y:
                 ix, iy = int(item.x), int(item.y)
                 if visible_tiles is None or (ix, iy) in visible_tiles:
-                    px = int(item.x * self.tile_size)
-                    py = int(item.y * self.tile_size)
+                    px, py = to_screen(item.x, item.y)
                     color = (255, 215, 0) if item.item_type == ResourceItem.FOOD else (0, 255, 255)
                     pygame.draw.circle(self.screen, color, (px, py), 3)
 
         for v in self.sim.vehicles:
-            if v.z == cur_z:
+            if v.z == cur_z and min_x <= v.x <= max_x and min_y <= v.y <= max_y:
                 vx, vy = int(v.x), int(v.y)
                 if visible_tiles is None or (vx, vy) in visible_tiles:
-                    px = int(v.x * self.tile_size) - 6
-                    py = int(v.y * self.tile_size) - 6
-                    pygame.draw.rect(self.screen, (70, 130, 180), (px, py, 12, 12))
+                    px, py = to_screen(v.x, v.y)
+                    pygame.draw.rect(self.screen, (70, 130, 180), (px - 6, py - 6, 12, 12))
 
         for a in self.sim.animals:
-            if a.is_alive and a.z == cur_z:
+            if a.is_alive and a.z == cur_z and min_x <= a.x <= max_x and min_y <= a.y <= max_y:
                 ax, ay = int(a.x), int(a.y)
                 if visible_tiles is None or (ax, ay) in visible_tiles:
-                    px = int(a.x * self.tile_size)
-                    py = int(a.y * self.tile_size)
+                    px, py = to_screen(a.x, a.y)
                     pygame.draw.circle(self.screen, (255, 192, 203), (px, py), 4)
 
         for z in self.sim.zombies:
-            if z.is_alive and z.z == cur_z:
+            if z.is_alive and z.z == cur_z and min_x <= z.x <= max_x and min_y <= z.y <= max_y:
                 zx, zy = int(z.x), int(z.y)
                 if visible_tiles is None or (zx, zy) in visible_tiles:
-                    px = int(z.x * self.tile_size)
-                    py = int(z.y * self.tile_size)
+                    px, py = to_screen(z.x, z.y)
                     pygame.draw.circle(self.screen, (178, 34, 34), (px, py), 5)
 
         for idx, s in enumerate(self.sim.survivors):
-            if s.is_alive and s.z == cur_z:
+            if s.is_alive and s.z == cur_z and min_x <= s.x <= max_x and min_y <= s.y <= max_y:
                 sx, sy = int(s.x), int(s.y)
                 if visible_tiles is None or (sx, sy) in visible_tiles:
-                    px = int(s.x * self.tile_size)
-                    py = int(s.y * self.tile_size)
+                    px, py = to_screen(s.x, s.y)
                     color = (255, 255, 255) if idx == self.sim.selected_survivor_idx else (50, 205, 50)
                     pygame.draw.circle(self.screen, color, (px, py), 6)
 
@@ -255,9 +271,10 @@ class RendererUI:
         invest_cnt = sum(1 for z in self.sim.zombies if z.is_alive and getattr(z, 'state', None) == 'investigate')
 
         draw_text("Zombie AI Neuroevolution", self.bold_font, (255, 215, 0))
+        draw_text(f"Date: {self.sim.world.get_time_string()}")
         draw_text(f"Gen: {self.sim.evolution_manager.generation}  Tick: {self.sim.world.current_tick}")
-        draw_text(f"View Level Z: {self.view_z} [-20..+20] [Z/X]")
-        draw_text(f"Light level: {light:.2f}")
+        draw_text(f"View Level Z: {self.view_z}  Light: {light:.2f}")
+        draw_text(f"Power: {'BLACKOUT' if self.sim.world.is_power_out() else 'ONLINE'} | Water: {'CUT OFF' if self.sim.world.is_water_out() else 'ONLINE'}")
         draw_text(f"Active Noises: {len(getattr(self.sim, 'noise_events', []))}")
         draw_text(f"Zombies: Chase={chase_cnt} Hear/Invest={invest_cnt}")
         draw_text(f"Speed: {self.speed_multiplier}x  Status: {'PAUSED' if self.paused else 'RUNNING'}")

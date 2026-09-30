@@ -9,7 +9,9 @@ from src.simulation import SimulationEngine
 class TestSimulation(unittest.TestCase):
     def test_simulation_integration(self):
         with open("config.json", "r") as f:
-            config = json.load(f)
+            config = json.load(f).copy()
+        config["simulation"]["map_width"] = 30
+        config["simulation"]["map_height"] = 30
 
         sim = SimulationEngine(config)
         self.assertEqual(len(sim.survivors), config["simulation"]["num_survivors"])

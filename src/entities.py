@@ -263,19 +263,20 @@ class Survivor:
         if not self.is_alive:
             return
         self.time_survived += 1
-        self.hunger -= 0.05
-        self.thirst -= 0.08
-        self.sleep -= 0.03
+        # Circadian decay rates calibrated for 24-hour in-game day (3,600 ticks)
+        self.hunger -= 0.025
+        self.thirst -= 0.035
+        self.sleep -= 0.025
 
         if self.hunger <= 0:
             self.hunger = 0
-            self.take_damage(0.5)
+            self.take_damage(0.2)
         if self.thirst <= 0:
             self.thirst = 0
-            self.take_damage(0.8)
+            self.take_damage(0.3)
         if self.sleep <= 0:
             self.sleep = 0
-            self.energy = max(0.0, self.energy - 0.5)
+            self.energy = max(0.0, self.energy - 0.2)
 
         # Auto consume food/water if severely depleted
         if self.hunger < 30 and self.inventory.get(ResourceItem.FOOD, 0) > 0:

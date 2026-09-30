@@ -9,12 +9,13 @@ from src.entities import Survivor, Zombie, Vehicle, Animal, ItemEntity, Resource
 class TestEntities(unittest.TestCase):
     def test_zombie_vision_and_hearing_ai(self):
         world = World(width=30, height=30, z_min=-20, z_max=20)
+        world.current_tick = 1800  # Daylight (noon peak)
         # Clear obstacle at ground level for test
         g_idx = world.z_to_idx(0)
         world.grid[g_idx, 5, 5:20] = TileType.GRASS
 
         zombie = Zombie(5.0, 5.0, z=0)
-        survivor = Survivor(12.0, 5.0, z=0)
+        survivor = Survivor(10.0, 5.0, z=0)
         noise_events = [NoiseEvent(18.0, 5.0, 0, volume=20.0)]
 
         # Test line of sight vision

@@ -120,7 +120,8 @@ class ChunkManager:
         return self.get_chunk(cx, cy)
 
 class World:
-    def __init__(self, width=60, height=40, day_length_ticks=600, z_min=0, z_max=2):
+    def __init__(self, width=1000, height=1000, day_length_ticks=3600, z_min=0, z_max=2,
+                 electricity_cutoff_day=7, water_cutoff_day=14, electricity_enabled=True, water_enabled=True):
         self.width = max(30, width)
         self.height = max(30, height)
         self.z_min = z_min
@@ -128,6 +129,10 @@ class World:
         self.num_levels = self.z_max - self.z_min + 1
         self.depth = self.num_levels
         self.day_length_ticks = day_length_ticks
+        self.electricity_cutoff_day = electricity_cutoff_day
+        self.water_cutoff_day = water_cutoff_day
+        self.electricity_enabled = electricity_enabled
+        self.water_enabled = water_enabled
         self.current_tick = 0
         self.chunk_manager = ChunkManager(self.width, self.height, chunk_size=16)
         self.grid = np.zeros((self.num_levels, self.height, self.width), dtype=int)
@@ -300,11 +305,48 @@ class World:
     def update_day_night(self):
         self.current_tick += 1
 
+    def get_time_components(self):
+        # 1 real hour (108,000 ticks) = 1 month (30 days)
+        # 1 in-game day = 3,600 ticks (24 hours)
+        # 1 in-game hour = 150 ticks (60 minutes)
+        # 1 in-game minute = 2.5 ticks
+        total_mins = self.current_tick / 2.5
+        minute = int(total_mins % 60)
+        total_hours = total_mins / 60.0
+        hour = int(total_hours % 24)
+        total_days = total_hours / 24.0
+        day = int(total_days % 30) + 1
+        total_months = total_days / 30.0
+        month = int(total_months % 12) + 1
+        year = int(total_months / 12) + 1
+        return year, month, day, hour, minute
+
+    def get_time_string(self):
+        y, m, d, hh, mm = self.get_time_components()
+        return f"Y{y}-M{m:02d}-D{d:02d} {hh:02d}:{mm:02d}"
+
+    def is_power_out(self):
+        if not self.electricity_enabled:
+            return True
+        y, m, d, hh, mm = self.get_time_components()
+        current_day_total = (y - 1) * 360 + (m - 1) * 30 + d
+        return current_day_total >= self.electricity_cutoff_day
+
+    def is_water_out(self):
+        if not self.water_enabled:
+            return True
+        y, m, d, hh, mm = self.get_time_components()
+        current_day_total = (y - 1) * 360 + (m - 1) * 30 + d
+        return current_day_total >= self.water_cutoff_day
+
     def get_light_level(self):
-        progress = (self.current_tick % self.day_length_ticks) / self.day_length_ticks
-        sine_val = math.sin(progress * 2 * math.pi)
-        light = 0.6 + 0.4 * sine_val
-        return max(0.2, min(1.0, light))
+        y, m, d, hh, mm = self.get_time_components()
+        progress = (hh * 60 + mm) / 1440.0
+        sine_val = math.sin((progress - 0.25) * 2 * math.pi)
+        light = 0.55 + 0.45 * sine_val
+        if self.is_power_out():
+            light *= 0.7
+        return max(0.12, min(1.0, light))
 
     def compute_fog_of_war(self, x, y, radius=8, z=0):
         ix, iy = int(x), int(y)

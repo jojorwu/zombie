@@ -68,7 +68,7 @@ TILE_WALKABLE = {
 }
 
 class World:
-    def __init__(self, width=60, height=40, day_length_ticks=600, z_min=-20, z_max=20):
+    def __init__(self, width=60, height=40, day_length_ticks=600, z_min=0, z_max=2):
         self.width = max(30, width)
         self.height = max(30, height)
         self.z_min = z_min
@@ -163,8 +163,8 @@ class World:
                     })
 
                     # Construct floors from underground (-20) up to upper towers (+20)
-                    top_floor = random.randint(3, self.z_max)
-                    bottom_floor = random.randint(self.z_min, -1)
+                    top_floor = random.randint(min(1, self.z_max), max(0, self.z_max))
+                    bottom_floor = random.randint(min(0, self.z_min), max(0, self.z_min))
 
                     for z in range(bottom_floor, top_floor + 1):
                         z_idx = self.z_to_idx(z)

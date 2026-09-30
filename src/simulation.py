@@ -3,9 +3,11 @@ import math
 from src.world import World, TileType, BuildingType
 from src.entities import Survivor, Zombie, Animal, Vehicle, ItemEntity, ResourceItem
 from src.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager
+from src.modding import LuaModManager
 
 class SimulationEngine:
     def __init__(self, config):
+        self.mod_manager = LuaModManager()
         self.config = config
         self.sim_cfg = config["simulation"]
         self.evo_cfg = config["evolution"]
@@ -111,6 +113,7 @@ class SimulationEngine:
 
     def tick(self):
         self.world.update_day_night()
+        self.mod_manager.trigger_event("on_tick", self.world.current_tick)
 
         # Update active noise events
         for ne in self.noise_events:

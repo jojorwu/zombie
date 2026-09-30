@@ -8,13 +8,18 @@ block_cipher = None
 
 datas = [
     ('config.json', '.'),
+    ('mods', 'mods'),
 ]
 
 hiddenimports = [
     'pygame',
     'torch',
     'numpy',
-] + collect_submodules('src')
+    'lupa',
+    'utils.p_np_math',
+    'utils.mod_utility',
+    'utils.dev_utility',
+] + collect_submodules('src') + collect_submodules('utils')
 
 a = Analysis(
     ['main.py'],

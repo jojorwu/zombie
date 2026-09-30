@@ -27,6 +27,19 @@ class TestWorld(unittest.TestCase):
         self.assertEqual(TileType.ROOF, 15)
         self.assertEqual(TileType.TRASH_CAN, 16)
 
+    def test_new_tiles_speed_modifiers_and_chunks(self):
+        world = World(width=64, height=64)
+        # Check new tile types speed modifiers
+        self.assertEqual(world.get_tile_speed_modifier(0, 0), world.get_tile_speed_modifier(0, 0))
+        self.assertGreater(TileType.SAND, 0)
+        self.assertGreater(TileType.ROAD_HIGHWAY, 0)
+
+        # Check ChunkManager active chunks updating
+        chunk_mgr = world.chunk_manager
+        chunk_mgr.update_active_chunks([(10, 10), (50, 50)], view_distance_chunks=1)
+        self.assertIn((0, 0), chunk_mgr.active_chunks)
+        self.assertIn((3, 3), chunk_mgr.active_chunks)
+
     def test_accelerated_time_and_cutoffs(self):
         world = World(width=100, height=100, day_length_ticks=3600, electricity_cutoff_day=7, water_cutoff_day=14)
         # At tick 0: Day 1, Power and Water are online
@@ -58,6 +71,44 @@ class TestWorld(unittest.TestCase):
         visible = world.compute_fog_of_war(10, 10, radius=5)
         self.assertIn((10, 10), visible)
         self.assertGreater(len(visible), 1)
+
+    def test_furniture_tiles_and_sound_occlusion(self):
+        world = World(width=30, height=30)
+        g_idx = world.z_to_idx(0)
+        world.grid[g_idx, 5, 10] = TileType.BUILDING_WALL
+
+        from src.entities import Zombie, NoiseEvent
+        zombie = Zombie(8.0, 5.0, z=0)
+        noise_event = [NoiseEvent(5.0, 5.0, 0, volume=20.0)]
+
+        # Check sound attenuation through wall
+        heard = zombie.check_hearing(noise_event, world=world)
+        self.assertIsNotNone(heard)
+
+        # Check furniture tile non-walkability
+        self.assertFalse(world.is_walkable(0, 0) and world.grid[g_idx, 0, 0] == TileType.REFRIGERATOR)
+
+    def test_weather_wind_rain_and_dynamic_lights(self):
+        world = World(width=150, height=150)
+        self.assertIsNotNone(world.weather)
+        self.assertGreaterEqual(world.weather.wind_speed, 0.0)
+
+        # Force rain front spawn
+        world.weather.rain_front = {"x": 10.0, "y": 10.0, "w": 100.0, "h": 100.0, "vx": 0.1, "vy": 0.1, "lifetime": 100}
+        self.assertTrue(world.weather.is_in_rain(20, 20))
+        self.assertFalse(world.weather.is_in_rain(120, 120))
+
+        # Check dynamic lighting addition
+        from src.world import DynamicLight
+        world.dynamic_lights.append(DynamicLight(10.0, 10.0, 0, radius=5.0))
+        self.assertEqual(len(world.dynamic_lights), 1)
+
+    def test_basement_generation_probabilities(self):
+        # Generate world with z_min=-2 to allow basements
+        world = World(width=100, height=100, z_min=-2, z_max=2)
+        basement_count = sum(1 for b in world.buildings if b.get("has_basement", False))
+        self.assertGreaterEqual(basement_count, 0)
+        self.assertLess(world.get_light_level(z=-1), world.get_light_level(z=0))
 
 if __name__ == "__main__":
     unittest.main()

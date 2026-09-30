@@ -1,6 +1,9 @@
 import math
 import random
 import numpy as np
+from src.world.chunk import ChunkManager
+from src.world.weather import WeatherManager
+from src.world.lighting import DynamicLight
 
 class TileType:
     GRASS = 0
@@ -43,6 +46,7 @@ class TileType:
     REFRIGERATOR = 34
     KITCHEN_COUNTER = 35
 
+
 class BuildingType:
     SUPERMARKET = "supermarket"
     STORE = "store"
@@ -55,6 +59,7 @@ class BuildingType:
     SCHOOL = "school"
     WAREHOUSE = "warehouse"
     FACTORY = "factory"
+
 
 TILE_COLORS = {
     TileType.GRASS: (34, 139, 34),
@@ -170,108 +175,6 @@ TILE_SPEED_MODIFIERS = {
     TileType.FOREST_DENSE: 0.6,
 }
 
-class Chunk:
-    def __init__(self, chunk_x, chunk_y, size=16):
-        self.chunk_x = chunk_x
-        self.chunk_y = chunk_y
-        self.size = size
-        self.buildings = []
-
-class ChunkManager:
-    def __init__(self, world_width, world_height, chunk_size=16):
-        self.chunk_size = chunk_size
-        self.num_chunks_x = int(math.ceil(world_width / chunk_size))
-        self.num_chunks_y = int(math.ceil(world_height / chunk_size))
-        self.chunks = {}
-        self.active_chunks = set()
-        for cy in range(self.num_chunks_y):
-            for cx in range(self.num_chunks_x):
-                self.chunks[(cx, cy)] = Chunk(cx, cy, chunk_size)
-                self.active_chunks.add((cx, cy))
-
-    def get_chunk_coords(self, world_x, world_y):
-        cx = int(world_x) // self.chunk_size
-        cy = int(world_y) // self.chunk_size
-        return cx, cy
-
-    def get_chunk(self, cx, cy):
-        return self.chunks.get((cx, cy))
-
-    def get_chunk_at(self, world_x, world_y):
-        cx, cy = self.get_chunk_coords(world_x, world_y)
-        return self.get_chunk(cx, cy)
-
-    def update_active_chunks(self, entity_positions, view_distance_chunks=2):
-        """
-        Dynamically loads / activates chunks around active entities and unloads / deactivates far chunks.
-        Prevents memory leaks and reduces unnecessary computation for inactive regions.
-        """
-        new_active = set()
-        for x, y in entity_positions:
-            cx, cy = self.get_chunk_coords(x, y)
-            for dy in range(-view_distance_chunks, view_distance_chunks + 1):
-                for dx in range(-view_distance_chunks, view_distance_chunks + 1):
-                    target_cx, target_cy = cx + dx, cy + dy
-                    if (target_cx, target_cy) in self.chunks:
-                        new_active.add((target_cx, target_cy))
-
-        self.active_chunks = new_active
-        return self.active_chunks
-
-class WeatherManager:
-    """Simulates dynamic wind directions/speeds and localized 100x100 moving rainstorms."""
-    def __init__(self, world_width, world_height):
-        self.world_width = world_width
-        self.world_height = world_height
-        self.wind_angle = random.uniform(0, 2 * math.pi)  # Radians
-        self.wind_speed = random.uniform(10.0, 50.0)      # km/h
-        self.rain_front = None                            # dict: {x, y, w: 100, h: 100, vx, vy, lifetime}
-        self.next_rain_tick = 3600 * 3                    # 3-day interval
-
-    def update(self, current_tick):
-        # Gradually shift wind direction & speed
-        self.wind_angle += random.uniform(-0.02, 0.02)
-        self.wind_speed = max(0.0, min(100.0, self.wind_speed + random.uniform(-0.5, 0.5)))
-
-        # Trigger rain front every ~3 in-game days (10,800 ticks)
-        if current_tick >= self.next_rain_tick and self.rain_front is None:
-            self.rain_front = {
-                "x": float(random.randint(0, max(1, self.world_width - 100))),
-                "y": float(random.randint(0, max(1, self.world_height - 100))),
-                "w": 100,
-                "h": 100,
-                "vx": math.cos(self.wind_angle) * 0.2,
-                "vy": math.sin(self.wind_angle) * 0.2,
-                "lifetime": 1200  # ~8 in-game hours
-            }
-            self.next_rain_tick = current_tick + 3600 * 3
-
-        if self.rain_front:
-            self.rain_front["x"] = max(0.0, min(self.world_width - 100, self.rain_front["x"] + self.rain_front["vx"]))
-            self.rain_front["y"] = max(0.0, min(self.world_height - 100, self.rain_front["y"] + self.rain_front["vy"]))
-            self.rain_front["lifetime"] -= 1
-            if self.rain_front["lifetime"] <= 0:
-                self.rain_front = None
-
-    def is_in_rain(self, x, y):
-        if not self.rain_front:
-            return False
-        rf = self.rain_front
-        return (rf["x"] <= x <= rf["x"] + rf["w"]) and (rf["y"] <= y <= rf["y"] + rf["h"])
-
-class DynamicLight:
-    """Represents a localized dynamic point/cone light source (muzzle flash, flashlight, headlight, lightning)."""
-    def __init__(self, x, y, z, radius=8.0, color=(255, 255, 200), intensity=1.0, lifetime=1):
-        self.x = float(x)
-        self.y = float(y)
-        self.z = int(z)
-        self.radius = float(radius)
-        self.color = color
-        self.intensity = float(intensity)
-        self.lifetime = lifetime
-
-    def update(self):
-        self.lifetime -= 1
 
 class World:
     def __init__(self, width=1000, height=1000, day_length_ticks=3600, z_min=0, z_max=2,
@@ -311,10 +214,6 @@ class World:
         if chunk:
             chunk.buildings.append(self.buildings[-1])
 
-        # Determine basement generation probability:
-        # Residential & Police Station: 20%
-        # Warehouse & Gun Store: 40%
-        # Others: 0%
         has_basement = False
         if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.20:
             has_basement = True
@@ -323,7 +222,6 @@ class World:
 
         bottom_floor = -1 if (has_basement and self.z_min <= -1) else 0
 
-        # Upper floors generation up to self.z_max
         if btype in (BuildingType.HOSPITAL, BuildingType.POLICE_STATION, BuildingType.DORMITORY, BuildingType.SCHOOL):
             top_floor = min(self.z_max, max(1, random.randint(1, max(1, self.z_max))))
         else:
@@ -353,7 +251,6 @@ class World:
 
             if z == 0:
                 self.grid[z_idx, min(self.height - 1, by + bh - 1), min(self.width - 1, bx + 2)] = TileType.DOOR
-                # Detailed Furniture layout inside room
                 self.grid[z_idx, min(self.height - 1, by + 1), min(self.width - 1, bx + 1)] = TileType.CABINET
                 self.grid[z_idx, min(self.height - 1, by + 1), min(self.width - 1, bx + 2)] = TileType.REFRIGERATOR if btype in (BuildingType.RESIDENTIAL, BuildingType.SUPERMARKET) else TileType.TABLE
                 self.grid[z_idx, min(self.height - 1, by + 2), min(self.width - 1, bx + 1)] = TileType.KITCHEN_COUNTER if btype == BuildingType.RESIDENTIAL else TileType.SOFA
@@ -373,11 +270,9 @@ class World:
                 self.grid[z_idx, min(self.height - 1, by + 1), min(self.width - 1, bx + 1)] = TileType.CABINET
                 self.grid[z_idx, min(self.height - 1, by + 2), min(self.width - 1, bx + 1)] = TileType.BED
 
-            # Stairs & Ladders
             self.grid[z_idx, min(self.height - 1, by + 3), min(self.width - 1, bx + 3)] = TileType.STAIRS if (z % 2 == 0) else TileType.LADDER
 
     def generate_world(self):
-        # Base tile setup
         g_idx = self.z_to_idx(0)
         self.grid[g_idx].fill(TileType.GRASS)
 
@@ -386,14 +281,6 @@ class World:
         for z in range(self.z_min, 0):
             self.grid[self.z_to_idx(z)].fill(TileType.UNDERGROUND_WALL)
 
-        # ----------------------------------------------------
-        # PHASE 1: City District Zoning Setup
-        # Assign chunks to realistic districts:
-        # 0: Commercial / City Center (Downtown)
-        # 1: Residential Neighborhoods
-        # 2: Industrial & Warehouse District
-        # 3: Parks, Rivers & Nature Reserve
-        # ----------------------------------------------------
         chunk_districts = {}
         center_cx = self.chunk_manager.num_chunks_x // 2
         center_cy = self.chunk_manager.num_chunks_y // 2
@@ -410,9 +297,6 @@ class World:
                 else:
                     chunk_districts[(cx, cy)] = "residential"
 
-        # ----------------------------------------------------
-        # PHASE 2: Rivers, Nature, Forests & Terrain Variations
-        # ----------------------------------------------------
         num_rivers = random.randint(1, 2)
         for _ in range(num_rivers):
             rx = random.randint(4, self.width - 5)
@@ -429,7 +313,6 @@ class World:
                 ry += 1
                 rx += random.choice([-1, 0, 1])
 
-        # Generate forests & vegetation in park & residential zones
         for cy in range(self.chunk_manager.num_chunks_y):
             for cx in range(self.chunk_manager.num_chunks_x):
                 district = chunk_districts[(cx, cy)]
@@ -453,15 +336,11 @@ class World:
                             if self.grid[g_idx, y, x] == TileType.GRASS and random.random() < 0.15:
                                 self.grid[g_idx, y, x] = TileType.GRASS_DRY
 
-        # ----------------------------------------------------
-        # PHASE 3: Realistic Road Network (Highways, Avenues, Sidewalks, Crosswalks)
-        # ----------------------------------------------------
         for x in range(0, self.width):
             for y in range(0, self.height):
                 cx, cy = x // 16, y // 16
                 district = chunk_districts.get((cx, cy), "residential")
 
-                # Major Highways every 16 tiles
                 if x % 16 == 0 or y % 16 == 0:
                     if self.grid[g_idx, y, x] == TileType.WATER:
                         self.grid[g_idx, y, x] = TileType.BRIDGE
@@ -469,32 +348,24 @@ class World:
                         self.grid[g_idx, y, x] = TileType.DIRT_ROAD if district == "industrial" else TileType.ROAD
                     else:
                         self.grid[g_idx, y, x] = TileType.ROAD_HIGHWAY
-
-                # Secondary Avenues and Sidewalks inside districts
                 elif x % 8 == 0 or y % 8 == 0:
                     if self.grid[g_idx, y, x] == TileType.WATER:
                         self.grid[g_idx, y, x] = TileType.BRIDGE
                     else:
                         self.grid[g_idx, y, x] = TileType.ROAD
 
-        # Add Sidewalks alongside urban roads and Crosswalks at intersections
         for y in range(1, self.height - 1):
             for x in range(1, self.width - 1):
                 if self.grid[g_idx, y, x] in (TileType.ROAD, TileType.ROAD_HIGHWAY):
-                    # Intersections -> Crosswalks
                     if (x % 8 == 0 and y % 16 == 0) or (x % 16 == 0 and y % 8 == 0):
                         self.grid[g_idx, y, x] = TileType.CROSSWALK
 
-                    # Sidewalk placement adjacent to grass/buildings
                     for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                         adj_x, adj_y = x + dx, y + dy
                         if 0 <= adj_x < self.width and 0 <= adj_y < self.height:
                             if self.grid[g_idx, adj_y, adj_x] in (TileType.GRASS, TileType.GRASS_DRY):
                                 self.grid[g_idx, adj_y, adj_x] = TileType.SIDEWALK
 
-        # ----------------------------------------------------
-        # PHASE 4: District-Matched Building Placement & Props
-        # ----------------------------------------------------
         commercial_types = [BuildingType.SUPERMARKET, BuildingType.STORE, BuildingType.GAS_STATION, BuildingType.HOSPITAL, BuildingType.POLICE_STATION, BuildingType.GUN_STORE]
         residential_types = [BuildingType.RESIDENTIAL, BuildingType.DORMITORY, BuildingType.SCHOOL]
         industrial_types = [BuildingType.WAREHOUSE, BuildingType.FACTORY, BuildingType.GAS_STATION]
@@ -517,9 +388,6 @@ class World:
 
                     self.build_chunk_building(bx, by, 5, 5, btype)
 
-        # ----------------------------------------------------
-        # PHASE 5: Detail Props (Trash Cans, Mailboxes, Containers)
-        # ----------------------------------------------------
         for y in range(1, self.height - 1):
             for x in range(1, self.width - 1):
                 if self.grid[g_idx, y, x] in (TileType.ROAD, TileType.SIDEWALK):
@@ -550,12 +418,10 @@ class World:
         self.current_tick += 1
         self.weather.update(self.current_tick)
 
-        # Update dynamic lights
         for dl in self.dynamic_lights:
             dl.update()
         self.dynamic_lights = [dl for dl in self.dynamic_lights if dl.lifetime > 0]
 
-        # Random lightning flash during rainstorms
         if self.weather.rain_front and random.random() < 0.03:
             rf = self.weather.rain_front
             lx = rf["x"] + random.uniform(0, 100)
@@ -563,10 +429,6 @@ class World:
             self.dynamic_lights.append(DynamicLight(lx, ly, z=0, radius=25.0, color=(200, 220, 255), intensity=2.0, lifetime=2))
 
     def get_time_components(self):
-        # 1 real hour (108,000 ticks) = 1 month (30 days)
-        # 1 in-game day = 3,600 ticks (24 hours)
-        # 1 in-game hour = 150 ticks (60 minutes)
-        # 1 in-game minute = 2.5 ticks
         total_mins = self.current_tick / 2.5
         minute = int(total_mins % 60)
         total_hours = total_mins / 60.0
@@ -598,7 +460,6 @@ class World:
 
     def get_light_level(self, z=0):
         if z < 0:
-            # Basements receive 0 natural sunlight (pitch black when power is out / unlit)
             return 0.08 if not self.is_power_out() else 0.03
         y, m, d, hh, mm = self.get_time_components()
         progress = (hh * 60 + mm) / 1440.0

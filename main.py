@@ -1,79 +1,92 @@
+import sys
+import os
 import json
 import argparse
-import time
-import os
-import sys
+
 from src.simulation import SimulationEngine
 
+
 def get_resource_path(relative_path):
-    """Get absolute path to resource, works for dev and for PyInstaller."""
+    """Get absolute path to resource, works for dev and for PyInstaller"""
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.abspath(relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Zombie AI Neuroevolution Simulation")
-    parser.add_argument("--config", type=str, default="config.json", help="Path to config file")
+    parser = argparse.ArgumentParser(description="Zombie AI Simulation")
     parser.add_argument("--headless", action="store_true", help="Run simulation in headless mode (no GUI)")
+    parser.add_argument("--config", type=str, default="config.json", help="Path to config JSON file")
     parser.add_argument("--ticks", type=int, default=1000, help="Number of ticks to run in headless mode")
     args = parser.parse_args()
 
-    config_path = get_resource_path(args.config) if not os.path.isabs(args.config) and not os.path.exists(args.config) else args.config
-    if not os.path.exists(config_path):
-        config_path = get_resource_path("config.json")
+    config_path = get_resource_path(args.config)
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            config = json.load(f)
+    else:
+        config = {
+            "simulation": {
+                "map_width": 1000,
+                "map_height": 1000,
+                "num_survivors": 20,
+                "num_zombies": 30,
+                "num_animals": 10,
+                "num_vehicles": 4,
+                "electricity_cutoff_day": 7,
+                "water_cutoff_day": 14,
+                "electricity_enabled": True,
+                "water_enabled": True,
+                "day_length_ticks": 3600
+            }
+        }
 
-    with open(config_path, "r") as f:
-        config = json.load(f)
+    sim_engine = SimulationEngine(config)
 
-    if args.headless or os.environ.get("SDL_VIDEODRIVER") == "dummy":
-        sim = SimulationEngine(config)
-        print(f"Running headless simulation for {args.ticks} ticks...")
-        start_time = time.time()
-        for i in range(args.ticks):
-            sim.tick()
-            if i % 200 == 0:
-                alive = sum(1 for s in sim.survivors if s.is_alive)
-                print(f"Tick {i}/{args.ticks} | Gen {sim.evolution_manager.generation} | Alive: {alive} | Best score: {sim.best_historical_score:.1f}")
-        print(f"Completed {args.ticks} ticks in {time.time() - start_time:.2f} seconds.")
+    if args.headless:
+        print("[Simulation Engine] Running in HEADLESS mode...")
+        for tick in range(1, args.ticks + 1):
+            sim_engine.tick()
+            if tick % 500 == 0 or tick == args.ticks:
+                alive = sum(1 for s in sim_engine.survivors if s.is_alive)
+                print(f"Tick {tick}/{args.ticks} | Alive Survivors: {alive}/{len(sim_engine.survivors)} | Date: {sim_engine.world.get_time_string()}")
+        print("[Simulation Engine] Headless simulation completed successfully.")
     else:
         from src.ui import MainMenuUI, RendererUI
+        menu_ui = MainMenuUI(config)
+        renderer_ui = None
+        in_menu = True
+
         import pygame
         clock = pygame.time.Clock()
 
-        menu = MainMenuUI(config)
-        sim = None
-        renderer = None
-
-        running = True
-        in_menu = True
-
-        while running:
+        while True:
             if in_menu:
-                menu.handle_events()
-                menu.render()
-
-                if menu.start_requested:
-                    menu.start_requested = False
-                    sim = SimulationEngine(menu.config)
-                    renderer = RendererUI(sim, tile_size=menu.config["simulation"].get("tile_size", 16))
-                    menu.has_active_sim = True
+                menu_ui.handle_events()
+                if menu_ui.start_requested:
+                    sim_engine = SimulationEngine(menu_ui.config)
+                    renderer_ui = RendererUI(sim_engine)
+                    menu_ui.has_active_sim = True
+                    menu_ui.start_requested = False
                     in_menu = False
-                elif menu.resume_requested:
-                    menu.resume_requested = False
-                    if sim is not None:
-                        in_menu = False
-                clock.tick(30)
+                elif menu_ui.resume_requested:
+                    menu_ui.resume_requested = False
+                    in_menu = False
+                else:
+                    menu_ui.render()
             else:
-                renderer.handle_events()
-                if renderer.open_menu_requested:
-                    renderer.open_menu_requested = False
+                renderer_ui.handle_events()
+                if renderer_ui.open_menu_requested:
+                    renderer_ui.open_menu_requested = False
                     in_menu = True
                 else:
-                    if not renderer.paused:
-                        for _ in range(renderer.speed_multiplier):
-                            sim.tick()
-                    renderer.render()
-                    clock.tick(menu.config["simulation"].get("fps", 30))
+                    if not renderer_ui.paused:
+                        for _ in range(renderer_ui.speed_multiplier):
+                            sim_engine.tick()
+                    renderer_ui.render()
+
+            clock.tick(60)
+
 
 if __name__ == "__main__":
     main()

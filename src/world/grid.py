@@ -25,7 +25,6 @@ class TileType:
     TRASH_CAN = 16
     CONTAINER_BOX = 17
     MAILBOX = 18
-    # New realistic road and terrain tile variants
     ROAD_HIGHWAY = 19
     SIDEWALK = 20
     CROSSWALK = 21
@@ -37,7 +36,6 @@ class TileType:
     GRASS_DRY = 27
     SAND = 28
 
-    # Specific Furniture Types
     TABLE = 29
     CHAIR = 30
     SOFA = 31
@@ -81,7 +79,6 @@ TILE_COLORS = {
     TileType.TRASH_CAN: (80, 90, 80),
     TileType.CONTAINER_BOX: (180, 130, 70),
     TileType.MAILBOX: (70, 130, 180),
-    # Visual colors for new tile variants
     TileType.ROAD_HIGHWAY: (50, 50, 55),
     TileType.SIDEWALK: (180, 180, 185),
     TileType.CROSSWALK: (220, 220, 220),
@@ -92,7 +89,6 @@ TILE_COLORS = {
     TileType.GRASS_DENSE: (0, 110, 0),
     TileType.GRASS_DRY: (189, 183, 107),
     TileType.SAND: (238, 214, 139),
-    # Furniture visual colors
     TileType.TABLE: (160, 120, 80),
     TileType.CHAIR: (180, 140, 90),
     TileType.SOFA: (100, 60, 140),
@@ -146,7 +142,6 @@ TILE_WALKABLE = {
     TileType.GRASS_DENSE: True,
     TileType.GRASS_DRY: True,
     TileType.SAND: True,
-    # Furniture Walkability
     TileType.TABLE: False,
     TileType.CHAIR: True,
     TileType.SOFA: False,
@@ -175,6 +170,18 @@ TILE_SPEED_MODIFIERS = {
     TileType.FOREST_DENSE: 0.6,
 }
 
+_FOW_NUM_RAYS = 36
+_FOW_RAYS = tuple(
+    (math.cos(i * (2 * math.pi / _FOW_NUM_RAYS)), math.sin(i * (2 * math.pi / _FOW_NUM_RAYS)))
+    for i in range(_FOW_NUM_RAYS)
+)
+_OPAQUE_FOW_TILES = {
+    TileType.BUILDING_WALL,
+    TileType.UNDERGROUND_WALL,
+    TileType.FURNITURE,
+    TileType.AIR
+}
+
 
 class World:
     def __init__(self, width=1000, height=1000, day_length_ticks=3600, z_min=0, z_max=2,
@@ -195,8 +202,8 @@ class World:
         self.weather = WeatherManager(self.width, self.height)
         self.dynamic_lights = []
         self.grid = np.zeros((self.num_levels, self.height, self.width), dtype=int)
-        self.building_grid = {}  # (x, y, z) -> BuildingType
-        self.buildings = []  # List of building info dicts
+        self.building_grid = {}
+        self.buildings = []
         self.generate_world()
 
     def z_to_idx(self, z):
@@ -206,7 +213,6 @@ class World:
         return idx + self.z_min
 
     def build_chunk_building(self, bx, by, bw, bh, btype):
-        """Constructs a building fitted wholly inside its chunk."""
         self.buildings.append({
             "x": bx, "y": by, "w": bw, "h": bh, "type": btype
         })
@@ -472,23 +478,20 @@ class World:
     def compute_fog_of_war(self, x, y, radius=8, z=0):
         ix, iy = int(x), int(y)
         z_idx = self.z_to_idx(z)
-        visible_tiles = set()
-        visible_tiles.add((ix, iy))
+        visible_tiles = {(ix, iy)}
+        w, h = self.width, self.height
+        grid_z = self.grid[z_idx]
+        r_int = int(radius)
 
-        num_rays = 36
-        for i in range(num_rays):
-            angle = i * (2 * math.pi / num_rays)
-            dx = math.cos(angle)
-            dy = math.sin(angle)
+        for dx, dy in _FOW_RAYS:
             cx, cy = float(x), float(y)
-            for _step in range(int(radius)):
+            for _step in range(r_int):
                 cx += dx
                 cy += dy
                 tx, ty = int(cx), int(cy)
-                if not (0 <= tx < self.width and 0 <= ty < self.height):
+                if not (0 <= tx < w and 0 <= ty < h):
                     break
                 visible_tiles.add((tx, ty))
-                t = self.grid[z_idx, ty, tx]
-                if t in (TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL, TileType.FURNITURE, TileType.AIR):
+                if grid_z[ty, tx] in _OPAQUE_FOW_TILES:
                     break
         return visible_tiles

@@ -47,7 +47,6 @@ class SimulationEngine:
         import gc
         import torch
 
-        # Release existing entities to pool
         if hasattr(self, 'zombies'):
             for z in self.zombies:
                 self.factory.release_zombie(z)
@@ -247,12 +246,19 @@ class SimulationEngine:
                 active_scents.append(st)
         self.scent_trails = active_scents
 
-        # Multi-threaded Zombie update step across active threads
+        # Multi-threaded Zombie update step with spatial grid bucketing for flocking
         active_zombies = [z for z in self.zombies if z.is_alive]
+        z_grid = {}
+        for z in active_zombies:
+            cell = (int(z.x // 6.0), int(z.y // 6.0), z.z)
+            if cell not in z_grid:
+                z_grid[cell] = []
+            z_grid[cell].append(z)
+
         if len(active_zombies) > 8:
             def _update_zombie_chunk(z_sublist):
                 for z in z_sublist:
-                    z.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies)
+                    z.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
             chunk_size = max(1, len(active_zombies) // 4)
             z_chunks = [active_zombies[i:i + chunk_size] for i in range(0, len(active_zombies), chunk_size)]
@@ -261,7 +267,7 @@ class SimulationEngine:
                 f.result()
         else:
             for zombie in active_zombies:
-                zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies)
+                zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
         for animal in self.animals:
             animal.update(self.world)

@@ -45,7 +45,6 @@ class Zombie:
         return True
 
     def check_vision(self, world, survivors):
-        # Light sensitivity: Higher vision range during day/bright light, lower at night
         base_range = max(3.0, 14.0 * world.get_light_level())
         closest_surv = None
         min_d = base_range
@@ -58,9 +57,6 @@ class Zombie:
         return closest_surv
 
     def check_hearing(self, noise_events, world=None):
-        """
-        Evaluates acoustic propagation accounting for wall/door sound occlusion and distance attenuation.
-        """
         if not noise_events:
             return None
         best_event = None
@@ -70,7 +66,6 @@ class Zombie:
             if dist <= ne.volume:
                 attenuated_vol = ne.volume
                 if world and abs(ne.z - self.z) <= 1:
-                    # Raycast ray-attenuation through walls and doors
                     steps = max(1, int(dist))
                     dx = (self.x - ne.x) / steps
                     dy = (self.y - ne.y) / steps
@@ -83,9 +78,9 @@ class Zombie:
                         if 0 <= ix < world.width and 0 <= iy < world.height:
                             tile = world.grid[z_idx, iy, ix]
                             if tile in (TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL):
-                                attenuated_vol *= 0.35  # Wall dampens 65% volume
+                                attenuated_vol *= 0.35
                             elif tile == TileType.DOOR:
-                                attenuated_vol *= 0.65  # Door dampens 35% volume
+                                attenuated_vol *= 0.65
 
                 audible_val = attenuated_vol - dist
                 if audible_val > max_audible:
@@ -94,7 +89,6 @@ class Zombie:
         return best_event
 
     def check_scent(self, scent_trails):
-        """Scans for nearby survivor scent trails to track prey by smell."""
         if not scent_trails:
             return None
         best_trail = None
@@ -109,32 +103,57 @@ class Zombie:
                         best_trail = st
         return best_trail
 
-    def compute_flocking_vector(self, all_zombies, neighbor_radius=6.0):
-        """Horde / Flocking behavior: Cohesion and alignment with neighboring zombies."""
+    def compute_flocking_vector(self, all_zombies, neighbor_radius=6.0, spatial_grid=None):
+        """Horde / Flocking behavior using fast spatial grid bucketing."""
+        if not all_zombies:
+            return 0.0, 0.0
+
         sep_x, sep_y = 0.0, 0.0
         align_x, align_y = 0.0, 0.0
         count = 0
-        for other in all_zombies:
-            if other is not self and other.is_alive and other.z == self.z:
-                d = math.hypot(other.x - self.x, other.y - self.y)
-                if 0.1 < d < neighbor_radius:
-                    count += 1
-                    # Separation
-                    sep_x += (self.x - other.x) / d
-                    sep_y += (self.y - other.y) / d
-                    # Cohesion towards horde center
-                    align_x += (other.x - self.x)
-                    align_y += (other.y - self.y)
+        rad_sq = neighbor_radius * neighbor_radius
+
+        if spatial_grid is not None:
+            cx, cy, cz = int(self.x // neighbor_radius), int(self.y // neighbor_radius), self.z
+            for dcx in (-1, 0, 1):
+                for dcy in (-1, 0, 1):
+                    neighbors = spatial_grid.get((cx + dcx, cy + dcy, cz), None)
+                    if neighbors:
+                        for other in neighbors:
+                            if other is not self and other.is_alive:
+                                dx = other.x - self.x
+                                dy = other.y - self.y
+                                d_sq = dx * dx + dy * dy
+                                if 0.01 < d_sq < rad_sq:
+                                    d = math.sqrt(d_sq)
+                                    count += 1
+                                    sep_x -= dx / d
+                                    sep_y -= dy / d
+                                    align_x += dx
+                                    align_y += dy
+        else:
+            for other in all_zombies:
+                if other is not self and other.is_alive and other.z == self.z:
+                    dx = other.x - self.x
+                    dy = other.y - self.y
+                    if abs(dx) < neighbor_radius and abs(dy) < neighbor_radius:
+                        d_sq = dx * dx + dy * dy
+                        if 0.01 < d_sq < rad_sq:
+                            d = math.sqrt(d_sq)
+                            count += 1
+                            sep_x -= dx / d
+                            sep_y -= dy / d
+                            align_x += dx
+                            align_y += dy
 
         if count > 0:
             return (sep_x * 0.4 + align_x * 0.2), (sep_y * 0.4 + align_y * 0.2)
         return 0.0, 0.0
 
-    def update(self, world, survivors, vehicles, noise_events=None, scent_trails=None, all_zombies=None):
+    def update(self, world, survivors, vehicles, noise_events=None, scent_trails=None, all_zombies=None, spatial_grid=None):
         if not self.is_alive:
             return
 
-        # 1. Vision Check (Light sensitive)
         seen_survivor = self.check_vision(world, survivors)
         if seen_survivor:
             self.state = ZombieState.CHASE
@@ -145,20 +164,17 @@ class Zombie:
                 self.investigate_pos = self.target
                 self.target = None
 
-            # 2. Hearing Check (Acoustics with wall occlusion)
             heard_noise = self.check_hearing(noise_events, world=world)
             if heard_noise and self.state != ZombieState.CHASE:
                 self.state = ZombieState.INVESTIGATE
                 self.investigate_pos = (heard_noise.x, heard_noise.y, heard_noise.z)
 
-            # 3. Smell / Scent Trail Check
             elif self.state == ZombieState.IDLE and scent_trails:
                 picked_scent = self.check_scent(scent_trails)
                 if picked_scent:
                     self.state = ZombieState.INVESTIGATE
                     self.investigate_pos = (picked_scent.x, picked_scent.y, picked_scent.z)
 
-        # 4. Movement Execution & Obstacle Avoidance
         dest_pos = None
         if self.state == ZombieState.CHASE and self.target:
             dest_pos = self.target
@@ -170,7 +186,7 @@ class Zombie:
 
         flock_dx, flock_dy = 0.0, 0.0
         if all_zombies:
-            flock_dx, flock_dy = self.compute_flocking_vector(all_zombies)
+            flock_dx, flock_dy = self.compute_flocking_vector(all_zombies, spatial_grid=spatial_grid)
 
         if dest_pos:
             tx, ty, tz = dest_pos
@@ -198,7 +214,6 @@ class Zombie:
                 elif tz < self.z and tile in (TileType.STAIRS, TileType.LADDER):
                     nz = max(world.z_min, self.z - 1)
 
-            # Smart obstacle avoidance step
             if world.is_walkable(nx, ny, nz):
                 self.x, self.y, self.z = nx, ny, nz
             elif world.is_walkable(nx, self.y, nz):
@@ -206,7 +221,6 @@ class Zombie:
             elif world.is_walkable(self.x, ny, nz):
                 self.y, self.z = ny, nz
         else:
-            # Horde alignment during wandering
             if random.random() < 0.3:
                 angle = random.uniform(0, 2 * math.pi)
                 tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
@@ -216,7 +230,6 @@ class Zombie:
                 if world.is_walkable(nx, ny, self.z):
                     self.x, self.y = nx, ny
 
-        # Attack adjacent survivor on same z level
         for survivor in survivors:
             if survivor.is_alive and not survivor.in_vehicle and survivor.z == self.z:
                 dist = math.hypot(survivor.x - self.x, survivor.y - self.y)

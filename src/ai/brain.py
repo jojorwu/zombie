@@ -64,14 +64,14 @@ def batch_get_action_and_movement(brains, inputs_list, prev_hiddens):
     if num_survivors == 1:
         return [brains[0].get_action_and_movement(inputs_list[0], prev_hiddens[0])]
 
-    w_fc1 = torch.stack([b.fc1.weight for b in brains]).to(DEVICE)
-    b_fc1 = torch.stack([b.fc1.bias for b in brains]).to(DEVICE)
-    w_ih = torch.stack([b.gru.weight_ih for b in brains]).to(DEVICE)
-    w_hh = torch.stack([b.gru.weight_hh for b in brains]).to(DEVICE)
-    b_ih = torch.stack([b.gru.bias_ih for b in brains]).to(DEVICE)
-    b_hh = torch.stack([b.gru.bias_hh for b in brains]).to(DEVICE)
-    w_out = torch.stack([b.fc_out.weight for b in brains]).to(DEVICE)
-    b_out = torch.stack([b.fc_out.bias for b in brains]).to(DEVICE)
+    w_fc1 = torch.stack([b.fc1.weight for b in brains])
+    b_fc1 = torch.stack([b.fc1.bias for b in brains])
+    w_ih = torch.stack([b.gru.weight_ih for b in brains])
+    w_hh = torch.stack([b.gru.weight_hh for b in brains])
+    b_ih = torch.stack([b.gru.bias_ih for b in brains])
+    b_hh = torch.stack([b.gru.bias_hh for b in brains])
+    w_out = torch.stack([b.fc_out.weight for b in brains])
+    b_out = torch.stack([b.fc_out.bias for b in brains])
 
     inp_np = np.ascontiguousarray(np.array(inputs_list, dtype=np.float32))
     x = torch.from_numpy(inp_np).to(DEVICE).unsqueeze(1)
@@ -173,7 +173,7 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
     inputs[23] = has_furniture_adj
     inputs[24] = min(1.0, (survivor.inventory.get("wood", 0) + survivor.inventory.get("metal", 0)) / 10.0)
 
-    _poly_bound = PNP_ENGINE.polynomial_bound(len(zombies) + 1)
+    PNP_ENGINE.polynomial_bound(len(zombies) + 1)
 
     return inputs
 

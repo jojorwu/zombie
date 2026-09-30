@@ -228,7 +228,16 @@ class RendererUI:
                 ix, iy = int(item.x), int(item.y)
                 if visible_tiles is None or (ix, iy) in visible_tiles:
                     px, py = to_screen(item.x, item.y)
-                    color = (255, 215, 0) if item.item_type == ResourceItem.FOOD else (0, 255, 255)
+                    if "ammo" in item.item_type or item.item_type in (ResourceItem.PISTOL, ResourceItem.SHOTGUN, ResourceItem.RIFLE):
+                        color = (255, 69, 0)
+                    elif item.item_type in (ResourceItem.KNIFE, ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.BASEBALL_BAT, ResourceItem.CHEF_KNIFE, ResourceItem.FRYING_PAN):
+                        color = (192, 192, 192)
+                    elif item.item_type in (ResourceItem.CANNED_FOOD, ResourceItem.BREAD, ResourceItem.APPLE, ResourceItem.MEAT, ResourceItem.MRE, ResourceItem.FOOD):
+                        color = (255, 215, 0)
+                    elif item.item_type in (ResourceItem.WATER_BOTTLE, ResourceItem.WATER):
+                        color = (0, 255, 255)
+                    else:
+                        color = (180, 180, 200)
                     pygame.draw.circle(self.screen, color, (px, py), 3)
 
         for v in self.sim.vehicles:

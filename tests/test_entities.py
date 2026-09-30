@@ -76,5 +76,29 @@ class TestEntities(unittest.TestCase):
         survivor.perform_action(8, world, [], [], [], [], [survivor])  # Action 8 = Stairs Down
         self.assertEqual(survivor.z, 0)
 
+    def test_firearms_ammo_and_scent_flocking(self):
+        world = World(width=30, height=30)
+        world.grid[:, 5, 4:20] = TileType.GRASS
+
+        survivor = Survivor(5.0, 5.0, z=0)
+        survivor.inventory[ResourceItem.PISTOL] = 1
+        survivor.inventory[ResourceItem.PISTOL_AMMO] = 10
+
+        zombie1 = Zombie(10.0, 5.0, z=0)
+        zombie2 = Zombie(11.0, 5.0, z=0)
+        noise_events = []
+
+        # Survivor shoots pistol
+        survivor.perform_action(6, world, [], [], [zombie1, zombie2], [], [survivor], noise_events=noise_events)
+
+        # Verify ammo consumed and noise generated
+        self.assertEqual(survivor.inventory[ResourceItem.PISTOL_AMMO], 9)
+        self.assertGreater(len(noise_events), 0)
+        self.assertLess(zombie1.hp, zombie1.max_hp)
+
+        # Test flocking vector calculation
+        flock_vec = zombie1.compute_flocking_vector([zombie1, zombie2])
+        self.assertIsNotNone(flock_vec)
+
 if __name__ == "__main__":
     unittest.main()

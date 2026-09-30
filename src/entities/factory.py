@@ -1,0 +1,101 @@
+import collections
+from src.entities.zombie import Zombie, ZombieState
+from src.entities.item import ItemEntity
+from src.entities.sensory import NoiseEvent, ScentTrail
+from src.entities.animal import Animal
+
+class ObjectPool:
+    def __init__(self, create_fn, max_size=1000):
+        self.create_fn = create_fn
+        self.max_size = max_size
+        self.pool = collections.deque()
+
+    def get(self, *args, **kwargs):
+        if self.pool:
+            obj = self.pool.pop()
+            if hasattr(obj, "reset"):
+                obj.reset(*args, **kwargs)
+            return obj
+        return self.create_fn(*args, **kwargs)
+
+    def release(self, obj):
+        if len(self.pool) < self.max_size:
+            self.pool.append(obj)
+
+class EntityFactory:
+    """
+    Factory with object pooling for efficient entity allocation/deallocation,
+    minimizing garbage collection overhead during high-entity count simulations.
+    """
+    def __init__(self):
+        self._zombie_pool = ObjectPool(lambda x=0, y=0, hp=50.0, z=0: Zombie(x, y, hp, z))
+        self._scent_pool = ObjectPool(lambda x=0, y=0, z=0, intensity=100.0: ScentTrail(x, y, z, intensity))
+        self._noise_pool = ObjectPool(lambda x=0, y=0, z=0, volume=10.0, lifetime=5, source_type="general": NoiseEvent(x, y, z, volume, lifetime, source_type))
+        self._item_pool = ObjectPool(lambda x=0, y=0, item_type="", amount=1, z=0: ItemEntity(x, y, item_type, amount, z))
+        self._animal_pool = ObjectPool(lambda x=0, y=0, hp=30.0, z=0: Animal(x, y, hp, z))
+
+    def create_zombie(self, x, y, hp=50.0, z=0):
+        zombie = self._zombie_pool.get(x, y, hp, z)
+        zombie.x, zombie.y, zombie.z = float(x), float(y), int(z)
+        zombie.hp, zombie.max_hp = hp, hp
+        zombie.is_alive = True
+        zombie.state = ZombieState.IDLE
+        zombie.target = None
+        zombie.investigate_pos = None
+        return zombie
+
+    def release_zombie(self, zombie):
+        zombie.is_alive = False
+        self._zombie_pool.release(zombie)
+
+    def create_scent_trail(self, x, y, z=0, intensity=100.0):
+        scent = self._scent_pool.get(x, y, z, intensity)
+        scent.x, scent.y, scent.z = float(x), float(y), int(z)
+        scent.intensity = float(intensity)
+        return scent
+
+    def release_scent_trail(self, scent):
+        self._scent_pool.release(scent)
+
+    def create_noise_event(self, x, y, z=0, volume=10.0, lifetime=5, source_type="general"):
+        noise = self._noise_pool.get(x, y, z, volume, lifetime, source_type)
+        noise.x, noise.y, noise.z = float(x), float(y), int(z)
+        noise.volume = float(volume)
+        noise.lifetime = lifetime
+        noise.source_type = source_type
+        return noise
+
+    def release_noise_event(self, noise):
+        self._noise_pool.release(noise)
+
+    def create_item(self, x, y, item_type, amount=1, z=0):
+        item = self._item_pool.get(x, y, item_type, amount, z)
+        item.x, item.y, item.z = float(x), float(y), int(z)
+        item.item_type = item_type
+        item.amount = amount
+        item.collected = False
+        return item
+
+    def release_item(self, item):
+        item.collected = True
+        self._item_pool.release(item)
+
+    def create_animal(self, x, y, hp=30.0, z=0):
+        animal = self._animal_pool.get(x, y, hp, z)
+        animal.x, animal.y, animal.z = float(x), float(y), int(z)
+        animal.hp, animal.max_hp = hp, hp
+        animal.is_alive = True
+        return animal
+
+    def release_animal(self, animal):
+        animal.is_alive = False
+        self._animal_pool.release(animal)
+
+    def get_pool_stats(self):
+        return {
+            "zombies_pooled": len(self._zombie_pool.pool),
+            "scents_pooled": len(self._scent_pool.pool),
+            "noises_pooled": len(self._noise_pool.pool),
+            "items_pooled": len(self._item_pool.pool),
+            "animals_pooled": len(self._animal_pool.pool),
+        }

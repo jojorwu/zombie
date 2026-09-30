@@ -5,6 +5,7 @@ from src.entities.vehicle import Vehicle
 from src.entities.zombie import Zombie, ZombieState
 from src.entities.crafting import CraftingSystem
 from src.entities.survivor import Survivor
+from src.entities.factory import EntityFactory
 
 __all__ = [
     "ResourceItem",
@@ -18,4 +19,5 @@ __all__ = [
     "ZombieState",
     "CraftingSystem",
     "Survivor",
+    "EntityFactory",
 ]

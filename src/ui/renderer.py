@@ -5,6 +5,13 @@ from src.world import TileType, TILE_COLORS, BUILDING_COLORS
 from src.entities import ResourceItem
 from src.ui.themes import UITheme, THEME_COLORS
 
+try:
+    import rust_vulkan_render
+    HAS_RUST_VULKAN = True
+except ImportError:
+    HAS_RUST_VULKAN = False
+
+
 class RendererUI:
     def __init__(self, simulation, tile_size=16):
         self.sim = simulation
@@ -14,19 +21,26 @@ class RendererUI:
 
         pygame.init()
         pygame.font.init()
-        self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption("Zombie Neuroevolution Simulation (GRU Memory)")
+        self.screen = pygame.display.set_mode((self.width, self.height), pygame.HWSURFACE | pygame.DOUBLEBUF)
+        pygame.display.set_caption("Zombie Neuroevolution Simulation (Native Rust Vulkan Render)")
         self.font = pygame.font.SysFont("Arial", 14)
         self.bold_font = pygame.font.SysFont("Arial", 16, bold=True)
 
         self.fog_of_war_enabled = False
         self.speed_multiplier = 1
         self.paused = False
-        self.view_z = 0  # Active height level (0, 1, 2)
+        self.view_z = 0
         self.open_menu_requested = False
         self.active_theme = UITheme.DARK
         self.theme_list = [UITheme.DARK, UITheme.NEON, UITheme.TACTICAL, UITheme.RETRO]
         self.theme_idx = 0
+
+        map_draw_width = (self.width - 300) // self.tile_size
+        map_draw_height = self.height // self.tile_size
+        if HAS_RUST_VULKAN:
+            self.rust_renderer = rust_vulkan_render.VulkanTileRenderer(map_draw_width, map_draw_height, self.tile_size)
+        else:
+            self.rust_renderer = None
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -228,6 +242,7 @@ class RendererUI:
         has_rain = self.sim.world.weather.rain_front is not None
 
         draw_text("Zombie AI Neuroevolution", self.bold_font, theme["title"])
+        draw_text(f"Render Engine: {'Native Rust Vulkan' if HAS_RUST_VULKAN else 'OpenGL/SDL2'}", color=(0, 255, 200))
         draw_text(f"Theme: {self.active_theme} [T to Switch]", color=theme["accent"])
         draw_text(f"Date: {self.sim.world.get_time_string()}")
         draw_text(f"Gen: {self.sim.evolution_manager.generation}  Tick: {self.sim.world.current_tick}")

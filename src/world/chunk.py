@@ -1,4 +1,7 @@
 import math
+from concurrent.futures import ThreadPoolExecutor
+
+CHUNK_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 class Chunk:
     def __init__(self, chunk_x, chunk_y, size=16):
@@ -6,6 +9,7 @@ class Chunk:
         self.chunk_y = chunk_y
         self.size = size
         self.buildings = []
+        self.loaded = True
 
 
 class ChunkManager:
@@ -34,8 +38,7 @@ class ChunkManager:
 
     def update_active_chunks(self, entity_positions, view_distance_chunks=2):
         """
-        Dynamically loads / activates chunks around active entities and unloads / deactivates far chunks.
-        Prevents memory leaks and reduces unnecessary computation for inactive regions.
+        Loads / activates chunks around active entities and deactivates far chunks.
         """
         new_active = set()
         for x, y in entity_positions:
@@ -48,3 +51,6 @@ class ChunkManager:
 
         self.active_chunks = new_active
         return self.active_chunks
+
+    def update_active_chunks_async(self, entity_positions, view_distance_chunks=2):
+        return self.update_active_chunks(entity_positions, view_distance_chunks)

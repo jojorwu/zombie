@@ -37,17 +37,19 @@ class SimulationEngine:
         self.animals = []
         self.vehicles = []
         self.items = []
+        self.noise_events = []
 
         self.hidden_states = [brain.init_hidden() for brain in self.brains]
 
         walkable_coords = []
         building_floors = []
-        for z in range(self.world.num_levels):
+        for z in range(self.world.z_min, self.world.z_max + 1):
+            z_idx = self.world.z_to_idx(z)
             for y in range(self.world.height):
                 for x in range(self.world.width):
                     if self.world.is_walkable(x, y, z):
                         walkable_coords.append((x, y, z))
-                        if self.world.grid[z, y, x] == TileType.BUILDING_FLOOR:
+                        if self.world.grid[z_idx, y, x] in (TileType.BUILDING_FLOOR, TileType.UNDERGROUND_FLOOR):
                             building_floors.append((x, y, z))
 
         random.shuffle(walkable_coords)
@@ -94,7 +96,7 @@ class SimulationEngine:
             elif btype == BuildingType.RESIDENTIAL:
                 loot_type = ResourceItem.FOOD if random.random() < 0.7 else ResourceItem.WATER
 
-            for floor_z in range(min(3, self.world.num_levels)):
+            for floor_z in range(self.world.z_min, self.world.z_max + 1):
                 lx, ly = bx + 2, by + 1
                 if self.world.is_walkable(lx, ly, floor_z):
                     self.items.append(ItemEntity(lx + 0.5, ly + 0.5, loot_type, amount=random.randint(1, 3), z=floor_z))
@@ -109,6 +111,11 @@ class SimulationEngine:
 
     def tick(self):
         self.world.update_day_night()
+
+        # Update active noise events
+        for ne in self.noise_events:
+            ne.update()
+        self.noise_events = [ne for ne in self.noise_events if ne.lifetime > 0 and ne.volume > 0.0]
 
         alive_count = 0
         import torch
@@ -126,11 +133,11 @@ class SimulationEngine:
                 dx, dy, action, new_hidden = brain.get_action_and_movement(inputs, prev_hidden)
                 self.hidden_states[i] = new_hidden
 
-                survivor.move(dx, dy, self.world)
-                survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors)
+                survivor.move(dx, dy, self.world, noise_events=self.noise_events)
+                survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors, noise_events=self.noise_events)
 
         for zombie in self.zombies:
-            zombie.update(self.world, self.survivors, self.vehicles)
+            zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events)
 
         for animal in self.animals:
             animal.update(self.world)
@@ -139,7 +146,7 @@ class SimulationEngine:
             active_items = [item for item in self.items if not item.collected]
             if len(active_items) < 20:
                 rx, ry = random.randint(0, self.world.width - 1), random.randint(0, self.world.height - 1)
-                rz = random.randint(0, self.world.num_levels - 1)
+                rz = random.randint(self.world.z_min, self.world.z_max)
                 if self.world.is_walkable(rx, ry, rz):
                     itype = random.choice([ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL])
                     self.items.append(ItemEntity(rx + 0.5, ry + 0.5, itype, amount=random.randint(1, 2), z=rz))

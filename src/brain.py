@@ -65,10 +65,10 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
         coords = np.array([[e.x, e.y, getattr(e, 'z', 0)] for e in active_entities], dtype=np.float32)
         surv_pos = np.array([survivor.x, survivor.y, survivor.z], dtype=np.float32)
         diffs = coords - surv_pos
-        dists = np.hypot(diffs[:, 0], diffs[:, 1]) + np.abs(diffs[:, 2]) * 3.0
+        dists = np.hypot(diffs[:, 0], diffs[:, 1]) + np.abs(diffs[:, 2]) * 2.0
         min_idx = np.argmin(dists)
         if dists[min_idx] < max_dist:
-            return float(diffs[min_idx, 0] / max_dist), float(diffs[min_idx, 1] / max_dist), float(diffs[min_idx, 2] / 3.0)
+            return float(diffs[min_idx, 0] / max_dist), float(diffs[min_idx, 1] / max_dist), float(diffs[min_idx, 2] / 20.0)
         return 0.0, 0.0, 0.0
 
     inputs[8], inputs[9], inputs[10] = find_closest_vectorized(zombies)
@@ -77,7 +77,7 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
     inputs[17], inputs[18], inputs[19] = find_closest_vectorized(animals)
     inputs[20] = 1.0 if world.is_walkable(survivor.x + 0.5, survivor.y, survivor.z) else 0.0
     inputs[21] = 1.0 if world.is_walkable(survivor.x, survivor.y + 0.5, survivor.z) else 0.0
-    inputs[22] = float(survivor.z) / 2.0
+    inputs[22] = float(survivor.z) / 20.0
 
     return inputs
 

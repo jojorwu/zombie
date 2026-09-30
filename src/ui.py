@@ -33,10 +33,10 @@ class RendererUI:
                     self.paused = not self.paused
                 elif event.key == pygame.K_f:
                     self.fog_of_war_enabled = not self.fog_of_war_enabled
-                elif event.key == pygame.K_z:
-                    self.view_z = min(self.sim.world.num_levels - 1, self.view_z + 1)
-                elif event.key == pygame.K_x:
-                    self.view_z = max(0, self.view_z - 1)
+                elif event.key in (pygame.K_z, pygame.K_PAGEUP, pygame.K_UP):
+                    self.view_z = min(self.sim.world.z_max, self.view_z + 1)
+                elif event.key in (pygame.K_x, pygame.K_PAGEDOWN, pygame.K_DOWN):
+                    self.view_z = max(self.sim.world.z_min, self.view_z - 1)
                 elif event.key == pygame.K_1:
                     self.speed_multiplier = 1
                 elif event.key == pygame.K_2:
@@ -72,13 +72,14 @@ class RendererUI:
 
         light = self.sim.world.get_light_level()
         cur_z = self.view_z
+        z_idx = self.sim.world.z_to_idx(cur_z)
 
         for y in range(self.sim.world.height):
             for x in range(self.sim.world.width):
                 if visible_tiles is not None and (x, y) not in visible_tiles:
                     color = (10, 10, 10)
                 else:
-                    ttype = self.sim.world.grid[cur_z, y, x]
+                    ttype = self.sim.world.grid[z_idx, y, x]
                     if ttype == TileType.BUILDING_FLOOR and (x, y, cur_z) in self.sim.world.building_grid:
                         btype = self.sim.world.building_grid[(x, y, cur_z)]
                         base_color = BUILDING_COLORS.get(btype, TILE_COLORS[ttype])
@@ -86,12 +87,20 @@ class RendererUI:
                         base_color = TILE_COLORS[ttype]
 
                     color = (
-                        int(base_color[0] * light),
-                        int(base_color[1] * light),
-                        int(base_color[2] * light)
+                        int(base_color[0] * (light if cur_z >= 0 else 0.8)),
+                        int(base_color[1] * (light if cur_z >= 0 else 0.8)),
+                        int(base_color[2] * (light if cur_z >= 0 else 0.8))
                     )
                 rect = (x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
                 pygame.draw.rect(self.screen, color, rect)
+
+        # Draw acoustic Noise Events on current level
+        for ne in getattr(self.sim, 'noise_events', []):
+            if ne.z == cur_z:
+                nx_p = int(ne.x * self.tile_size)
+                ny_p = int(ne.y * self.tile_size)
+                r_p = int(ne.volume * self.tile_size)
+                pygame.draw.circle(self.screen, (255, 100, 0), (nx_p, ny_p), max(3, r_p), 1)
 
         for item in self.sim.items:
             if not item.collected and item.z == cur_z:
@@ -146,13 +155,16 @@ class RendererUI:
             self.screen.blit(img, (sidebar_x + 10, y_offset))
             y_offset += 20
 
-        draw_text("Zombie Neuroevolution (GRU)", self.bold_font, (255, 215, 0))
+        chase_cnt = sum(1 for z in self.sim.zombies if z.is_alive and getattr(z, 'state', None) == 'chase')
+        invest_cnt = sum(1 for z in self.sim.zombies if z.is_alive and getattr(z, 'state', None) == 'investigate')
+
+        draw_text("Zombie AI Neuroevolution", self.bold_font, (255, 215, 0))
         draw_text(f"Gen: {self.sim.evolution_manager.generation}  Tick: {self.sim.world.current_tick}")
-        draw_text(f"View Level: {self.view_z + 1} / {self.sim.world.num_levels} [Z/X]")
+        draw_text(f"View Level Z: {self.view_z} [-20..+20] [Z/X]")
         draw_text(f"Light level: {light:.2f}")
-        draw_text(f"Speed: {self.speed_multiplier}x  (0=Fast Train)")
-        draw_text(f"Fog of War [F]: {'ON' if self.fog_of_war_enabled else 'OFF'}")
-        draw_text(f"Status: {'PAUSED' if self.paused else 'RUNNING'}")
+        draw_text(f"Active Noises: {len(getattr(self.sim, 'noise_events', []))}")
+        draw_text(f"Zombies: Chase={chase_cnt} Hear/Invest={invest_cnt}")
+        draw_text(f"Speed: {self.speed_multiplier}x  Status: {'PAUSED' if self.paused else 'RUNNING'}")
         draw_text(f"Best Score: {self.sim.best_historical_score:.1f}")
 
         y_offset += 10

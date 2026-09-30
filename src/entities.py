@@ -12,6 +12,25 @@ class ResourceItem:
 
 from src.world import TileType
 
+class NoiseEvent:
+    def __init__(self, x, y, z, volume=10.0, lifetime=5, source_type="general"):
+        self.x = float(x)
+        self.y = float(y)
+        self.z = int(z)
+        self.volume = float(volume)
+        self.lifetime = lifetime
+        self.source_type = source_type
+
+    def update(self):
+        self.lifetime -= 1
+        self.volume = max(0.0, self.volume - 0.5)
+
+class ZombieState:
+    IDLE = "idle"
+    INVESTIGATE = "investigate"
+    CHASE = "chase"
+    ATTACK = "attack"
+
 class ItemEntity:
     def __init__(self, x, y, item_type, amount=1, z=0):
         self.x = float(x)
@@ -62,45 +81,112 @@ class Zombie:
         self.hp = hp
         self.max_hp = hp
         self.is_alive = True
-        self.speed = 0.05  # Slow "Walking Dead" style
-        self.damage = 10.0
+        self.speed = 0.06
+        self.damage = 12.0
+        self.state = ZombieState.IDLE
         self.target = None
+        self.investigate_pos = None
 
-    def update(self, world, survivors, vehicles):
+    def has_line_of_sight(self, tx, ty, tz, world):
+        if abs(tz - self.z) > 1:
+            return False
+        dist = math.hypot(tx - self.x, ty - self.y)
+        if dist < 0.1:
+            return True
+        steps = int(ceil(dist * 2)) if 'ceil' in globals() else int(dist * 2) + 1
+        dx = (tx - self.x) / steps
+        dy = (ty - self.y) / steps
+        cx, cy = self.x, self.y
+        z_idx = world.z_to_idx(self.z)
+        for _ in range(steps):
+            cx += dx
+            cy += dy
+            ix, iy = int(cx), int(cy)
+            if 0 <= ix < world.width and 0 <= iy < world.height:
+                tile = world.grid[z_idx, iy, ix]
+                if tile in (TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL, TileType.FURNITURE):
+                    return False
+        return True
+
+    def check_vision(self, world, survivors):
+        base_range = max(3.0, 12.0 * world.get_light_level())
+        closest_surv = None
+        min_d = base_range
+        for s in survivors:
+            if s.is_alive and not s.in_vehicle:
+                d = math.hypot(s.x - self.x, s.y - self.y) + abs(s.z - self.z) * 3.0
+                if d <= min_d and self.has_line_of_sight(s.x, s.y, s.z, world):
+                    min_d = d
+                    closest_surv = s
+        return closest_surv
+
+    def check_hearing(self, noise_events):
+        if not noise_events:
+            return None
+        best_event = None
+        max_audible = 0.0
+        for ne in noise_events:
+            d = math.hypot(ne.x - self.x, ne.y - self.y) + abs(ne.z - self.z) * 2.0
+            if d <= ne.volume:
+                audible_val = ne.volume - d
+                if audible_val > max_audible:
+                    max_audible = audible_val
+                    best_event = ne
+        return best_event
+
+    def update(self, world, survivors, vehicles, noise_events=None):
         if not self.is_alive:
             return
 
-        # Find closest survivor within perception range
-        closest_dist = 12.0
-        self.target = None
+        # 1. Vision Check
+        seen_survivor = self.check_vision(world, survivors)
+        if seen_survivor:
+            self.state = ZombieState.CHASE
+            self.target = (seen_survivor.x, seen_survivor.y, seen_survivor.z)
+        else:
+            if self.state == ZombieState.CHASE:
+                self.state = ZombieState.INVESTIGATE
+                self.investigate_pos = self.target
+                self.target = None
 
-        for survivor in survivors:
-            if survivor.is_alive and not survivor.in_vehicle:
-                dist = math.hypot(survivor.x - self.x, survivor.y - self.y) + abs(survivor.z - self.z) * 3.0
-                if dist < closest_dist:
-                    closest_dist = dist
-                    self.target = (survivor.x, survivor.y, survivor.z)
+            # 2. Hearing Check
+            heard_noise = self.check_hearing(noise_events)
+            if heard_noise and self.state != ZombieState.CHASE:
+                self.state = ZombieState.INVESTIGATE
+                self.investigate_pos = (heard_noise.x, heard_noise.y, heard_noise.z)
 
-        # Move towards target or wander
-        if self.target:
-            tx, ty, tz = self.target
+        # 3. State Execution
+        dest_pos = None
+        if self.state == ZombieState.CHASE and self.target:
+            dest_pos = self.target
+        elif self.state == ZombieState.INVESTIGATE and self.investigate_pos:
+            dest_pos = self.investigate_pos
+            if math.hypot(self.x - dest_pos[0], self.y - dest_pos[1]) < 0.8 and self.z == dest_pos[2]:
+                self.state = ZombieState.IDLE
+                self.investigate_pos = None
+
+        if dest_pos:
+            tx, ty, tz = dest_pos
             angle = math.atan2(ty - self.y, tx - self.x)
             nx = self.x + math.cos(angle) * self.speed
             ny = self.y + math.sin(angle) * self.speed
 
             nz = self.z
             ix, iy = int(self.x), int(self.y)
+            z_idx = world.z_to_idx(self.z)
             if 0 <= ix < world.width and 0 <= iy < world.height:
-                if tz > self.z and world.grid[self.z, iy, ix] == TileType.STAIRS:
-                    nz = min(world.num_levels - 1, self.z + 1)
-                elif tz < self.z and world.grid[self.z, iy, ix] == TileType.STAIRS:
-                    nz = max(0, self.z - 1)
+                tile = world.grid[z_idx, iy, ix]
+                if tz > self.z and tile in (TileType.STAIRS, TileType.LADDER):
+                    nz = min(world.z_max, self.z + 1)
+                elif tz < self.z and tile in (TileType.STAIRS, TileType.LADDER):
+                    nz = max(world.z_min, self.z - 1)
 
             if world.is_walkable(nx, ny, nz):
                 self.x, self.y, self.z = nx, ny, nz
             elif world.is_walkable(nx, ny, self.z):
                 self.x, self.y = nx, ny
         else:
+            # Idle wander
             if random.random() < 0.2:
                 angle = random.uniform(0, 2 * math.pi)
                 nx = self.x + math.cos(angle) * self.speed
@@ -114,6 +200,7 @@ class Zombie:
                 dist = math.hypot(survivor.x - self.x, survivor.y - self.y)
                 if dist < 0.8:
                     survivor.take_damage(self.damage)
+                    self.state = ZombieState.ATTACK
 
 class CraftingSystem:
     RECIPES = {
@@ -200,7 +287,7 @@ class Survivor:
 
         self.score += 0.1
 
-    def move(self, dx, dy, world, dz=0):
+    def move(self, dx, dy, world, noise_events=None, dz=0):
         if not self.is_alive:
             return
         speed = 0.15
@@ -213,19 +300,26 @@ class Survivor:
 
         nx = self.x + dx * speed
         ny = self.y + dy * speed
-        target_z = max(0, min(world.num_levels - 1, int(round(self.z + dz))))
+        target_z = max(world.z_min, min(world.z_max, int(round(self.z + dz))))
 
+        moved = False
         if world.is_walkable(nx, ny, target_z):
             self.x, self.y = nx, ny
             self.z = target_z
+            moved = True
             if self.in_vehicle:
                 self.in_vehicle.x, self.in_vehicle.y, self.in_vehicle.z = self.x, self.y, self.z
         elif world.is_walkable(nx, ny, self.z):
             self.x, self.y = nx, ny
+            moved = True
             if self.in_vehicle:
                 self.in_vehicle.x, self.in_vehicle.y, self.in_vehicle.z = self.x, self.y, self.z
 
-    def perform_action(self, action, world, items, vehicles, zombies, animals, survivors):
+        if moved and noise_events is not None:
+            vol = 15.0 if self.in_vehicle else 3.0
+            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=vol, source_type="movement"))
+
+    def perform_action(self, action, world, items, vehicles, zombies, animals, survivors, noise_events=None):
         # Actions:
         # 0 = None
         # 1 = Gather
@@ -249,10 +343,14 @@ class Survivor:
         elif action == 2:  # Craft Medkit
             if CraftingSystem.craft(self.inventory, ResourceItem.MEDKIT):
                 self.score += 10.0
+                if noise_events is not None:
+                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=8.0, source_type="crafting"))
 
         elif action == 3:  # Craft Weapon
             if CraftingSystem.craft(self.inventory, ResourceItem.WEAPON):
                 self.score += 10.0
+                if noise_events is not None:
+                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=8.0, source_type="crafting"))
 
         elif action == 4:  # Enter/Exit Vehicle
             if self.in_vehicle:
@@ -293,6 +391,9 @@ class Survivor:
                         self.kills += 1
                         self.score += 20.0
                     attacked = True
+                    if noise_events is not None:
+                        vol = 25.0 if has_weapon else 6.0
+                        noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=vol, source_type="attack"))
                     break
 
             if not attacked:

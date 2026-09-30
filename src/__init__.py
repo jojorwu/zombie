@@ -11,15 +11,6 @@ from src.simulation import SimulationEngine
 from src.ai import BrainNet, extract_survivor_inputs, GeneticEvolutionManager, AStar3D
 from src.modding import LuaModManager
 
-# Legacy module aliases for backward compatibility with external code imports
-import src.brain
-import src.pathfinding
-import src.entities
-import src.world
-import src.ui
-import src.simulation
-import src.modding
-
 __all__ = [
     "ResourceItem", "WEAPON_STATS", "ItemEntity", "NoiseEvent", "ScentTrail",
     "Animal", "Vehicle", "Zombie", "ZombieState", "CraftingSystem", "Survivor",

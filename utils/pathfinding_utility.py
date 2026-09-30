@@ -9,7 +9,7 @@ import sys
 import os
 import time
 from src.world import World, TileType
-from src.pathfinding import AStar3D
+from src.ai.pathfinding import AStar3D
 
 class PathfindingUtility:
     def __init__(self, width=60, height=40):

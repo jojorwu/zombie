@@ -7,7 +7,7 @@ from utils.p_np_math import PolynomialVerifier, PNPComplexityEngine
 from utils.mod_utility import ModUtility
 from utils.dev_utility import DevUtility
 from utils.pathfinding_utility import PathfindingUtility
-from src.pathfinding import AStar3D
+from src.ai.pathfinding import AStar3D
 from src.world import World, TileType, ChunkManager
 
 class TestUtilitiesAndMath(unittest.TestCase):

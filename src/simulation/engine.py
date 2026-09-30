@@ -2,8 +2,8 @@ import random
 import math
 from src.world import World, TileType, BuildingType
 from src.entities import Survivor, Zombie, Animal, Vehicle, ItemEntity, ResourceItem
-from src.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager
-from src.modding import LuaModManager
+from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager
+from src.modding.manager import LuaModManager
 
 class SimulationEngine:
     def __init__(self, config):
@@ -192,7 +192,7 @@ class SimulationEngine:
             active_inputs = [extract_survivor_inputs(self.survivors[i], self.world, self.items, self.vehicles, self.zombies, self.animals) for i in alive_indices]
             active_hiddens = [self.hidden_states[i] for i in alive_indices]
 
-            from src.brain import batch_get_action_and_movement
+            from src.ai.brain import batch_get_action_and_movement
             step_outputs = batch_get_action_and_movement(active_brains, active_inputs, active_hiddens)
 
             for idx, orig_i in enumerate(alive_indices):

@@ -3,8 +3,12 @@ import random
 import torch
 import torch.nn as nn
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Thread pool worker for concurrent async brain evaluations
+EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 class BrainNet(nn.Module):
     def __init__(self, input_size=25, hidden_size=32, output_size=13):
@@ -47,23 +51,25 @@ class BrainNet(nn.Module):
         action_idx = int(np.argmax(out_arr[2:]))
         return dx, dy, action_idx, new_hidden
 
+def _eval_brain_single(brain, inp, hidden):
+    return brain.get_action_and_movement(inp, hidden)
+
 def batch_get_action_and_movement(brains, inputs_list, prev_hiddens):
     """
-    Batched neural network inference over all active survivors simultaneously.
-    Significantly speeds up evaluation by avoiding individual PyTorch tensor overheads.
+    Multi-channel multi-threaded async batched neural network inference over active survivors.
+    Executes concurrent evaluations via ThreadPoolExecutor.
     """
     if not brains or not inputs_list:
         return []
 
-    results = []
-    # If all brains share the same architecture (standard in neuroevolution pop)
-    # We evaluate them efficiently
-    with torch.inference_mode():
+    if len(brains) < 4:
+        results = []
         for brain, inp, hidden in zip(brains, inputs_list, prev_hiddens):
-            dx, dy, action_idx, new_hidden = brain.get_action_and_movement(inp, hidden)
-            results.append((dx, dy, action_idx, new_hidden))
+            results.append(brain.get_action_and_movement(inp, hidden))
+        return results
 
-    return results
+    futures = [EXECUTOR.submit(_eval_brain_single, b, i, h) for b, i, h in zip(brains, inputs_list, prev_hiddens)]
+    return [f.result() for f in futures]
 
 def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
     inputs = np.zeros(25, dtype=np.float32)
@@ -97,7 +103,6 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
     inputs[21] = 1.0 if world.is_walkable(survivor.x, survivor.y + 0.5, survivor.z) else 0.0
     inputs[22] = float(survivor.z) / 20.0
 
-    # New Features: Adjacent movable furniture proximity & wood/metal inventory count
     from utils.tile_interaction_utility import TileInteractionUtility
     z_idx = world.z_to_idx(survivor.z)
     has_furniture_adj = 0.0

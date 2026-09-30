@@ -1,4 +1,11 @@
-__pycache__/
 *.pyc
-best_brain.pth
-test_brain.pth
+__pycache__/
+*.so
+*.dylib
+*.dll
+build/
+dist/
+*.egg-info/
+target/
+rust_vulkan_render/target/
+.pytest_cache/

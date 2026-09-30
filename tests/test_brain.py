@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import unittest
 from src.world import World
 from src.entities import Survivor
-from src.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager
+from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager
 
 class TestBrain(unittest.TestCase):
     def test_brain_forward(self):

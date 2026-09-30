@@ -1,10 +1,5 @@
-import sys
-import os
-import random
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from src.world import World, TileType
-from src.entities import ResourceItem
+from src.world import TileType
+from src.entities.item import ResourceItem
 
 class TileInteractionUtility:
     """
@@ -64,18 +59,3 @@ class TileInteractionUtility:
             world.grid[z_idx, iy, ix] = TileType.BUILDING_FLOOR if z >= 0 else TileType.UNDERGROUND_FLOOR
             return True, wood, metal
         return False, 0, 0
-
-if __name__ == "__main__":
-    print("==================================================")
-    print("  UTILITY: Tile & Furniture Interaction Engine")
-    print("==================================================")
-    w = World(width=20, height=20)
-    g_idx = w.z_to_idx(0)
-    w.grid[g_idx, 5, 5] = TileType.CABINET
-    w.grid[g_idx, 5, 6] = TileType.BUILDING_FLOOR
-
-    pushed = TileInteractionUtility.push_furniture(w, 5, 5, 0, 1, 0)
-    print(f"[Test Push] Furniture pushed to (6, 5): {pushed}")
-    inv = {}
-    dismantled, wood, metal = TileInteractionUtility.dismantle_furniture(w, 6, 5, 0, inv)
-    print(f"[Test Dismantle] Harvested Wood={wood}, Metal={metal}: {dismantled}")

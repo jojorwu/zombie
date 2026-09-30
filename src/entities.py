@@ -93,7 +93,7 @@ class Zombie:
         dist = math.hypot(tx - self.x, ty - self.y)
         if dist < 0.1:
             return True
-        steps = int(ceil(dist * 2)) if 'ceil' in globals() else int(dist * 2) + 1
+        steps = int(math.ceil(dist * 2.0))
         dx = (tx - self.x) / steps
         dy = (ty - self.y) / steps
         cx, cy = self.x, self.y

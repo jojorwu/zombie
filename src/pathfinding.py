@@ -33,12 +33,14 @@ class AStar3D:
         x, y, z = node.x, node.y, node.z
         z_idx = self.world.z_to_idx(z)
 
-        # 4-directional horizontal moves
-        cardinals = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-        for dx, dy in cardinals:
+        # 8-directional horizontal moves
+        directions = [
+            (0, 1, 1.0), (0, -1, 1.0), (1, 0, 1.0), (-1, 0, 1.0),
+            (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414), (-1, -1, 1.414)
+        ]
+        for dx, dy, cost in directions:
             nx, ny = x + dx, y + dy
             if self.world.is_walkable(nx, ny, z):
-                cost = 1.0
                 neighbors.append((nx, ny, z, cost))
 
         # Vertical moves via STAIRS or LADDER

@@ -44,6 +44,10 @@ class MainMenuUI:
                     self.sim_cfg["num_survivors"] = min(100, self.sim_cfg.get("num_survivors", 20) + 2)
                 elif event.key == pygame.K_LEFT:
                     self.sim_cfg["num_survivors"] = max(1, self.sim_cfg.get("num_survivors", 20) - 2)
+                elif event.key == pygame.K_p:
+                    self.sim_cfg["electricity_enabled"] = not self.sim_cfg.get("electricity_enabled", True)
+                elif event.key == pygame.K_w:
+                    self.sim_cfg["water_enabled"] = not self.sim_cfg.get("water_enabled", True)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = pygame.mouse.get_pos()
                 # Check start button click (x: 250..550, y: 460..500)
@@ -74,8 +78,8 @@ class MainMenuUI:
         y_offset += 20
         draw_text("World & Simulation Settings:", self.bold_font, (255, 255, 255), center_x=False)
         draw_text(f"  Map Width: {self.sim_cfg.get('map_width', 1000)} x {self.sim_cfg.get('map_height', 1000)} tiles", color=(200, 220, 255), center_x=False)
-        draw_text(f"  Power Cutoff: Day {self.sim_cfg.get('electricity_cutoff_day', 7)}  ({'ON' if self.sim_cfg.get('electricity_enabled', True) else 'OFF'})", color=(255, 215, 0), center_x=False)
-        draw_text(f"  Water Cutoff: Day {self.sim_cfg.get('water_cutoff_day', 14)}  ({'ON' if self.sim_cfg.get('water_enabled', True) else 'OFF'})", color=(0, 200, 255), center_x=False)
+        draw_text(f"  Power Cutoff: Day {self.sim_cfg.get('electricity_cutoff_day', 7)}  ({'ON' if self.sim_cfg.get('electricity_enabled', True) else 'OFF'})  [P to Toggle]", color=(255, 215, 0), center_x=False)
+        draw_text(f"  Water Cutoff: Day {self.sim_cfg.get('water_cutoff_day', 14)}  ({'ON' if self.sim_cfg.get('water_enabled', True) else 'OFF'})  [W to Toggle]", color=(0, 200, 255), center_x=False)
         draw_text(f"  Survivors Count: {self.sim_cfg.get('num_survivors', 20)}  [LEFT / RIGHT Arrows]", color=(0, 255, 127), center_x=False)
         draw_text(f"  Zombies Count: {self.sim_cfg.get('num_zombies', 30)}  [UP / DOWN Arrows]", color=(255, 99, 71), center_x=False)
         draw_text(f"  Animals Count: {self.sim_cfg.get('num_animals', 10)}", color=(255, 192, 203), center_x=False)

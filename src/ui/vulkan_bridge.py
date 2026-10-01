@@ -1,0 +1,65 @@
+import numpy as np
+import pygame
+from src.world import TileType, TILE_COLORS, BUILDING_COLORS
+
+try:
+    import rust_vulkan_render
+    HAS_RUST_VULKAN = True
+except ImportError:
+    HAS_RUST_VULKAN = False
+
+
+class VulkanBridge:
+    """Wrapper bridge for Rust Vulkan Crate hardware accelerated viewport tile rendering."""
+    def __init__(self, tile_size, palette):
+        self.tile_size = tile_size
+        self.palette = palette
+        self.rust_renderer = None
+        self.rust_dimensions = (0, 0)
+
+    @property
+    def is_available(self):
+        return HAS_RUST_VULKAN
+
+    def render_viewport(self, world, cur_z, z_idx, min_x, max_x, min_y, max_y, map_draw_w, map_draw_h, light, visible_tiles):
+        if not HAS_RUST_VULKAN:
+            return None
+
+        if self.rust_dimensions != (map_draw_w, map_draw_h) or self.rust_renderer is None:
+            self.rust_renderer = rust_vulkan_render.VulkanTileRenderer(map_draw_w, map_draw_h, self.tile_size)
+            self.rust_dimensions = (map_draw_w, map_draw_h)
+
+        grid_sub = world.grid[z_idx, min_y:max_y, min_x:max_x]
+        grid_bytes = grid_sub.astype(np.uint8).tobytes()
+
+        b_override = np.zeros((max_y - min_y, max_x - min_x, 3), dtype=np.uint8)
+        for (bx, by, bz), btype in world.building_grid.items():
+            if bz == cur_z and min_x <= bx < max_x and min_y <= by < max_y:
+                sub_y, sub_x = by - min_y, bx - min_x
+                if grid_sub[sub_y, sub_x] == TileType.BUILDING_FLOOR:
+                    b_override[sub_y, sub_x] = BUILDING_COLORS.get(btype, TILE_COLORS[TileType.BUILDING_FLOOR])
+        b_bytes = b_override.tobytes()
+
+        if visible_tiles is not None:
+            fog_mask = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
+            for (vx, vy) in visible_tiles:
+                if min_x <= vx < max_x and min_y <= vy < max_y:
+                    fog_mask[vy - min_y, vx - min_x] = 1
+            fog_bytes = fog_mask.tobytes()
+        else:
+            fog_bytes = None
+
+        light_factor = light if cur_z >= 0 else 0.8
+        pixel_buf = self.rust_renderer.render_viewport_bytes(
+            grid_bytes,
+            b_bytes,
+            self.palette,
+            light_factor,
+            fog_bytes
+        )
+
+        return pygame.image.frombuffer(
+            pixel_buf,
+            (map_draw_w * self.tile_size, map_draw_h * self.tile_size),
+            "RGBA"
+        )

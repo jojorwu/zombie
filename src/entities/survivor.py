@@ -74,12 +74,7 @@ class Survivor:
         if light < 0.3:
             self.fear = min(100.0, self.fear + 0.15)
 
-        nearby_zombie_count = 0
-        for z in zombies:
-            if z.is_alive and z.z == self.z:
-                d = math.hypot(z.x - self.x, z.y - self.y)
-                if d < 8.0:
-                    nearby_zombie_count += 1
+        nearby_zombie_count = sum(1 for z in zombies if z.is_alive and z.z == self.z and math.hypot(z.x - self.x, z.y - self.y) < 8.0)
 
         if nearby_zombie_count > 0:
             self.fear = min(100.0, self.fear + nearby_zombie_count * 0.4)
@@ -209,58 +204,145 @@ class Survivor:
             stype = "vehicle_engine" if self.in_vehicle else "footsteps"
             noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=vol, source_type=stype))
 
+    def _action_gather(self, world, items, noise_events):
+        from utils.p_np_math import PolynomialKnapsackSolver
+        nearby_items = [
+            item for item in items
+            if not item.collected and item.z == self.z and math.hypot(item.x - self.x, item.y - self.y) < 1.5
+        ]
+
+        if nearby_items:
+            optimal_subset = PolynomialKnapsackSolver.optimize_inventory(nearby_items, max_capacity=15)
+            for item in optimal_subset:
+                item.collected = True
+                self.inventory[item.item_type] = self.inventory.get(item.item_type, 0) + item.amount
+                self.score += 5.0
+        elif world:
+            z_idx = world.z_to_idx(self.z)
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                fx, fy = int(self.x + dx), int(self.y + dy)
+                if 0 <= fx < world.width and 0 <= fy < world.height:
+                    ftile = world.grid[z_idx, fy, fx]
+                    if ftile in (TileType.CABINET, TileType.REFRIGERATOR, TileType.KITCHEN_COUNTER, TileType.TABLE):
+                        if ftile == TileType.REFRIGERATOR:
+                            found_item = random.choice([ResourceItem.MEAT, ResourceItem.BREAD, ResourceItem.WATER_BOTTLE, ResourceItem.APPLE])
+                        elif ftile == TileType.CABINET:
+                            found_item = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CAN_OPENER, ResourceItem.PISTOL_AMMO, ResourceItem.MEDKIT])
+                        else:
+                            found_item = random.choice([ResourceItem.CHEF_KNIFE, ResourceItem.FRYING_PAN, ResourceItem.POT, ResourceItem.CUTTING_BOARD])
+
+                        self.inventory[found_item] = self.inventory.get(found_item, 0) + 1
+                        self.score += 10.0
+                        if noise_events is not None:
+                            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=11.0, source_type="dismantling"))
+                        break
+
+    def _action_attack(self, world, zombies, animals, survivors, noise_events):
+        best_weapon = None
+        is_firearm = False
+        ammo_type = None
+
+        firearms = [ResourceItem.RIFLE, ResourceItem.SHOTGUN, ResourceItem.PISTOL]
+        for fa in firearms:
+            if self.inventory.get(fa, 0) > 0:
+                req_ammo = WEAPON_STATS[fa]["ammo"]
+                if self.inventory.get(req_ammo, 0) > 0:
+                    best_weapon = fa
+                    is_firearm = True
+                    ammo_type = req_ammo
+                    break
+
+        if not best_weapon:
+            melee_options = [ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.BASEBALL_BAT, ResourceItem.FRYING_PAN, ResourceItem.KNIFE, ResourceItem.CHEF_KNIFE, ResourceItem.WEAPON]
+            for mw in melee_options:
+                if self.inventory.get(mw, 0) > 0:
+                    best_weapon = mw
+                    break
+
+        w_stats = WEAPON_STATS.get(best_weapon, {"damage": 15.0, "range": 1.0, "noise": 4.0})
+        attack_range = w_stats["range"]
+        damage = w_stats["damage"] * self.body.attack_damage_multiplier
+        stype = "pistol_shot"
+
+        if is_firearm and ammo_type:
+            caliber_map = {ResourceItem.RIFLE: "5.56mm", ResourceItem.SHOTGUN: "12gauge", ResourceItem.PISTOL: "9mm"}
+            stype_map = {ResourceItem.RIFLE: "rifle_shot", ResourceItem.SHOTGUN: "shotgun_shot", ResourceItem.PISTOL: "pistol_shot"}
+            stype = stype_map.get(best_weapon, "pistol_shot")
+            caliber = caliber_map.get(best_weapon, "9mm")
+            ballistics = BallisticsUtility.calculate_trajectory(
+                caliber,
+                distance_m=attack_range * 10.0,
+                wind_speed_kmh=world.weather.wind_speed,
+                wind_angle_rad=world.weather.wind_angle
+            )
+            damage = ballistics["damage"] * self.body.attack_damage_multiplier
+
+        if self.emotional_state == EmotionalState.PANICKED and random.random() < 0.25:
+            damage *= 0.5
+        elif self.emotional_state == EmotionalState.TERRIFIED and random.random() < 0.50:
+            damage = 0.0
+
+        if is_firearm and ammo_type:
+            self.inventory[ammo_type] -= 1
+            world.dynamic_lights.append(DynamicLight(self.x, self.y, self.z, radius=12.0, color=(255, 200, 100), intensity=1.5, lifetime=2))
+
+        if self.in_vehicle and self.in_vehicle.fuel > 0:
+            attack_range = 1.5
+            damage = 60.0
+
+        for z in zombies:
+            if z.is_alive and z.z == self.z and math.hypot(z.x - self.x, z.y - self.y) <= attack_range:
+                z.take_targeted_damage(damage)
+                if not z.is_alive:
+                    self.kills += 1
+                    self.score += 20.0
+                    self.fear = max(0.0, self.fear - 15.0)
+                    self.panic = max(0.0, self.panic - 20.0)
+                    self.morale = min(100.0, self.morale + 10.0)
+                if noise_events is not None:
+                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=31.0, source_type=stype))
+                return
+
+        for a in animals:
+            if a.is_alive and a.z == self.z and math.hypot(a.x - self.x, a.y - self.y) <= attack_range:
+                a.hp -= damage
+                if a.hp <= 0:
+                    a.is_alive = False
+                    self.inventory[ResourceItem.MEAT] = self.inventory.get(ResourceItem.MEAT, 0) + 2
+                    self.score += 15.0
+                if noise_events is not None:
+                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=31.0, source_type=stype))
+                return
+
+        for other in survivors:
+            if other is not self and other.is_alive and other.z == self.z and math.hypot(other.x - self.x, other.y - self.y) <= attack_range:
+                other.take_damage(damage)
+                if not other.is_alive:
+                    self.kills += 1
+                    self.score += 30.0
+                if noise_events is not None:
+                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=31.0, source_type=stype))
+                return
+
     def perform_action(self, action, world, items, vehicles, zombies, animals, survivors, noise_events=None):
+        """Action dispatcher executing survivor AI decisions."""
         if not self.is_alive:
             return
 
         self.update_emotions(world, zombies, noise_events=noise_events)
 
         if action == 1:
-            from utils.p_np_math import PolynomialKnapsackSolver
-            nearby_items = [
-                item for item in items
-                if not item.collected and item.z == self.z and math.hypot(item.x - self.x, item.y - self.y) < 1.5
-            ]
-
-            if nearby_items:
-                optimal_subset = PolynomialKnapsackSolver.optimize_inventory(nearby_items, max_capacity=15)
-                for item in optimal_subset:
-                    item.collected = True
-                    self.inventory[item.item_type] = self.inventory.get(item.item_type, 0) + item.amount
-                    self.score += 5.0
-            else:
-                if world:
-                    z_idx = world.z_to_idx(self.z)
-                    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                        fx, fy = int(self.x + dx), int(self.y + dy)
-                        if 0 <= fx < world.width and 0 <= fy < world.height:
-                            ftile = world.grid[z_idx, fy, fx]
-                            if ftile in (TileType.CABINET, TileType.REFRIGERATOR, TileType.KITCHEN_COUNTER, TileType.TABLE):
-                                if ftile == TileType.REFRIGERATOR:
-                                    found_item = random.choice([ResourceItem.MEAT, ResourceItem.BREAD, ResourceItem.WATER_BOTTLE, ResourceItem.APPLE])
-                                elif ftile == TileType.CABINET:
-                                    found_item = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CAN_OPENER, ResourceItem.PISTOL_AMMO, ResourceItem.MEDKIT])
-                                else:
-                                    found_item = random.choice([ResourceItem.CHEF_KNIFE, ResourceItem.FRYING_PAN, ResourceItem.POT, ResourceItem.CUTTING_BOARD])
-
-                                self.inventory[found_item] = self.inventory.get(found_item, 0) + 1
-                                self.score += 10.0
-                                if noise_events is not None:
-                                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=11.0, source_type="dismantling"))
-                                break
-
+            self._action_gather(world, items, noise_events)
         elif action == 2:
             if CraftingSystem.craft(self.inventory, ResourceItem.MEDKIT):
                 self.score += 10.0
                 if noise_events is not None:
                     noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=11.0, source_type="crafting"))
-
         elif action == 3:
             if CraftingSystem.craft(self.inventory, ResourceItem.WEAPON):
                 self.score += 10.0
                 if noise_events is not None:
                     noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=11.0, source_type="crafting"))
-
         elif action == 4:
             if self.in_vehicle:
                 self.in_vehicle.driver = None
@@ -277,137 +359,32 @@ class Survivor:
                         self.in_vehicle = v
                         v.driver = self
                         break
-
         elif action == 5:
             self.sleep = min(100.0, self.sleep + 1.0)
             self.energy = min(100.0, self.energy + 1.0)
             self.fear = max(0.0, self.fear - 0.5)
             self.panic = max(0.0, self.panic - 0.8)
-
         elif action == 6:
-            best_weapon = None
-            is_firearm = False
-            ammo_type = None
-
-            firearms = [ResourceItem.RIFLE, ResourceItem.SHOTGUN, ResourceItem.PISTOL]
-            for fa in firearms:
-                if self.inventory.get(fa, 0) > 0:
-                    req_ammo = WEAPON_STATS[fa]["ammo"]
-                    if self.inventory.get(req_ammo, 0) > 0:
-                        best_weapon = fa
-                        is_firearm = True
-                        ammo_type = req_ammo
-                        break
-
-            if not best_weapon:
-                melee_options = [ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.BASEBALL_BAT, ResourceItem.FRYING_PAN, ResourceItem.KNIFE, ResourceItem.CHEF_KNIFE, ResourceItem.WEAPON]
-                for mw in melee_options:
-                    if self.inventory.get(mw, 0) > 0:
-                        best_weapon = mw
-                        break
-
-            w_stats = WEAPON_STATS.get(best_weapon, {"damage": 15.0, "range": 1.0, "noise": 4.0})
-            attack_range = w_stats["range"]
-            damage = w_stats["damage"] * self.body.attack_damage_multiplier
-            stype = "pistol_shot"
-
-            if is_firearm and ammo_type:
-                caliber_map = {
-                    ResourceItem.RIFLE: "5.56mm",
-                    ResourceItem.SHOTGUN: "12gauge",
-                    ResourceItem.PISTOL: "9mm",
-                }
-                stype_map = {
-                    ResourceItem.RIFLE: "rifle_shot",
-                    ResourceItem.SHOTGUN: "shotgun_shot",
-                    ResourceItem.PISTOL: "pistol_shot",
-                }
-                stype = stype_map.get(best_weapon, "pistol_shot")
-                caliber = caliber_map.get(best_weapon, "9mm")
-                ballistics = BallisticsUtility.calculate_trajectory(
-                    caliber,
-                    distance_m=attack_range * 10.0,
-                    wind_speed_kmh=world.weather.wind_speed,
-                    wind_angle_rad=world.weather.wind_angle
-                )
-                damage = ballistics["damage"] * self.body.attack_damage_multiplier
-
-            if self.emotional_state == EmotionalState.PANICKED and random.random() < 0.25:
-                damage *= 0.5
-            elif self.emotional_state == EmotionalState.TERRIFIED and random.random() < 0.50:
-                damage = 0.0
-
-            if is_firearm and ammo_type:
-                self.inventory[ammo_type] -= 1
-                world.dynamic_lights.append(DynamicLight(self.x, self.y, self.z, radius=12.0, color=(255, 200, 100), intensity=1.5, lifetime=2))
-
-            if self.in_vehicle and self.in_vehicle.fuel > 0:
-                attack_range = 1.5
-                damage = 60.0
-
-            attacked = False
-            for z in zombies:
-                if z.is_alive and z.z == self.z and math.hypot(z.x - self.x, z.y - self.y) <= attack_range:
-                    z.take_targeted_damage(damage)
-                    if not z.is_alive:
-                        self.kills += 1
-                        self.score += 20.0
-                        self.fear = max(0.0, self.fear - 15.0)
-                        self.panic = max(0.0, self.panic - 20.0)
-                        self.morale = min(100.0, self.morale + 10.0)
-                    attacked = True
-                    if noise_events is not None:
-                        noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=31.0, source_type=stype))
-                    break
-
-            if not attacked:
-                for a in animals:
-                    if a.is_alive and a.z == self.z and math.hypot(a.x - self.x, a.y - self.y) <= attack_range:
-                        a.hp -= damage
-                        if a.hp <= 0:
-                            a.is_alive = False
-                            self.inventory[ResourceItem.MEAT] = self.inventory.get(ResourceItem.MEAT, 0) + 2
-                            self.score += 15.0
-                        attacked = True
-                        if noise_events is not None:
-                            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=31.0, source_type=stype))
-                        break
-
-            if not attacked:
-                for other in survivors:
-                    if other is not self and other.is_alive and other.z == self.z and math.hypot(other.x - self.x, other.y - self.y) <= attack_range:
-                        other.take_damage(damage)
-                        if not other.is_alive:
-                            self.kills += 1
-                            self.score += 30.0
-                        if noise_events is not None:
-                            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=31.0, source_type=stype))
-                        break
-
+            self._action_attack(world, zombies, animals, survivors, noise_events)
         elif action == 7:
             if self.z < world.num_levels - 1 and world.is_walkable(self.x, self.y, self.z + 1):
                 self.z += 1
                 if self.in_vehicle:
                     self.in_vehicle.z = self.z
-
         elif action == 8:
             if self.z > 0 and world.is_walkable(self.x, self.y, self.z - 1):
                 self.z -= 1
                 if self.in_vehicle:
                     self.in_vehicle.z = self.z
-
         elif action == 9:
             from utils.tile_interaction_utility import TileInteractionUtility
-            pushed = False
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 fx, fy = int(self.x + dx), int(self.y + dy)
                 if TileInteractionUtility.push_furniture(world, fx, fy, self.z, dx, dy):
                     self.score += 8.0
-                    pushed = True
                     if noise_events is not None:
                         noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=14.0, source_type="furniture_push"))
                     break
-
         elif action == 10:
             from utils.tile_interaction_utility import TileInteractionUtility
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:

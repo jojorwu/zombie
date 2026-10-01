@@ -1,5 +1,6 @@
 import math
 import numpy as np
+from src.entities.item import ResourceItem
 
 
 class PolynomialVerifier:
@@ -9,11 +10,6 @@ class PolynomialVerifier:
     """
     @staticmethod
     def verify_3sat(clauses, assignment):
-        """
-        Polynomial-time verifier for 3-SAT certificate.
-        clauses: list of tuples of 3 literals (e.g., [(1, -2, 3), (-1, 2, 3)])
-        assignment: dict mapping variable_id -> True/False
-        """
         for c in clauses:
             clause_satisfied = False
             for lit in c:
@@ -30,17 +26,11 @@ class PolynomialVerifier:
 
     @staticmethod
     def verify_subset_sum(numbers, target, certificate):
-        """
-        Verifies if subset elements sum to target in O(N) polynomial time.
-        """
         subset = [numbers[i] for i in certificate if 0 <= i < len(numbers)]
         return sum(subset) == target
 
     @staticmethod
     def verify_spatial_partitioning(coords, cell_size=16.0):
-        """
-        Polynomial-time O(N) verifier for spatial grid cell mapping.
-        """
         if coords is None or len(coords) == 0:
             return True
         grid = {}
@@ -57,62 +47,63 @@ class PolynomialKnapsackSolver:
     Used by survivors to optimize inventory item selection based on item weight vs survival utility value.
     """
     ITEM_VALUES = {
-        "medkit": 100.0,
-        "pistol": 80.0,
-        "rifle": 90.0,
-        "shotgun": 85.0,
-        "pistol_ammo": 60.0,
-        "rifle_ammo": 70.0,
-        "shotgun_shells": 65.0,
-        "canned_food": 50.0,
-        "mre": 75.0,
-        "water_bottle": 55.0,
-        "axe": 40.0,
-        "crowbar": 35.0,
-        "knife": 30.0,
-        "chef_knife": 25.0,
-        "bread": 20.0,
-        "apple": 15.0,
-        "wood": 10.0,
-        "metal": 10.0,
-        "fuel": 45.0,
+        ResourceItem.MEDKIT: 100.0,
+        ResourceItem.PISTOL: 80.0,
+        ResourceItem.RIFLE: 90.0,
+        ResourceItem.SHOTGUN: 85.0,
+        ResourceItem.PISTOL_AMMO: 60.0,
+        ResourceItem.RIFLE_AMMO: 70.0,
+        ResourceItem.SHOTGUN_SHELLS: 65.0,
+        ResourceItem.CANNED_FOOD: 50.0,
+        ResourceItem.MRE: 75.0,
+        ResourceItem.WATER_BOTTLE: 55.0,
+        ResourceItem.AXE: 40.0,
+        ResourceItem.CROWBAR: 35.0,
+        ResourceItem.KNIFE: 30.0,
+        ResourceItem.CHEF_KNIFE: 25.0,
+        ResourceItem.BREAD: 20.0,
+        ResourceItem.APPLE: 15.0,
+        ResourceItem.WOOD: 10.0,
+        ResourceItem.METAL: 10.0,
+        ResourceItem.FUEL: 45.0,
+        ResourceItem.FOOD: 25.0,
+        ResourceItem.WATER: 25.0,
+        ResourceItem.WEAPON: 30.0,
     }
 
     ITEM_WEIGHTS = {
-        "medkit": 2,
-        "pistol": 3,
-        "rifle": 6,
-        "shotgun": 7,
-        "pistol_ammo": 1,
-        "rifle_ammo": 1,
-        "shotgun_shells": 1,
-        "canned_food": 2,
-        "mre": 2,
-        "water_bottle": 2,
-        "axe": 5,
-        "crowbar": 4,
-        "knife": 1,
-        "chef_knife": 1,
-        "bread": 1,
-        "apple": 1,
-        "wood": 3,
-        "metal": 4,
-        "fuel": 5,
+        ResourceItem.MEDKIT: 2,
+        ResourceItem.PISTOL: 3,
+        ResourceItem.RIFLE: 6,
+        ResourceItem.SHOTGUN: 7,
+        ResourceItem.PISTOL_AMMO: 1,
+        ResourceItem.RIFLE_AMMO: 1,
+        ResourceItem.SHOTGUN_SHELLS: 1,
+        ResourceItem.CANNED_FOOD: 2,
+        ResourceItem.MRE: 2,
+        ResourceItem.WATER_BOTTLE: 2,
+        ResourceItem.AXE: 5,
+        ResourceItem.CROWBAR: 4,
+        ResourceItem.KNIFE: 1,
+        ResourceItem.CHEF_KNIFE: 1,
+        ResourceItem.BREAD: 1,
+        ResourceItem.APPLE: 1,
+        ResourceItem.WOOD: 3,
+        ResourceItem.METAL: 4,
+        ResourceItem.FUEL: 5,
+        ResourceItem.FOOD: 1,
+        ResourceItem.WATER: 1,
+        ResourceItem.WEAPON: 3,
     }
 
     @classmethod
     def optimize_inventory(cls, item_list, max_capacity=20):
-        """
-        Calculates the optimal subset of items from item_list that fits within max_capacity
-        and maximizes total survival utility score in O(N * W) polynomial time.
-        `item_list`: list of item type strings or dicts
-        """
         if not item_list:
             return []
 
         formatted_items = []
         for item in item_list:
-            itype = item if isinstance(item, str) else getattr(item, 'item_type', 'canned_food')
+            itype = item.item_type if hasattr(item, 'item_type') else item
             val = cls.ITEM_VALUES.get(itype, 10.0)
             weight = cls.ITEM_WEIGHTS.get(itype, 1)
             formatted_items.append((itype, weight, val, item))
@@ -147,10 +138,6 @@ class PolynomialTSPSolver:
     """
     @staticmethod
     def compute_optimal_route(waypoints):
-        """
-        Given a list of (x, y, z) waypoints, returns the optimized route order
-        that minimizes total path traversal distance in O(N^2) polynomial time.
-        """
         if not waypoints or len(waypoints) <= 2:
             return list(waypoints)
 
@@ -198,18 +185,12 @@ class PNPComplexityEngine:
         self.degree = degree
 
     def polynomial_bound(self, n):
-        """P time bound: O(n^k)"""
         return float(n ** self.degree)
 
     def exponential_bound(self, n):
-        """NP brute-force bound: O(2^n)"""
         return float(2 ** n) if n < 100 else float('inf')
 
     def analyze_p_vs_np(self, input_sizes):
-        """
-        Compares polynomial bound vs exponential bound across problem sizes.
-        Returns dict containing scale analysis.
-        """
         results = []
         for n in input_sizes:
             p_time = self.polynomial_bound(n)
@@ -224,10 +205,6 @@ class PNPComplexityEngine:
         return results
 
     def simulate_p_equals_np_reduction(self, n_vars, n_clauses):
-        """
-        Simulates polynomial reduction of an NP-complete problem to P solver.
-        Formula: T(N) = c * N^k
-        """
         matrix = np.random.randn(n_vars, n_vars)
         eigenvalues = np.linalg.eigvals(matrix)
         poly_cost = (n_vars ** 2.5) + (n_clauses ** 1.5)

@@ -6,6 +6,8 @@ from src.entities.item import ResourceItem, WEAPON_STATS
 from src.entities.sensory import NoiseEvent
 from src.entities.crafting import CraftingSystem
 from src.entities.health import AnatomicalHealth, BodyPart
+from utils.ballistics_utility import BallisticsUtility
+from utils.sound_utility import SoundUtility
 
 
 class EmotionalState:
@@ -23,7 +25,6 @@ class Survivor:
         self.y = float(y)
         self.z = int(z)
 
-        # Anatomical Body Health
         self.body = AnatomicalHealth()
         self.hunger = 100.0
         self.thirst = 100.0
@@ -32,10 +33,9 @@ class Survivor:
         self.is_alive = True
         self.in_vehicle = None
 
-        # Psychological & Emotional Attributes
-        self.fear = 0.0      # 0.0 .. 100.0
-        self.panic = 0.0     # 0.0 .. 100.0
-        self.morale = 80.0   # 0.0 .. 100.0
+        self.fear = 0.0
+        self.panic = 0.0
+        self.morale = 80.0
         self.emotional_state = EmotionalState.CALM
 
         self.inventory = {
@@ -57,7 +57,7 @@ class Survivor:
 
     @health.setter
     def health(self, val):
-        pass  # Health managed via AnatomicalHealth body parts
+        pass
 
     def take_damage(self, amount, target_part=None):
         with self._lock:
@@ -70,13 +70,10 @@ class Survivor:
                 self.is_alive = False
 
     def update_emotions(self, world, zombies, noise_events=None):
-        """Updates fear, panic, and morale based on surroundings, darkness, and wounds."""
-        # 1. Darkness factor
         light = world.get_light_level(self.z)
         if light < 0.3:
             self.fear = min(100.0, self.fear + 0.15)
 
-        # 2. Nearby zombies factor
         nearby_zombie_count = 0
         for z in zombies:
             if z.is_alive and z.z == self.z:
@@ -92,11 +89,9 @@ class Survivor:
             self.fear = max(0.0, self.fear - 0.2)
             self.panic = max(0.0, self.panic - 0.3)
 
-        # 3. Kills boost morale
         if self.kills > 0 and self.fear < 30.0:
             self.morale = min(100.0, self.morale + 0.05)
 
-        # 4. State classification
         if self.panic > 70.0 or self.fear > 80.0:
             self.emotional_state = EmotionalState.TERRIFIED
         elif self.panic > 40.0:
@@ -113,7 +108,6 @@ class Survivor:
             return
         self.time_survived += 1
 
-        # Bleeding tick
         self.body.update_bleeding()
         if self.body.is_dead:
             self.is_alive = False
@@ -168,9 +162,9 @@ class Survivor:
         base_speed = 0.15 * self.body.movement_speed_multiplier
 
         if self.emotional_state == EmotionalState.PANICKED:
-            base_speed *= 1.15  # Adrenaline rush
+            base_speed *= 1.15
         elif self.emotional_state == EmotionalState.TERRIFIED:
-            base_speed *= 0.85  # Paralyzing fear
+            base_speed *= 0.85
 
         if self.in_vehicle:
             if self.in_vehicle.fuel > 0:
@@ -189,7 +183,6 @@ class Survivor:
         is_raining = world.weather.is_in_rain(self.x, self.y)
         rain_factor = 0.85 if (is_raining and not self.in_vehicle) else 1.0
 
-        # Winter snow speed modifier
         season_factor = 0.8 if getattr(world.weather, 'season', None) == "Winter" else 1.0
 
         speed = base_speed * tile_mod * wind_factor * rain_factor * season_factor
@@ -212,8 +205,9 @@ class Survivor:
                 self.in_vehicle.x, self.in_vehicle.y, self.in_vehicle.z = self.x, self.y, self.z
 
         if moved and noise_events is not None:
-            vol = 15.0 if self.in_vehicle else 3.0
-            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=vol, source_type="movement"))
+            vol = 17.0 if self.in_vehicle else 8.0
+            stype = "vehicle_engine" if self.in_vehicle else "footsteps"
+            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=vol, source_type=stype))
 
     def perform_action(self, action, world, items, vehicles, zombies, animals, survivors, noise_events=None):
         if not self.is_alive:
@@ -252,20 +246,20 @@ class Survivor:
                                 self.inventory[found_item] = self.inventory.get(found_item, 0) + 1
                                 self.score += 10.0
                                 if noise_events is not None:
-                                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=5.0, source_type="searching"))
+                                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=11.0, source_type="dismantling"))
                                 break
 
         elif action == 2:
             if CraftingSystem.craft(self.inventory, ResourceItem.MEDKIT):
                 self.score += 10.0
                 if noise_events is not None:
-                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=8.0, source_type="crafting"))
+                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=11.0, source_type="crafting"))
 
         elif action == 3:
             if CraftingSystem.craft(self.inventory, ResourceItem.WEAPON):
                 self.score += 10.0
                 if noise_events is not None:
-                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=8.0, source_type="crafting"))
+                    noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=11.0, source_type="crafting"))
 
         elif action == 4:
             if self.in_vehicle:
@@ -315,13 +309,33 @@ class Survivor:
             w_stats = WEAPON_STATS.get(best_weapon, {"damage": 15.0, "range": 1.0, "noise": 4.0})
             attack_range = w_stats["range"]
             damage = w_stats["damage"] * self.body.attack_damage_multiplier
-            noise_vol = w_stats["noise"]
+            stype = "pistol_shot"
 
-            # Panic accuracy penalty
+            if is_firearm and ammo_type:
+                caliber_map = {
+                    ResourceItem.RIFLE: "5.56mm",
+                    ResourceItem.SHOTGUN: "12gauge",
+                    ResourceItem.PISTOL: "9mm",
+                }
+                stype_map = {
+                    ResourceItem.RIFLE: "rifle_shot",
+                    ResourceItem.SHOTGUN: "shotgun_shot",
+                    ResourceItem.PISTOL: "pistol_shot",
+                }
+                stype = stype_map.get(best_weapon, "pistol_shot")
+                caliber = caliber_map.get(best_weapon, "9mm")
+                ballistics = BallisticsUtility.calculate_trajectory(
+                    caliber,
+                    distance_m=attack_range * 10.0,
+                    wind_speed_kmh=world.weather.wind_speed,
+                    wind_angle_rad=world.weather.wind_angle
+                )
+                damage = ballistics["damage"] * self.body.attack_damage_multiplier
+
             if self.emotional_state == EmotionalState.PANICKED and random.random() < 0.25:
                 damage *= 0.5
             elif self.emotional_state == EmotionalState.TERRIFIED and random.random() < 0.50:
-                damage = 0.0  # Missed due to panic
+                damage = 0.0
 
             if is_firearm and ammo_type:
                 self.inventory[ammo_type] -= 1
@@ -330,7 +344,6 @@ class Survivor:
             if self.in_vehicle and self.in_vehicle.fuel > 0:
                 attack_range = 1.5
                 damage = 60.0
-                noise_vol = 20.0
 
             attacked = False
             for z in zombies:
@@ -344,7 +357,7 @@ class Survivor:
                         self.morale = min(100.0, self.morale + 10.0)
                     attacked = True
                     if noise_events is not None:
-                        noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=noise_vol, source_type="attack"))
+                        noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=31.0, source_type=stype))
                     break
 
             if not attacked:
@@ -357,7 +370,7 @@ class Survivor:
                             self.score += 15.0
                         attacked = True
                         if noise_events is not None:
-                            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=noise_vol, source_type="attack"))
+                            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=31.0, source_type=stype))
                         break
 
             if not attacked:
@@ -368,7 +381,7 @@ class Survivor:
                             self.kills += 1
                             self.score += 30.0
                         if noise_events is not None:
-                            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=noise_vol, source_type="attack"))
+                            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=31.0, source_type=stype))
                         break
 
         elif action == 7:
@@ -392,7 +405,7 @@ class Survivor:
                     self.score += 8.0
                     pushed = True
                     if noise_events is not None:
-                        noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=12.0, source_type="pushing_furniture"))
+                        noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=14.0, source_type="furniture_push"))
                     break
 
         elif action == 10:

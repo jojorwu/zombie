@@ -81,6 +81,20 @@ class TileInteractionUtility:
         return False
 
     @staticmethod
+    def siphon_fuel_from_pump(world, x, y, z, inventory):
+        """Allows survivors to siphon fuel from gas station pumps at (x, y, z) into inventory."""
+        z_idx = world.z_to_idx(z)
+        ix, iy = int(x), int(y)
+        if not (0 <= ix < world.width and 0 <= iy < world.height):
+            return False, 0
+
+        tile = world.grid[z_idx, iy, ix]
+        if tile == TileType.GAS_PUMP:
+            inventory[ResourceItem.FUEL] = inventory.get(ResourceItem.FUEL, 0) + 2
+            return True, 2
+        return False, 0
+
+    @staticmethod
     def dismantle_furniture(world, x, y, z, inventory):
         """Dismantles furniture at (x, y, z) returning harvested wood and metal into inventory."""
         z_idx = world.z_to_idx(z)

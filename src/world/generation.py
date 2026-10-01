@@ -95,6 +95,14 @@ class WorldGenerator:
                     self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.BOOKSHELF, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.LOCKER, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.BED, b_id, btype)
+                elif btype == BuildingType.GAS_STATION:
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.STORE_SHELF, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.CASH_REGISTER, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.REFRIGERATOR, b_id, btype)
+                    # Outdoor Gas Pumps
+                    if bx + bw < world.width and by + bh < world.height:
+                        world.grid[z_idx, min(world.height - 1, by + bh), min(world.width - 1, bx + 1)] = TileType.GAS_PUMP
+                        world.grid[z_idx, min(world.height - 1, by + bh), min(world.width - 1, bx + 3)] = TileType.GAS_PUMP
                 elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.FACTORY_RACK, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.WORKBENCH, b_id, btype)

@@ -3,7 +3,7 @@
     "map_width": 1000,
     "map_height": 1000,
     "electricity_cutoff_day": 7,
-    "water_cutoff_day": 14,
+    "water_cutoff_day": 7,
     "electricity_enabled": true,
     "water_enabled": true,
     "tile_size": 16,

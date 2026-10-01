@@ -37,7 +37,7 @@ class TileType:
     REFRIGERATOR = 34
     KITCHEN_COUNTER = 35
 
-    # New Specialized Building Furniture
+    # Specialized Building Furniture
     BOOKSHELF = 36
     OFFICE_DESK = 37
     MEDICAL_BED = 38
@@ -51,6 +51,15 @@ class TileType:
     TV_STAND = 46
     DISPLAY_CASE = 47
     FACTORY_RACK = 48
+
+    # Windows & Curtains
+    WINDOW = 49
+    WINDOW_OPEN = 50
+    WINDOW_BROKEN = 51
+    CURTAIN_OPEN = 52
+    CURTAIN_CLOSED = 53
+    DOOR_OPEN = 54
+    DOOR_LOCKED = 55
 
 
 class BuildingType:
@@ -67,6 +76,12 @@ class BuildingType:
     FACTORY = "factory"
 
 
+class SettlementType:
+    MEGALOPOLIS = "megalopolis"
+    STANDARD_CITY = "standard_city"
+    VILLAGE = "village"
+
+
 TILE_COLORS = {
     TileType.GRASS: (34, 139, 34),
     TileType.ROAD: (105, 105, 105),
@@ -76,6 +91,8 @@ TILE_COLORS = {
     TileType.FOREST: (0, 100, 0),
     TileType.FURNITURE: (139, 115, 85),
     TileType.DOOR: (160, 82, 45),
+    TileType.DOOR_OPEN: (200, 120, 70),
+    TileType.DOOR_LOCKED: (120, 40, 20),
     TileType.STAIRS: (255, 140, 0),
     TileType.AIR: (15, 15, 25),
     TileType.BRIDGE: (139, 90, 43),
@@ -117,6 +134,11 @@ TILE_COLORS = {
     TileType.TV_STAND: (50, 50, 60),
     TileType.DISPLAY_CASE: (210, 230, 240),
     TileType.FACTORY_RACK: (90, 95, 100),
+    TileType.WINDOW: (173, 216, 230),
+    TileType.WINDOW_OPEN: (135, 206, 235),
+    TileType.WINDOW_BROKEN: (100, 149, 237),
+    TileType.CURTAIN_OPEN: (220, 200, 180),
+    TileType.CURTAIN_CLOSED: (180, 50, 50),
 }
 
 BUILDING_COLORS = {
@@ -142,6 +164,8 @@ TILE_WALKABLE = {
     TileType.FOREST: True,
     TileType.FURNITURE: False,
     TileType.DOOR: True,
+    TileType.DOOR_OPEN: True,
+    TileType.DOOR_LOCKED: False,
     TileType.STAIRS: True,
     TileType.AIR: False,
     TileType.BRIDGE: True,
@@ -183,6 +207,11 @@ TILE_WALKABLE = {
     TileType.TV_STAND: False,
     TileType.DISPLAY_CASE: False,
     TileType.FACTORY_RACK: False,
+    TileType.WINDOW: False,
+    TileType.WINDOW_OPEN: True,
+    TileType.WINDOW_BROKEN: True,
+    TileType.CURTAIN_OPEN: True,
+    TileType.CURTAIN_CLOSED: False,
 }
 
 TILE_SPEED_MODIFIERS = {
@@ -194,6 +223,8 @@ TILE_SPEED_MODIFIERS = {
     TileType.BRIDGE: 1.0,
     TileType.BUILDING_FLOOR: 1.0,
     TileType.UNDERGROUND_FLOOR: 1.0,
+    TileType.WINDOW_OPEN: 0.5,
+    TileType.WINDOW_BROKEN: 0.6,
     TileType.GRASS: 0.95,
     TileType.GRASS_DRY: 0.9,
     TileType.DIRT_ROAD: 0.9,

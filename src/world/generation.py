@@ -1,14 +1,15 @@
 import math
 import random
 import numpy as np
-from src.world.tiles import TileType, BuildingType
+from src.world.tiles import TileType, BuildingType, SettlementType
 from utils.p_np_math import PolynomialVerifier
 
 
 class WorldGenerator:
-    """Handles terrain generation, district partitioning, road networks, and building placement with unique furniture layouts."""
-    def __init__(self, world):
+    """Handles terrain generation, settlement classification, winding rivers, dense forest biomes, and multi-floor buildings up to Z=5."""
+    def __init__(self, world, settlement_type: str = SettlementType.STANDARD_CITY):
         self.world = world
+        self.settlement_type = settlement_type
 
     def build_chunk_building(self, bx, by, bw, bh, btype):
         world = self.world
@@ -28,14 +29,21 @@ class WorldGenerator:
 
         bottom_floor = -1 if (has_basement and world.z_min <= -1) else 0
 
-        if btype in (BuildingType.HOSPITAL, BuildingType.POLICE_STATION, BuildingType.DORMITORY, BuildingType.SCHOOL):
-            top_floor = min(world.z_max, max(1, random.randint(1, max(1, world.z_max))))
+        if self.settlement_type == SettlementType.MEGALOPOLIS:
+            max_sky_floor = min(world.z_max, 5)
+            top_floor = random.randint(2, max_sky_floor) if world.z_max >= 2 else world.z_max
+        elif self.settlement_type == SettlementType.VILLAGE:
+            top_floor = 0
         else:
             top_floor = min(world.z_max, random.randint(0, max(0, world.z_max)))
 
+        is_house_locked = (random.random() < 0.35)
         building_info["has_basement"] = has_basement
         building_info["top_floor"] = top_floor
         building_info["bottom_floor"] = bottom_floor
+        building_info["is_locked"] = is_house_locked
+
+        door_tile = TileType.DOOR_LOCKED if is_house_locked else TileType.DOOR
 
         for z in range(bottom_floor, top_floor + 1):
             z_idx = world.z_to_idx(z)
@@ -56,7 +64,8 @@ class WorldGenerator:
                     world.building_grid[(x, y, z)] = btype
 
             if z == 0:
-                world.grid[z_idx, min(world.height - 1, by + bh - 1), min(world.width - 1, bx + 2)] = TileType.DOOR
+                world.grid[z_idx, min(world.height - 1, by + bh - 1), min(world.width - 1, bx + 2)] = door_tile
+                world.grid[z_idx, min(world.height - 1, by), min(world.width - 1, bx + 2)] = TileType.WINDOW
 
                 if btype in (BuildingType.SUPERMARKET, BuildingType.STORE):
                     world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.STORE_SHELF
@@ -134,6 +143,7 @@ class WorldGenerator:
                 else:
                     chunk_districts[(cx, cy)] = "residential"
 
+        # Winding River Generation with Bridges
         num_rivers = random.randint(1, 2)
         for _ in range(num_rivers):
             rx = random.randint(4, world.width - 5)
@@ -150,26 +160,28 @@ class WorldGenerator:
                 ry += 1
                 rx += random.choice([-1, 0, 1])
 
-        # Vectorized Road Grid Generation
-        world.grid[g_idx, ::16, :] = TileType.ROAD_HIGHWAY
-        world.grid[g_idx, :, ::16] = TileType.ROAD_HIGHWAY
+        # Road Grid Generation based on Settlement Type
+        road_tile = TileType.DIRT_ROAD if self.settlement_type == SettlementType.VILLAGE else TileType.ROAD
+        world.grid[g_idx, ::16, :] = TileType.ROAD_HIGHWAY if self.settlement_type != SettlementType.VILLAGE else TileType.DIRT_ROAD
+        world.grid[g_idx, :, ::16] = TileType.ROAD_HIGHWAY if self.settlement_type != SettlementType.VILLAGE else TileType.DIRT_ROAD
 
         road_mask_8_x = (world.grid[g_idx, ::8, :] == TileType.GRASS)
-        world.grid[g_idx, ::8, :][road_mask_8_x] = TileType.ROAD
+        world.grid[g_idx, ::8, :][road_mask_8_x] = road_tile
         road_mask_8_y = (world.grid[g_idx, :, ::8] == TileType.GRASS)
-        world.grid[g_idx, :, ::8][road_mask_8_y] = TileType.ROAD
+        world.grid[g_idx, :, ::8][road_mask_8_y] = road_tile
 
-        # Vectorized Sidewalks & Crosswalks
-        road_tiles = (world.grid[g_idx] == TileType.ROAD) | (world.grid[g_idx] == TileType.ROAD_HIGHWAY)
-        grass_tiles = (world.grid[g_idx] == TileType.GRASS) | (world.grid[g_idx] == TileType.GRASS_DRY)
+        # Sidewalks
+        if self.settlement_type != SettlementType.VILLAGE:
+            road_tiles = (world.grid[g_idx] == TileType.ROAD) | (world.grid[g_idx] == TileType.ROAD_HIGHWAY)
+            grass_tiles = (world.grid[g_idx] == TileType.GRASS) | (world.grid[g_idx] == TileType.GRASS_DRY)
 
-        pad_r = np.pad(road_tiles[:, 1:], ((0, 0), (0, 1)), mode='constant')
-        pad_l = np.pad(road_tiles[:, :-1], ((0, 0), (1, 0)), mode='constant')
-        pad_d = np.pad(road_tiles[1:, :], ((0, 1), (0, 0)), mode='constant')
-        pad_u = np.pad(road_tiles[:-1, :], ((1, 0), (0, 0)), mode='constant')
+            pad_r = np.pad(road_tiles[:, 1:], ((0, 0), (0, 1)), mode='constant')
+            pad_l = np.pad(road_tiles[:, :-1], ((0, 0), (1, 0)), mode='constant')
+            pad_d = np.pad(road_tiles[1:, :], ((0, 1), (0, 0)), mode='constant')
+            pad_u = np.pad(road_tiles[:-1, :], ((1, 0), (0, 0)), mode='constant')
 
-        adjacent_grass = grass_tiles & (pad_r | pad_l | pad_d | pad_u)
-        world.grid[g_idx, adjacent_grass] = TileType.SIDEWALK
+            adjacent_grass = grass_tiles & (pad_r | pad_l | pad_d | pad_u)
+            world.grid[g_idx, adjacent_grass] = TileType.SIDEWALK
 
         commercial_types = [BuildingType.SUPERMARKET, BuildingType.STORE, BuildingType.GAS_STATION, BuildingType.HOSPITAL, BuildingType.POLICE_STATION, BuildingType.GUN_STORE]
         residential_types = [BuildingType.RESIDENTIAL, BuildingType.DORMITORY, BuildingType.SCHOOL]
@@ -179,7 +191,7 @@ class WorldGenerator:
         for cy in range(num_cy):
             for cx in range(num_cx):
                 district = chunk_districts[(cx, cy)]
-                if district == "park":
+                if district == "park" and self.settlement_type != SettlementType.MEGALOPOLIS:
                     continue
 
                 bx = cx * 16 + 2

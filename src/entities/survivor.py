@@ -6,8 +6,9 @@ from src.entities.item import ResourceItem, WEAPON_STATS
 from src.entities.sensory import NoiseEvent
 from src.entities.crafting import CraftingSystem
 from src.entities.health import AnatomicalHealth, BodyPart
+from utils.p_np_math import PolynomialKnapsackSolver
 from utils.ballistics_utility import BallisticsUtility
-from utils.sound_utility import SoundUtility
+from utils.tile_interaction_utility import TileInteractionUtility
 
 
 class EmotionalState:
@@ -126,7 +127,7 @@ class Survivor:
             food_items = [
                 ResourceItem.STEAK, ResourceItem.STEW, ResourceItem.CANNED_TUNA, ResourceItem.CANNED_BEANS,
                 ResourceItem.MRE, ResourceItem.CANNED_FOOD, ResourceItem.CHOCOLATE, ResourceItem.CEREAL,
-                ResourceItem.BREAD, ResourceItem.MEAT, ResourceItem.APPLE, ResourceItem.FOOD
+                ResourceItem.BREAD, ResourceItem.MEAT, ResourceItem.APPLE, ResourceItem.FOOD, ResourceItem.BERRIES, ResourceItem.MUSHROOM
             ]
             for f_item in food_items:
                 if self.inventory.get(f_item, 0) > 0:
@@ -209,7 +210,6 @@ class Survivor:
             noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=vol, source_type=stype))
 
     def _action_gather(self, world, items, noise_events):
-        from utils.p_np_math import PolynomialKnapsackSolver
         nearby_items = [
             item for item in items
             if not item.collected and item.z == self.z and math.hypot(item.x - self.x, item.y - self.y) < 1.5
@@ -220,18 +220,35 @@ class Survivor:
             for item in optimal_subset:
                 item.collected = True
                 self.inventory[item.item_type] = self.inventory.get(item.item_type, 0) + item.amount
+                if hasattr(item, 'contents') and item.contents:
+                    for ck, cv in item.contents.items():
+                        self.inventory[ck] = self.inventory.get(ck, 0) + cv
                 self.score += 5.0
         elif world:
             z_idx = world.z_to_idx(self.z)
+            SEARCHABLE_TILES = (
+                TileType.CABINET, TileType.REFRIGERATOR, TileType.KITCHEN_COUNTER, TileType.TABLE,
+                TileType.BOOKSHELF, TileType.OFFICE_DESK, TileType.MEDICAL_BED, TileType.GUN_RACK,
+                TileType.WEAPON_SAFE, TileType.CASH_REGISTER, TileType.STORE_SHELF, TileType.SCHOOL_DESK,
+                TileType.WORKBENCH, TileType.LOCKER, TileType.TV_STAND, TileType.DISPLAY_CASE, TileType.FACTORY_RACK
+            )
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 fx, fy = int(self.x + dx), int(self.y + dy)
                 if 0 <= fx < world.width and 0 <= fy < world.height:
                     ftile = world.grid[z_idx, fy, fx]
-                    if ftile in (TileType.CABINET, TileType.REFRIGERATOR, TileType.KITCHEN_COUNTER, TileType.TABLE):
+                    if ftile in SEARCHABLE_TILES:
                         if ftile == TileType.REFRIGERATOR:
                             found_item = random.choice([ResourceItem.STEAK, ResourceItem.STEW, ResourceItem.MEAT, ResourceItem.BREAD, ResourceItem.WATER_BOTTLE, ResourceItem.CHEESE])
-                        elif ftile == TileType.CABINET:
-                            found_item = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CANNED_BEANS, ResourceItem.CANNED_TUNA, ResourceItem.CAN_OPENER, ResourceItem.PISTOL_AMMO, ResourceItem.MEDKIT])
+                        elif ftile in (TileType.GUN_RACK, TileType.WEAPON_SAFE):
+                            found_item = random.choice([ResourceItem.PISTOL, ResourceItem.SHOTGUN, ResourceItem.RIFLE, ResourceItem.SNIPER_RIFLE, ResourceItem.PISTOL_AMMO, ResourceItem.SHOTGUN_SHELLS, ResourceItem.RIFLE_AMMO, ResourceItem.MAGNUM_AMMO, ResourceItem.KATANA, ResourceItem.HELMET, ResourceItem.BODY_ARMOR])
+                        elif ftile in (TileType.MEDICAL_BED, TileType.LOCKER):
+                            found_item = random.choice([ResourceItem.MEDKIT, ResourceItem.WATER_BOTTLE, ResourceItem.CAN_OPENER, ResourceItem.PISTOL_AMMO, ResourceItem.LEATHER_JACKET, ResourceItem.PADS])
+                        elif ftile in (TileType.STORE_SHELF, TileType.CASH_REGISTER):
+                            found_item = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CANNED_BEANS, ResourceItem.CANNED_TUNA, ResourceItem.CHOCOLATE, ResourceItem.CEREAL])
+                        elif ftile in (TileType.BOOKSHELF, TileType.SCHOOL_DESK, TileType.OFFICE_DESK):
+                            found_item = random.choice([ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.CAN_OPENER, ResourceItem.CUTTING_BOARD])
+                        elif ftile in (TileType.WORKBENCH, TileType.FACTORY_RACK):
+                            found_item = random.choice([ResourceItem.AXE, ResourceItem.SLEDGEHAMMER, ResourceItem.CROWBAR, ResourceItem.SPEAR, ResourceItem.PIPE, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL])
                         else:
                             found_item = random.choice([ResourceItem.CHEF_KNIFE, ResourceItem.KATANA, ResourceItem.FRYING_PAN, ResourceItem.POT, ResourceItem.CUTTING_BOARD])
 
@@ -409,7 +426,6 @@ class Survivor:
                 if self.in_vehicle:
                     self.in_vehicle.z = self.z
         elif action == 9:
-            from utils.tile_interaction_utility import TileInteractionUtility
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 fx, fy = int(self.x + dx), int(self.y + dy)
                 if TileInteractionUtility.push_furniture(world, fx, fy, self.z, dx, dy):
@@ -418,7 +434,6 @@ class Survivor:
                         noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=14.0, source_type="furniture_push"))
                     break
         elif action == 10:
-            from utils.tile_interaction_utility import TileInteractionUtility
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 fx, fy = int(self.x + dx), int(self.y + dy)
                 success, w_amt, m_amt = TileInteractionUtility.dismantle_furniture(world, fx, fy, self.z, self.inventory)

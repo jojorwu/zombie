@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 class ResourceItem:
     """Enumeration of all collectible resources, tools, food items, weapons, and armor in the game."""
@@ -51,6 +51,11 @@ class ResourceItem:
     BODY_ARMOR = "body_armor"
     LEATHER_JACKET = "leather_jacket"
     PADS = "pads"
+
+    # Container Items on Floor
+    BACKPACK = "backpack"
+    DUFFEL_BAG = "duffel_bag"
+    CRATE = "crate"
 
     # Base Specific Foods
     CANNED_FOOD = "canned_food"
@@ -126,11 +131,12 @@ WEAPON_STATS: Dict[str, Dict[str, Any]] = {
 
 
 class ItemEntity:
-    """Represents an item entity spawned in the world grid at specific coordinates."""
-    def __init__(self, x: float, y: float, item_type: str, amount: int = 1, z: int = 0) -> None:
+    """Represents an item or floor container entity spawned in the world grid."""
+    def __init__(self, x: float, y: float, item_type: str, amount: int = 1, z: int = 0, contents: Optional[Dict[str, int]] = None) -> None:
         self.x: float = float(x)
         self.y: float = float(y)
         self.z: int = int(z)
         self.item_type: str = item_type
         self.amount: int = amount
         self.collected: bool = False
+        self.contents: Dict[str, int] = contents if contents is not None else {}

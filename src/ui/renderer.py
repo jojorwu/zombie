@@ -1,20 +1,17 @@
 import sys
 import math
-import numpy as np
 import pygame
 from src.world import TileType, TILE_COLORS, BUILDING_COLORS
 from src.entities import ResourceItem
 from src.ui.themes import UITheme, THEME_COLORS
-
-try:
-    import rust_vulkan_render
-    HAS_RUST_VULKAN = True
-except ImportError:
-    HAS_RUST_VULKAN = False
+from src.ui.camera import Camera
+from src.ui.vulkan_bridge import VulkanBridge
+from src.ui.hud_renderer import HUDRenderer
 
 
 class RendererUI:
-    def __init__(self, simulation, tile_size=16):
+    """Main graphical renderer managing Pygame surface rendering, user input, viewport, and HUD elements."""
+    def __init__(self, simulation, tile_size: int = 16):
         self.sim = simulation
         self.tile_size = tile_size
         self.width = simulation.world.width * tile_size + 300
@@ -27,6 +24,13 @@ class RendererUI:
         self.font = pygame.font.SysFont("Arial", 14)
         self.bold_font = pygame.font.SysFont("Arial", 16, bold=True)
 
+        self.camera = Camera(tile_size=tile_size)
+        self.hud_renderer = HUDRenderer(self.screen, self.font, self.bold_font, simulation.world.width * tile_size, self.height)
+
+        max_tile = max(TILE_COLORS.keys())
+        self.palette = [TILE_COLORS.get(i, (50, 50, 50)) for i in range(max_tile + 1)]
+        self.vulkan_bridge = VulkanBridge(tile_size, self.palette)
+
         self.fog_of_war_enabled = False
         self.speed_multiplier = 1
         self.paused = False
@@ -36,19 +40,7 @@ class RendererUI:
         self.theme_list = [UITheme.DARK, UITheme.NEON, UITheme.TACTICAL, UITheme.RETRO]
         self.theme_idx = 0
 
-        max_tile = max(TILE_COLORS.keys())
-        self.palette = [TILE_COLORS.get(i, (50, 50, 50)) for i in range(max_tile + 1)]
-
-        map_draw_width = (self.width - 300) // self.tile_size
-        map_draw_height = self.height // self.tile_size
-        if HAS_RUST_VULKAN:
-            self.rust_renderer = rust_vulkan_render.VulkanTileRenderer(map_draw_width, map_draw_height, self.tile_size)
-            self.rust_dimensions = (map_draw_width, map_draw_height)
-        else:
-            self.rust_renderer = None
-            self.rust_dimensions = (0, 0)
-
-    def handle_events(self):
+    def handle_events(self) -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -92,7 +84,7 @@ class RendererUI:
                     self.sim.selected_survivor_idx = best_idx
                     self.view_z = self.sim.survivors[best_idx].z
 
-    def render(self):
+    def render(self) -> None:
         theme = THEME_COLORS[self.active_theme]
         self.screen.fill(theme["bg"])
 
@@ -105,65 +97,23 @@ class RendererUI:
         cur_z = self.view_z
         z_idx = self.sim.world.z_to_idx(cur_z)
 
-        map_draw_width = (self.width - 300) // self.tile_size
-        map_draw_height = self.height // self.tile_size
-
         cam_x = sel_survivor.x if sel_survivor.is_alive else self.sim.world.width / 2.0
         cam_y = sel_survivor.y if sel_survivor.is_alive else self.sim.world.height / 2.0
 
-        min_x = max(0, int(cam_x - map_draw_width // 2))
-        max_x = min(self.sim.world.width, min_x + map_draw_width)
-        min_x = max(0, max_x - map_draw_width)
+        min_x, max_x, min_y, max_y, map_draw_w, map_draw_h = self.camera.get_viewport_bounds(
+            cam_x, cam_y, self.width, self.height, self.sim.world.width, self.sim.world.height
+        )
 
-        min_y = max(0, int(cam_y - map_draw_height // 2))
-        max_y = min(self.sim.world.height, min_y + map_draw_height)
-        min_y = max(0, max_y - map_draw_height)
-
-        if HAS_RUST_VULKAN and self.rust_renderer is not None:
-            if self.rust_dimensions != (map_draw_width, map_draw_height):
-                self.rust_renderer = rust_vulkan_render.VulkanTileRenderer(map_draw_width, map_draw_height, self.tile_size)
-                self.rust_dimensions = (map_draw_width, map_draw_height)
-
-            grid_sub = self.sim.world.grid[z_idx, min_y:max_y, min_x:max_x]
-            grid_bytes = grid_sub.astype(np.uint8).tobytes()
-
-            b_override = np.zeros((max_y - min_y, max_x - min_x, 3), dtype=np.uint8)
-            for (bx, by, bz), btype in self.sim.world.building_grid.items():
-                if bz == cur_z and min_x <= bx < max_x and min_y <= by < max_y:
-                    sub_y, sub_x = by - min_y, bx - min_x
-                    if grid_sub[sub_y, sub_x] == TileType.BUILDING_FLOOR:
-                        b_override[sub_y, sub_x] = BUILDING_COLORS.get(btype, TILE_COLORS[TileType.BUILDING_FLOOR])
-            b_bytes = b_override.tobytes()
-
-            if visible_tiles is not None:
-                fog_mask = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
-                for (vx, vy) in visible_tiles:
-                    if min_x <= vx < max_x and min_y <= vy < max_y:
-                        fog_mask[vy - min_y, vx - min_x] = 1
-                fog_bytes = fog_mask.tobytes()
-            else:
-                fog_bytes = None
-
-            light_factor = light if cur_z >= 0 else 0.8
-            pixel_buf = self.rust_renderer.render_viewport_bytes(
-                grid_bytes,
-                b_bytes,
-                self.palette,
-                light_factor,
-                fog_bytes
+        if self.vulkan_bridge.is_available:
+            viewport_surf = self.vulkan_bridge.render_viewport(
+                self.sim.world, cur_z, z_idx, min_x, max_x, min_y, max_y, map_draw_w, map_draw_h, light, visible_tiles
             )
-
-            viewport_surf = pygame.image.frombuffer(
-                pixel_buf,
-                (map_draw_width * self.tile_size, map_draw_height * self.tile_size),
-                "RGBA"
-            )
-            self.screen.blit(viewport_surf, (0, 0))
+            if viewport_surf:
+                self.screen.blit(viewport_surf, (0, 0))
         else:
             for y in range(min_y, max_y):
                 for x in range(min_x, max_x):
-                    screen_px = (x - min_x) * self.tile_size
-                    screen_py = (y - min_y) * self.tile_size
+                    screen_px, screen_py = self.camera.world_to_screen(x, y, min_x, min_y)
 
                     if visible_tiles is not None and (x, y) not in visible_tiles:
                         color = (10, 10, 10)
@@ -184,7 +134,7 @@ class RendererUI:
                     pygame.draw.rect(self.screen, color, rect)
 
         def to_screen(wx, wy):
-            return int((wx - min_x) * self.tile_size), int((wy - min_y) * self.tile_size)
+            return self.camera.world_to_screen(wx, wy, min_x, min_y)
 
         for dl in getattr(self.sim.world, 'dynamic_lights', []):
             if dl.z == cur_z and min_x <= dl.x <= max_x and min_y <= dl.y <= max_y:
@@ -258,93 +208,8 @@ class RendererUI:
                     color = (255, 255, 255) if idx == self.sim.selected_survivor_idx else (50, 205, 50)
                     pygame.draw.circle(self.screen, color, (px, py), 6)
 
-        sidebar_x = self.sim.world.width * self.tile_size
-        pygame.draw.rect(self.screen, theme["sidebar_bg"], (sidebar_x, 0, 300, self.height))
-        pygame.draw.line(self.screen, theme["sidebar_line"], (sidebar_x, 0), (sidebar_x, self.height), 2)
-
-        y_offset = 10
-        def draw_text(text, font_obj=self.font, color=theme["text"]):
-            nonlocal y_offset
-            img = font_obj.render(text, True, color)
-            self.screen.blit(img, (sidebar_x + 10, y_offset))
-            y_offset += 20
-
-        def draw_stat_bar(label, val, max_val, color):
-            nonlocal y_offset
-            img = self.font.render(f"{label}: {val:.1f}/{max_val:.0f}", True, theme["text"])
-            self.screen.blit(img, (sidebar_x + 10, y_offset))
-            bar_x = sidebar_x + 150
-            bar_w = 130
-            pygame.draw.rect(self.screen, (50, 50, 50), (bar_x, y_offset + 3, bar_w, 12), border_radius=3)
-            fill_w = int((max(0.0, min(max_val, val)) / max_val) * bar_w)
-            if fill_w > 0:
-                pygame.draw.rect(self.screen, color, (bar_x, y_offset + 3, fill_w, 12), border_radius=3)
-            y_offset += 20
-
-        chase_cnt = sum(1 for z in self.sim.zombies if z.is_alive and getattr(z, 'state', None) == 'chase')
-        invest_cnt = sum(1 for z in self.sim.zombies if z.is_alive and getattr(z, 'state', None) == 'investigate')
-
-        wind_deg = int(math.degrees(self.sim.world.weather.wind_angle) % 360)
-        wind_spd = self.sim.world.weather.wind_speed
-        has_rain = self.sim.world.weather.rain_front is not None
-
-        # Memory monitor stats
-        self.sim.memory_monitor.update_fps()
-        mem_stats = self.sim.memory_monitor.get_memory_stats(self.sim.factory)
-
-        draw_text("Zombie AI Neuroevolution", self.bold_font, theme["title"])
-        draw_text(f"Render Engine: {'Native Rust Vulkan' if HAS_RUST_VULKAN else 'OpenGL/SDL2'}", color=(0, 255, 200))
-        draw_text(f"RAM Usage: {mem_stats['ram_rss_mb']} MB | CPU: {mem_stats['cpu_percent']}%", color=(255, 215, 0))
-        draw_text(f"Theme: {self.active_theme} [T to Switch]", color=theme["accent"])
-        draw_text(f"Date: {self.sim.world.get_time_string()}")
-        draw_text(f"Gen: {self.sim.evolution_manager.generation}  Tick: {self.sim.world.current_tick}")
-        draw_text(f"View Level Z: {self.view_z}  Light: {light:.2f}")
-        draw_text(f"Power: {'BLACKOUT' if self.sim.world.is_power_out() else 'ONLINE'} | Water: {'CUT OFF' if self.sim.world.is_water_out() else 'ONLINE'}")
-        draw_text(f"Wind: {wind_spd:.1f} km/h ({wind_deg}°)", color=(180, 220, 255))
-        draw_text(f"Weather: {'LOCAL RAINSTORM' if has_rain else 'CLEAR SKIES'}", color=(0, 255, 255) if has_rain else (255, 215, 0))
-        draw_text(f"Active Noises: {len(getattr(self.sim, 'noise_events', []))}")
-        draw_text(f"Zombies: Chase={chase_cnt} Hear/Invest={invest_cnt}")
-        draw_text(f"Speed: {self.speed_multiplier}x  Status: {'PAUSED' if self.paused else 'RUNNING'}")
-        draw_text(f"Best Score: {self.sim.best_historical_score:.1f}")
-
-        y_offset += 10
-        draw_text("Selected Survivor Stats", self.bold_font, theme["header"])
-        draw_text(f"Index: {self.sim.selected_survivor_idx} / {len(self.sim.survivors)}")
-
-        s = sel_survivor
-        if s.is_alive:
-            floor_name = f"Basement B{abs(self.view_z)}" if self.view_z < 0 else (f"Ground Floor" if self.view_z == 0 else f"Floor {self.view_z + 1}")
-            draw_text(f"View Floor: {floor_name} (Z={self.view_z})")
-            draw_stat_bar("Health", s.health, 100.0, (220, 50, 50))
-            draw_stat_bar("Hunger", s.hunger, 100.0, (220, 160, 40))
-            draw_stat_bar("Thirst", s.thirst, 100.0, (40, 180, 220))
-            draw_stat_bar("Sleep", s.sleep, 100.0, (160, 100, 220))
-
-            draw_text(f"Kills: {s.kills}  Score: {s.score:.1f}")
-            draw_text(f"In Vehicle: {'Yes' if s.in_vehicle else 'No'}")
-
-            cur_hidden = self.sim.hidden_states[self.sim.selected_survivor_idx]
-            hidden_norm = float(cur_hidden.norm().item())
-            draw_text(f"GRU Memory Activation: {hidden_norm:.2f}")
-
-            y_offset += 5
-            draw_text("Inventory & Weapons:", self.bold_font, theme["header"])
-            for item_k, item_v in s.inventory.items():
-                if item_v > 0:
-                    draw_text(f"  {item_k}: {item_v}")
-        else:
-            draw_text("SURVIVOR DEAD", color=(255, 69, 0))
-
-        y_offset += 15
-        draw_text("Hotkeys & Actions:", self.bold_font, theme["header"])
-        draw_text(" [M / ESC] Main Menu & Settings")
-        draw_text(" [T] Switch UI Theme")
-        draw_text(" [SPACE] Pause / Resume")
-        draw_text(" [F] Toggle Fog of War")
-        draw_text(" [Z/X] Change Height Level")
-        draw_text(" [1/2/5/0] Speed Multipliers")
-        draw_text(" [TAB] Switch Survivor")
-        draw_text(" [Action 9] Move Furniture")
-        draw_text(" [Action 10] Dismantle Furniture")
+        self.hud_renderer.render_sidebar(
+            self.sim, self.active_theme, self.speed_multiplier, self.paused, self.view_z, light, self.vulkan_bridge.is_available
+        )
 
         pygame.display.flip()

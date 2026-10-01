@@ -19,6 +19,8 @@ class Chunk:
         self.size = size
         self.buildings = []
         self.entities = []
+        self.furniture_states = {}
+        self.item_states = {}
         self.state = ChunkState.GENERATED
 
     @property

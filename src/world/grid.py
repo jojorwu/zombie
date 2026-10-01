@@ -7,6 +7,7 @@ from src.world.chunk import ChunkManager
 from src.world.weather import WeatherManager
 from src.world.lighting import DynamicLight, LightingEngine
 from src.world.generation import WorldGenerator
+from src.entities.state_manager import FurnitureStateManager, ItemStateManager
 
 WORLD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
@@ -29,6 +30,8 @@ class World:
         self.chunk_manager = ChunkManager(self.width, self.height, chunk_size=16)
         self.weather = WeatherManager(self.width, self.height)
         self.lighting_engine = LightingEngine(self)
+        self.furniture_state_manager = FurnitureStateManager()
+        self.item_state_manager = ItemStateManager()
         self.generator = WorldGenerator(self)
         self.dynamic_lights = []
         self.grid = np.zeros((self.num_levels, self.height, self.width), dtype=int)

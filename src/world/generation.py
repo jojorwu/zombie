@@ -1,5 +1,6 @@
 import math
 import random
+import uuid
 import numpy as np
 from src.world.tiles import TileType, BuildingType, SettlementType
 from utils.p_np_math import PolynomialVerifier
@@ -13,10 +14,20 @@ class WorldGenerator:
         self.world = world
         self.settlement_type = settlement_type
 
+    def _place_and_register_furniture(self, x: int, y: int, z: int, tile: int, b_id: str, btype: str) -> None:
+        world = self.world
+        z_idx = world.z_to_idx(z)
+        world.grid[z_idx, y, x] = tile
+        if hasattr(world, "furniture_state_manager"):
+            world.furniture_state_manager.register_furniture(
+                x=x, y=y, z=z, tile_type=tile, building_id=b_id, building_type=btype, durability=100.0
+            )
+
     def build_chunk_building(self, bx: int, by: int, bw: int, bh: int, btype: str) -> None:
         world = self.world
+        b_id = f"bldg_{bx}_{by}_{uuid.uuid4().hex[:6]}"
         building_info = {
-            "x": bx, "y": by, "w": bw, "h": bh, "type": btype
+            "id": b_id, "x": bx, "y": by, "w": bw, "h": bh, "type": btype
         }
         world.buildings.append(building_info)
 
@@ -65,36 +76,36 @@ class WorldGenerator:
                 world.grid[z_idx, min(world.height - 1, by), min(world.width - 1, bx + 2)] = TileType.WINDOW
 
                 if btype in (BuildingType.SUPERMARKET, BuildingType.STORE):
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.STORE_SHELF
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.REFRIGERATOR
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.STORE_SHELF
-                    world.grid[z_idx, min(world.height - 1, by + 3), min(world.width - 1, bx + 1)] = TileType.CASH_REGISTER
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.STORE_SHELF, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.REFRIGERATOR, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.STORE_SHELF, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 3), z, TileType.CASH_REGISTER, b_id, btype)
                 elif btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION):
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.GUN_RACK
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.WEAPON_SAFE
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.LOCKER
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.OFFICE_DESK
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.GUN_RACK, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.WEAPON_SAFE, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.LOCKER, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.OFFICE_DESK, b_id, btype)
                 elif btype == BuildingType.HOSPITAL:
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.MEDICAL_BED
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.CABINET
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.MEDICAL_BED
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.OFFICE_DESK
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.MEDICAL_BED, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.CABINET, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.MEDICAL_BED, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.OFFICE_DESK, b_id, btype)
                 elif btype in (BuildingType.SCHOOL, BuildingType.DORMITORY):
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.SCHOOL_DESK
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.BOOKSHELF
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.LOCKER
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.BED
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.SCHOOL_DESK, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.BOOKSHELF, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.LOCKER, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.BED, b_id, btype)
                 elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.FACTORY_RACK
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.WORKBENCH
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.CONTAINER_BOX
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.LOCKER
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.FACTORY_RACK, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.WORKBENCH, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.CONTAINER_BOX, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.LOCKER, b_id, btype)
                 else:
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.CABINET
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.REFRIGERATOR
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.KITCHEN_COUNTER
-                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.SOFA
-                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 3)] = TileType.TV_STAND
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.CABINET, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.REFRIGERATOR, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.KITCHEN_COUNTER, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.SOFA, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 1), z, TileType.TV_STAND, b_id, btype)
 
                 if bx + bw + 1 < world.width and by + bh < world.height:
                     for px in range(bx + bw, min(world.width, bx + bw + 2)):
@@ -107,8 +118,8 @@ class WorldGenerator:
                     for rx in range(bx + 1, min(world.width - 1, bx + bw - 1)):
                         world.grid[z_idx, ry, rx] = TileType.ROOF
             elif z < top_floor:
-                world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.CABINET
-                world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.BED
+                self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.CABINET, b_id, btype)
+                self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.BED, b_id, btype)
 
             world.grid[z_idx, min(world.height - 1, by + 3), min(world.width - 1, bx + 3)] = TileType.STAIRS if (z % 2 == 0) else TileType.LADDER
 

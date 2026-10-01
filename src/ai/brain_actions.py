@@ -77,8 +77,8 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
 
 
 def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) -> np.ndarray:
-    """Extracts 25 numerical input features for PyTorch neural network inference."""
-    inputs = np.zeros(25, dtype=np.float32)
+    """Extracts 32 numerical input features for PyTorch neural network inference."""
+    inputs = np.zeros(32, dtype=np.float32)
     inputs[0] = survivor.health / 100.0
     inputs[1] = survivor.hunger / 100.0
     inputs[2] = survivor.thirst / 100.0
@@ -129,5 +129,25 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
 
     inputs[23] = has_furniture_adj
     inputs[24] = getattr(survivor, 'fear', 0.0) / 100.0
+
+    # 7 New Inputs for expanded BrainNet (Total: 32)
+    inputs[25] = getattr(survivor, 'panic', 0.0) / 100.0
+    inputs[26] = getattr(survivor, 'morale', 50.0) / 100.0
+
+    # Anatomical health status
+    if hasattr(survivor, 'anatomical_health'):
+        inputs[27] = survivor.anatomical_health.head_health / 100.0
+        inputs[28] = survivor.anatomical_health.torso_health / 100.0
+        inputs[29] = min(survivor.anatomical_health.left_leg_health, survivor.anatomical_health.right_leg_health) / 100.0
+    else:
+        inputs[27], inputs[28], inputs[29] = 1.0, 1.0, 1.0
+
+    # Building shelter indicator
+    building = world.building_grid.get((int(survivor.x), int(survivor.y), int(survivor.z)))
+    inputs[30] = 1.0 if building is not None else 0.0
+
+    # Exploration coverage indicator
+    visited_count = len(getattr(survivor, 'visited_tiles', set()))
+    inputs[31] = min(1.0, visited_count / 500.0)
 
     return inputs

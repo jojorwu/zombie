@@ -7,6 +7,10 @@ from src.entities.survivor import Survivor, EmotionalState
 from src.entities.crafting import CraftingSystem
 from src.entities.factory import EntityFactory, ObjectPool
 from src.entities.health import AnatomicalHealth, BodyPart
+from src.entities.state_manager import (
+    FurnitureState, FurnitureCondition, FurnitureStateManager,
+    ExtendedItemState, ItemCondition, ItemStateManager
+)
 
 __all__ = [
     "ItemEntity",
@@ -27,4 +31,10 @@ __all__ = [
     "ObjectPool",
     "AnatomicalHealth",
     "BodyPart",
+    "FurnitureState",
+    "FurnitureCondition",
+    "FurnitureStateManager",
+    "ExtendedItemState",
+    "ItemCondition",
+    "ItemStateManager",
 ]

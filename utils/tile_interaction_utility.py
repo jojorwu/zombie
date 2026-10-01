@@ -73,6 +73,10 @@ class TileInteractionUtility:
             if target_tile in (TileType.BUILDING_FLOOR, TileType.UNDERGROUND_FLOOR, TileType.GRASS, TileType.SIDEWALK):
                 world.grid[z_idx, ty, tx] = tile
                 world.grid[z_idx, iy, ix] = TileType.BUILDING_FLOOR if z >= 0 else TileType.UNDERGROUND_FLOOR
+
+                # Move state in state manager if available
+                if hasattr(world, 'furniture_state_manager'):
+                    world.furniture_state_manager.move_state(ix, iy, tx, ty, z)
                 return True
         return False
 
@@ -94,5 +98,9 @@ class TileInteractionUtility:
             inventory[ResourceItem.METAL] = inventory.get(ResourceItem.METAL, 0) + metal
 
             world.grid[z_idx, iy, ix] = TileType.BUILDING_FLOOR if z >= 0 else TileType.UNDERGROUND_FLOOR
+
+            # Remove state from state manager if available
+            if hasattr(world, 'furniture_state_manager'):
+                world.furniture_state_manager.remove_state(ix, iy, z)
             return True, wood, metal
         return False, 0, 0

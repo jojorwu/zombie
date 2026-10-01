@@ -100,5 +100,36 @@ class TestEntities(unittest.TestCase):
         flock_vec = zombie1.compute_flocking_vector([zombie1, zombie2])
         self.assertIsNotNone(flock_vec)
 
+    def test_zombie_infection_grab_and_memory(self):
+        world = World(width=30, height=30)
+        world.grid[:, 5, 4:20] = TileType.GRASS
+
+        config = {
+            "zombie": {
+                "speed": 0.08,
+                "damage": 10.0,
+                "bite_infection_chance": 1.0,
+                "grab_slowdown": 0.5,
+                "memory_duration_ticks": 50,
+                "pathfinding_max_nodes": 100
+            }
+        }
+
+        zombie = Zombie(5.0, 5.0, z=0, config=config)
+        survivor = Survivor(5.5, 5.0, z=0)
+
+        # Zombie attacks survivor -> triggers grab slowdown and infection
+        zombie.update(world, [survivor], [])
+        self.assertTrue(survivor.is_infected)
+        self.assertEqual(survivor.grab_slowdown_factor, 0.5)
+
+        # Test memory persistence when survivor vanishes/out of sight
+        survivor.x = 25.0  # Move out of sight/range
+        zombie.state = ZombieState.CHASE
+        zombie.target = (5.5, 5.0, 0)
+        zombie.update(world, [], [])
+        self.assertEqual(zombie.state, ZombieState.INVESTIGATE)
+        self.assertGreater(zombie.memory_timer, 0)
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,7 +17,7 @@ class SimulationEngine:
     """Main simulation controller coordinating world ticks, AI decisions, entity updates, and evolution."""
     def __init__(self, config):
         self.mod_manager = LuaModManager()
-        self.factory = EntityFactory()
+        self.factory = EntityFactory(config=config)
         self.memory_monitor = MemoryMonitorUtility()
         self.config = config
         self.sim_cfg = config["simulation"]
@@ -149,6 +149,11 @@ class SimulationEngine:
             for idx, orig_i in enumerate(alive_indices):
                 survivor = self.survivors[orig_i]
                 survivor.update_needs()
+
+                if not survivor.is_alive and survivor.is_infected:
+                    new_z = self.factory.create_zombie(survivor.x, survivor.y, z=survivor.z)
+                    self.zombies.append(new_z)
+                    continue
 
                 dx, dy, action, new_hidden = step_outputs[idx]
                 self.hidden_states[orig_i] = new_hidden

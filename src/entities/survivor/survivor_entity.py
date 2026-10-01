@@ -29,6 +29,11 @@ class Survivor:
         self.morale = 80.0
         self.emotional_state = EmotionalState.CALM
 
+        self.is_infected = False
+        self.infection_progress = 0.0
+        self.grab_slowdown_timer = 0
+        self.grab_slowdown_factor = 1.0
+
         self.visited_tiles = set()
         self.visited_tiles.add((int(x), int(y), int(z)))
 
@@ -122,6 +127,17 @@ class Survivor:
         self.thirst -= 0.035
         self.sleep -= 0.025
 
+        if self.grab_slowdown_timer > 0:
+            self.grab_slowdown_timer -= 1
+            if self.grab_slowdown_timer <= 0:
+                self.grab_slowdown_factor = 1.0
+
+        if self.is_infected:
+            self.infection_progress = min(100.0, self.infection_progress + 0.1)
+            self.take_damage(0.1, BodyPart.TORSO)
+            if self.infection_progress >= 100.0:
+                self.is_alive = False
+
         if self.hunger <= 0:
             self.hunger = 0
             self.take_damage(0.2, BodyPart.TORSO)
@@ -168,7 +184,7 @@ class Survivor:
     def move(self, dx, dy, world, noise_events=None, dz=0):
         if not self.is_alive:
             return
-        base_speed = 0.15 * self.body.movement_speed_multiplier
+        base_speed = 0.15 * self.body.movement_speed_multiplier * self.grab_slowdown_factor
 
         if self.emotional_state == EmotionalState.PANICKED:
             base_speed *= 1.15

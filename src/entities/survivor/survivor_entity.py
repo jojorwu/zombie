@@ -34,8 +34,11 @@ class Survivor:
         self.grab_slowdown_timer = 0
         self.grab_slowdown_factor = 1.0
 
+        self.facing_angle = 0.0
         self.visited_tiles = set()
+        self.discovered_tiles = set()
         self.visited_tiles.add((int(x), int(y), int(z)))
+        self.discovered_tiles.add((int(x), int(y), int(z)))
 
         self.inventory = {
             ResourceItem.FOOD: 2,
@@ -212,6 +215,9 @@ class Survivor:
 
         speed = base_speed * tile_mod * wind_factor * rain_factor * season_factor
 
+        if abs(dx) > 0.001 or abs(dy) > 0.001:
+            self.facing_angle = math.atan2(dy, dx)
+
         nx = self.x + dx * speed
         ny = self.y + dy * speed
         target_z = max(world.z_min, min(world.z_max, int(round(self.z + dz))))
@@ -223,14 +229,22 @@ class Survivor:
             moved = True
             if self.in_vehicle:
                 self.in_vehicle.x, self.in_vehicle.y, self.in_vehicle.z = self.x, self.y, self.z
-        elif world.is_walkable(nx, ny, self.z):
-            self.x, self.y = nx, ny
+        elif world.is_walkable(nx, self.y, self.z):
+            self.x = nx
             moved = True
             if self.in_vehicle:
-                self.in_vehicle.x, self.in_vehicle.y, self.in_vehicle.z = self.x, self.y, self.z
+                self.in_vehicle.x = self.x
+        elif world.is_walkable(self.x, ny, self.z):
+            self.y = ny
+            moved = True
+            if self.in_vehicle:
+                self.in_vehicle.y = self.y
 
         if moved:
             self.visited_tiles.add((int(self.x), int(self.y), int(self.z)))
+            current_fov = world.compute_fog_of_war(self.x, self.y, radius=8, z=self.z, facing_angle=self.facing_angle, fov_degrees=180.0)
+            for tx, ty in current_fov:
+                self.discovered_tiles.add((tx, ty, self.z))
             if noise_events is not None:
                 vol = 17.0 if self.in_vehicle else 8.0
                 stype = "vehicle_engine" if self.in_vehicle else "footsteps"

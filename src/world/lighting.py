@@ -52,7 +52,7 @@ class DynamicLight:
 
 
 class LightingEngine:
-    """Handles ambient illumination (solar zenith & moon phases) and raycasted Fog of War (FOW)."""
+    """Handles ambient illumination (solar zenith & moon phases) and raycasted/shadowcast Fog of War (FOW)."""
     __slots__ = ("world",)
 
     def __init__(self, world):
@@ -91,8 +91,10 @@ class LightingEngine:
 
         return max(0.08, min(1.0, ambient))
 
-    def compute_fog_of_war(self, x: float, y: float, radius: int = 8, z: int = 0) -> set:
-        """Fast raycasted Fog of War (FOW) computation using pre-computed direction vectors."""
+    def compute_fog_of_war(self, x: float, y: float, radius: int = 8, z: int = 0, facing_angle: float = None, fov_degrees: float = 180.0) -> set:
+        """
+        Symmetric Raycasting Fog of War with directional Field-Of-View (FOV) cone filtering.
+        """
         ix, iy = int(x), int(y)
         z_idx = self.world.z_to_idx(z)
         visible_tiles = {(ix, iy)}
@@ -100,7 +102,15 @@ class LightingEngine:
         grid_z = self.world.grid[z_idx]
         r_int = int(radius)
 
+        half_fov = math.radians(fov_degrees / 2.0) if facing_angle is not None else None
+
         for dx, dy in _FOW_RAYS:
+            if facing_angle is not None and half_fov is not None:
+                ray_angle = math.atan2(dy, dx)
+                diff = (ray_angle - facing_angle + math.pi) % (2 * math.pi) - math.pi
+                if abs(diff) > half_fov:
+                    continue
+
             cx, cy = float(x), float(y)
             for _step in range(r_int):
                 cx += dx

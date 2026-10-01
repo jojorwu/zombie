@@ -12,7 +12,7 @@ class BrainNet(nn.Module):
     """PyTorch GRU-based Neural Network model for survivor AI decision making."""
     __slots__ = ("input_size", "hidden_size", "output_size", "fc1", "relu", "gru", "fc_out")
 
-    def __init__(self, input_size: int = 32, hidden_size: int = 64, output_size: int = 13):
+    def __init__(self, input_size: int = 57, hidden_size: int = 64, output_size: int = 13):
         super(BrainNet, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -67,7 +67,7 @@ class GeneticEvolutionManager:
         self.generation = 1
 
     def create_initial_brains(self) -> list:
-        return [BrainNet(input_size=32, hidden_size=64, output_size=13) for _ in range(self.population_size)]
+        return [BrainNet(input_size=57, hidden_size=64, output_size=13) for _ in range(self.population_size)]
 
     def mutate_net(self, net: BrainNet) -> BrainNet:
         mutated_net = BrainNet(input_size=net.input_size, hidden_size=net.hidden_size, output_size=net.output_size)

@@ -77,8 +77,8 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
 
 
 def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) -> np.ndarray:
-    """Extracts 32 numerical input features for PyTorch neural network inference."""
-    inputs = np.zeros(32, dtype=np.float32)
+    """Extracts 57 numerical input features (32 status/closest entity inputs + 25 local 5x5 spatial grid inputs) for PyTorch neural network inference."""
+    inputs = np.zeros(57, dtype=np.float32)
     inputs[0] = survivor.health / 100.0
     inputs[1] = survivor.hunger / 100.0
     inputs[2] = survivor.thirst / 100.0
@@ -149,5 +149,19 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     # Exploration coverage indicator
     visited_count = len(getattr(survivor, 'visited_tiles', set()))
     inputs[31] = min(1.0, visited_count / 500.0)
+
+    # 25 Local Spatial Grid Vision Inputs (5x5 matrix around survivor)
+    idx_grid = 32
+    sx_i, sy_i = int(survivor.x), int(survivor.y)
+    z_val = survivor.z
+
+    for dy_g in range(-2, 3):
+        for dx_g in range(-2, 3):
+            gx, gy = sx_i + dx_g, sy_i + dy_g
+            if world.is_walkable(gx, gy, z_val):
+                inputs[idx_grid] = 1.0
+            else:
+                inputs[idx_grid] = -1.0
+            idx_grid += 1
 
     return inputs

@@ -151,21 +151,26 @@ class WorldGenerator:
                 else:
                     chunk_districts[(cx, cy)] = "residential"
 
+        # Simplex/Perlin-style organic river and terrain noise generation
         num_rivers = random.randint(1, 2)
         for _ in range(num_rivers):
-            rx = random.randint(4, world.width - 5)
+            rx = float(random.randint(10, world.width - 11))
             ry = 0
-            for _step in range(world.height):
-                if 0 <= rx < world.width and 0 <= ry < world.height:
-                    world.grid[g_idx, ry, rx] = TileType.WATER
-                    if rx + 1 < world.width:
-                        world.grid[g_idx, ry, rx + 1] = TileType.WATER
-                    if rx - 1 >= 0 and random.random() < 0.3:
-                        world.grid[g_idx, ry, rx - 1] = TileType.SAND
-                    if rx + 2 < world.width and random.random() < 0.3:
-                        world.grid[g_idx, ry, rx + 2] = TileType.SAND
-                ry += 1
-                rx += random.choice([-1, 0, 1])
+            freq_a = random.uniform(0.02, 0.05)
+            freq_b = random.uniform(0.08, 0.12)
+            amplitude = random.uniform(12.0, 25.0)
+
+            for step_y in range(world.height):
+                offset = math.sin(step_y * freq_a) * amplitude + math.cos(step_y * freq_b) * (amplitude * 0.5)
+                cur_x = int(rx + offset)
+                for w_off in range(-1, 2):
+                    tx = cur_x + w_off
+                    if 0 <= tx < world.width and 0 <= step_y < world.height:
+                        world.grid[g_idx, step_y, tx] = TileType.WATER
+                for s_off in (-2, 2):
+                    tx = cur_x + s_off
+                    if 0 <= tx < world.width and 0 <= step_y < world.height and random.random() < 0.4:
+                        world.grid[g_idx, step_y, tx] = TileType.SAND
 
         road_tile = TileType.DIRT_ROAD if self.settlement_type == SettlementType.VILLAGE else TileType.ROAD
         world.grid[g_idx, ::16, :] = TileType.ROAD_HIGHWAY if self.settlement_type != SettlementType.VILLAGE else TileType.DIRT_ROAD

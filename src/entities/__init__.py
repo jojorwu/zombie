@@ -1,23 +1,30 @@
-from src.entities.item import ResourceItem, WEAPON_STATS, ItemEntity
+from src.entities.item import ItemEntity, ResourceItem, WEAPON_STATS, ARMOR_STATS
 from src.entities.sensory import NoiseEvent, ScentTrail
-from src.entities.animal import Animal
+from src.entities.animal import Animal, Rat
 from src.entities.vehicle import Vehicle
 from src.entities.zombie import Zombie, ZombieState
+from src.entities.survivor import Survivor, EmotionalState
 from src.entities.crafting import CraftingSystem
-from src.entities.survivor import Survivor
-from src.entities.factory import EntityFactory
+from src.entities.factory import EntityFactory, ObjectPool
+from src.entities.health import AnatomicalHealth, BodyPart
 
 __all__ = [
+    "ItemEntity",
     "ResourceItem",
     "WEAPON_STATS",
-    "ItemEntity",
+    "ARMOR_STATS",
     "NoiseEvent",
     "ScentTrail",
     "Animal",
+    "Rat",
     "Vehicle",
     "Zombie",
     "ZombieState",
-    "CraftingSystem",
     "Survivor",
+    "EmotionalState",
+    "CraftingSystem",
     "EntityFactory",
+    "ObjectPool",
+    "AnatomicalHealth",
+    "BodyPart",
 ]

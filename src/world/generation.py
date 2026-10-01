@@ -1,0 +1,205 @@
+import math
+import random
+import numpy as np
+from src.world.tiles import TileType, BuildingType, SettlementType
+from utils.p_np_math import PolynomialVerifier
+
+
+class WorldGenerator:
+    """Handles terrain generation, settlement classification, winding rivers, dense forest biomes, and multi-floor buildings."""
+    __slots__ = ("world", "settlement_type")
+
+    def __init__(self, world, settlement_type: str = SettlementType.STANDARD_CITY):
+        self.world = world
+        self.settlement_type = settlement_type
+
+    def build_chunk_building(self, bx: int, by: int, bw: int, bh: int, btype: str) -> None:
+        world = self.world
+        building_info = {
+            "x": bx, "y": by, "w": bw, "h": bh, "type": btype
+        }
+        world.buildings.append(building_info)
+        chunk = world.chunk_manager.get_chunk_at(bx, by)
+        if chunk:
+            chunk.buildings.append(building_info)
+
+        has_basement = False
+        if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.20:
+            has_basement = True
+        elif btype in (BuildingType.WAREHOUSE, BuildingType.GUN_STORE) and random.random() < 0.40:
+            has_basement = True
+
+        bottom_floor = -1 if (has_basement and world.z_min <= -1) else 0
+
+        if self.settlement_type == SettlementType.MEGALOPOLIS:
+            max_sky_floor = min(world.z_max, 5)
+            top_floor = random.randint(2, max_sky_floor) if world.z_max >= 2 else world.z_max
+        elif self.settlement_type == SettlementType.VILLAGE:
+            top_floor = 0
+        else:
+            top_floor = min(world.z_max, random.randint(0, max(0, world.z_max)))
+
+        is_house_locked = (random.random() < 0.35)
+        building_info["has_basement"] = has_basement
+        building_info["top_floor"] = top_floor
+        building_info["bottom_floor"] = bottom_floor
+        building_info["is_locked"] = is_house_locked
+
+        door_tile = TileType.DOOR_LOCKED if is_house_locked else TileType.DOOR
+
+        for z in range(bottom_floor, top_floor + 1):
+            z_idx = world.z_to_idx(z)
+            is_underground = (z < 0)
+
+            for y in range(by, min(world.height, by + bh)):
+                for x in range(bx, min(world.width, bx + bw)):
+                    if is_underground:
+                        tile = TileType.UNDERGROUND_WALL if (x == bx or x == bx + bw - 1 or y == by or y == by + bh - 1) else TileType.UNDERGROUND_FLOOR
+                    else:
+                        tile = TileType.BUILDING_WALL if (x == bx or x == bx + bw - 1 or y == by or y == by + bh - 1) else TileType.BUILDING_FLOOR
+                    world.grid[z_idx, y, x] = tile
+                    world.building_grid[(x, y, z)] = btype
+
+            if z == 0:
+                world.grid[z_idx, min(world.height - 1, by + bh - 1), min(world.width - 1, bx + 2)] = door_tile
+                world.grid[z_idx, min(world.height - 1, by), min(world.width - 1, bx + 2)] = TileType.WINDOW
+
+                if btype in (BuildingType.SUPERMARKET, BuildingType.STORE):
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.STORE_SHELF
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.REFRIGERATOR
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.STORE_SHELF
+                    world.grid[z_idx, min(world.height - 1, by + 3), min(world.width - 1, bx + 1)] = TileType.CASH_REGISTER
+                elif btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION):
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.GUN_RACK
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.WEAPON_SAFE
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.LOCKER
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.OFFICE_DESK
+                elif btype == BuildingType.HOSPITAL:
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.MEDICAL_BED
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.CABINET
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.MEDICAL_BED
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.OFFICE_DESK
+                elif btype in (BuildingType.SCHOOL, BuildingType.DORMITORY):
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.SCHOOL_DESK
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.BOOKSHELF
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.LOCKER
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.BED
+                elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.FACTORY_RACK
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.WORKBENCH
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.CONTAINER_BOX
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.LOCKER
+                else:
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.CABINET
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.REFRIGERATOR
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.KITCHEN_COUNTER
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.SOFA
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 3)] = TileType.TV_STAND
+
+                if bx + bw + 1 < world.width and by + bh < world.height:
+                    for px in range(bx + bw, min(world.width, bx + bw + 2)):
+                        for py in range(by, min(world.height, by + bh)):
+                            if world.grid[z_idx, py, px] in (TileType.GRASS, TileType.ROAD):
+                                world.grid[z_idx, py, px] = TileType.PARKING
+                    world.grid[z_idx, min(world.height - 1, by + bh - 1), min(world.width - 1, bx + bw)] = TileType.TRASH_CAN
+            elif z == top_floor and z > 0:
+                for ry in range(by + 1, min(world.height - 1, by + bh - 1)):
+                    for rx in range(bx + 1, min(world.width - 1, bx + bw - 1)):
+                        world.grid[z_idx, ry, rx] = TileType.ROOF
+            elif z < top_floor:
+                world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.CABINET
+                world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.BED
+
+            world.grid[z_idx, min(world.height - 1, by + 3), min(world.width - 1, bx + 3)] = TileType.STAIRS if (z % 2 == 0) else TileType.LADDER
+
+    def generate(self) -> None:
+        """High-performance vectorized world generator."""
+        world = self.world
+        g_idx = world.z_to_idx(0)
+        world.grid[g_idx].fill(TileType.GRASS)
+
+        for z in range(1, world.z_max + 1):
+            world.grid[world.z_to_idx(z)].fill(TileType.AIR)
+        for z in range(world.z_min, 0):
+            world.grid[world.z_to_idx(z)].fill(TileType.UNDERGROUND_WALL)
+
+        num_cx = world.chunk_manager.num_chunks_x
+        num_cy = world.chunk_manager.num_chunks_y
+        center_cx, center_cy = num_cx // 2, num_cy // 2
+
+        chunk_districts = {}
+        for cy in range(num_cy):
+            for cx in range(num_cx):
+                dist = math.hypot(cx - center_cx, cy - center_cy)
+                if dist <= max(2, num_cx * 0.25):
+                    chunk_districts[(cx, cy)] = "commercial"
+                elif cx < num_cx * 0.4 and cy < num_cy * 0.4:
+                    chunk_districts[(cx, cy)] = "industrial"
+                elif cx >= num_cx * 0.6 and cy >= num_cy * 0.6:
+                    chunk_districts[(cx, cy)] = "park"
+                else:
+                    chunk_districts[(cx, cy)] = "residential"
+
+        num_rivers = random.randint(1, 2)
+        for _ in range(num_rivers):
+            rx = random.randint(4, world.width - 5)
+            ry = 0
+            for _step in range(world.height):
+                if 0 <= rx < world.width and 0 <= ry < world.height:
+                    world.grid[g_idx, ry, rx] = TileType.WATER
+                    if rx + 1 < world.width:
+                        world.grid[g_idx, ry, rx + 1] = TileType.WATER
+                    if rx - 1 >= 0 and random.random() < 0.3:
+                        world.grid[g_idx, ry, rx - 1] = TileType.SAND
+                    if rx + 2 < world.width and random.random() < 0.3:
+                        world.grid[g_idx, ry, rx + 2] = TileType.SAND
+                ry += 1
+                rx += random.choice([-1, 0, 1])
+
+        road_tile = TileType.DIRT_ROAD if self.settlement_type == SettlementType.VILLAGE else TileType.ROAD
+        world.grid[g_idx, ::16, :] = TileType.ROAD_HIGHWAY if self.settlement_type != SettlementType.VILLAGE else TileType.DIRT_ROAD
+        world.grid[g_idx, :, ::16] = TileType.ROAD_HIGHWAY if self.settlement_type != SettlementType.VILLAGE else TileType.DIRT_ROAD
+
+        road_mask_8_x = (world.grid[g_idx, ::8, :] == TileType.GRASS)
+        world.grid[g_idx, ::8, :][road_mask_8_x] = road_tile
+        road_mask_8_y = (world.grid[g_idx, :, ::8] == TileType.GRASS)
+        world.grid[g_idx, :, ::8][road_mask_8_y] = road_tile
+
+        if self.settlement_type != SettlementType.VILLAGE:
+            road_tiles = (world.grid[g_idx] == TileType.ROAD) | (world.grid[g_idx] == TileType.ROAD_HIGHWAY)
+            grass_tiles = (world.grid[g_idx] == TileType.GRASS) | (world.grid[g_idx] == TileType.GRASS_DRY)
+
+            pad_r = np.pad(road_tiles[:, 1:], ((0, 0), (0, 1)), mode='constant')
+            pad_l = np.pad(road_tiles[:, :-1], ((0, 0), (1, 0)), mode='constant')
+            pad_d = np.pad(road_tiles[1:, :], ((0, 1), (0, 0)), mode='constant')
+            pad_u = np.pad(road_tiles[:-1, :], ((1, 0), (0, 0)), mode='constant')
+
+            adjacent_grass = grass_tiles & (pad_r | pad_l | pad_d | pad_u)
+            world.grid[g_idx, adjacent_grass] = TileType.SIDEWALK
+
+        commercial_types = [BuildingType.SUPERMARKET, BuildingType.STORE, BuildingType.GAS_STATION, BuildingType.HOSPITAL, BuildingType.POLICE_STATION, BuildingType.GUN_STORE]
+        residential_types = [BuildingType.RESIDENTIAL, BuildingType.DORMITORY, BuildingType.SCHOOL]
+        industrial_types = [BuildingType.WAREHOUSE, BuildingType.FACTORY, BuildingType.GAS_STATION]
+
+        buildings_to_construct = []
+        for cy in range(num_cy):
+            for cx in range(num_cx):
+                district = chunk_districts[(cx, cy)]
+                if district == "park" and self.settlement_type != SettlementType.MEGALOPOLIS:
+                    continue
+
+                bx = cx * 16 + 2
+                by = cy * 16 + 2
+                if bx + 6 < world.width and by + 6 < world.height:
+                    if district == "commercial":
+                        btype = random.choice(commercial_types)
+                    elif district == "industrial":
+                        btype = random.choice(industrial_types)
+                    else:
+                        btype = random.choice(residential_types)
+                    buildings_to_construct.append((bx, by, 5, 5, btype))
+
+        for bx, by, bw, bh, btype in buildings_to_construct:
+            self.build_chunk_building(bx, by, bw, bh, btype)
+
+        PolynomialVerifier.verify_spatial_partitioning([(b["x"], b["y"]) for b in world.buildings])

@@ -1,7 +1,7 @@
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 class ResourceItem:
-    """Enumeration of all collectible resources, tools, food items, and weapons in the game."""
+    """Enumeration of all collectible resources, tools, food items, weapons, and armor in the game."""
     # Generic Resources
     FOOD = "food"
     WATER = "water"
@@ -46,6 +46,17 @@ class ResourceItem:
     SNIPER_AMMO = "sniper_ammo"
     BOLTS = "bolts"
 
+    # Armor Items
+    HELMET = "helmet"
+    BODY_ARMOR = "body_armor"
+    LEATHER_JACKET = "leather_jacket"
+    PADS = "pads"
+
+    # Container Items on Floor
+    BACKPACK = "backpack"
+    DUFFEL_BAG = "duffel_bag"
+    CRATE = "crate"
+
     # Base Specific Foods
     CANNED_FOOD = "canned_food"
     BREAD = "bread"
@@ -65,6 +76,10 @@ class ResourceItem:
     STEW = "stew"
     RICE = "rice"
 
+    # Foraged Forest Food
+    MUSHROOM = "mushroom"
+    BERRIES = "berries"
+
     # Kitchen Items
     FRYING_PAN = "frying_pan"
     POT = "pot"
@@ -72,6 +87,14 @@ class ResourceItem:
     CAN_OPENER = "can_opener"
     WATER_BOTTLE = "water_bottle"
     CUTTING_BOARD = "cutting_board"
+
+
+ARMOR_STATS: Dict[str, Dict[str, Any]] = {
+    ResourceItem.HELMET: {"slot": "head", "reduction": 0.50, "durability": 100.0},
+    ResourceItem.BODY_ARMOR: {"slot": "torso", "reduction": 0.60, "durability": 150.0},
+    ResourceItem.LEATHER_JACKET: {"slot": "torso", "reduction": 0.25, "durability": 80.0},
+    ResourceItem.PADS: {"slot": "limbs", "reduction": 0.35, "durability": 90.0},
+}
 
 
 # Detailed Properties for Weapons & Tools
@@ -108,11 +131,12 @@ WEAPON_STATS: Dict[str, Dict[str, Any]] = {
 
 
 class ItemEntity:
-    """Represents an item entity spawned in the world grid at specific coordinates."""
-    def __init__(self, x: float, y: float, item_type: str, amount: int = 1, z: int = 0) -> None:
+    """Represents an item or floor container entity spawned in the world grid."""
+    def __init__(self, x: float, y: float, item_type: str, amount: int = 1, z: int = 0, contents: Optional[Dict[str, int]] = None) -> None:
         self.x: float = float(x)
         self.y: float = float(y)
         self.z: int = int(z)
         self.item_type: str = item_type
         self.amount: int = amount
         self.collected: bool = False
+        self.contents: Dict[str, int] = contents if contents is not None else {}

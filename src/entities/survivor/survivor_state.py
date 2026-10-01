@@ -1,0 +1,6 @@
+class EmotionalState:
+    CALM = "CALM"
+    CONFIDENT = "CONFIDENT"
+    PANICKED = "PANICKED"
+    TERRIFIED = "TERRIFIED"
+    ENRAGED = "ENRAGED"

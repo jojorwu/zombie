@@ -1,6 +1,9 @@
 import random
+import zlib
+import io
 import torch
 import torch.nn as nn
+import numpy as np
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -9,7 +12,7 @@ class BrainNet(nn.Module):
     """PyTorch GRU-based Neural Network model for survivor AI decision making."""
     __slots__ = ("input_size", "hidden_size", "output_size", "fc1", "relu", "gru", "fc_out")
 
-    def __init__(self, input_size: int = 25, hidden_size: int = 32, output_size: int = 13):
+    def __init__(self, input_size: int = 32, hidden_size: int = 64, output_size: int = 13):
         super(BrainNet, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -31,7 +34,6 @@ class BrainNet(nn.Module):
         return torch.zeros(1, self.hidden_size, dtype=torch.float32, device=DEVICE)
 
     def get_action_and_movement(self, inputs, prev_hidden=None):
-        import numpy as np
         self.eval()
         if prev_hidden is None:
             prev_hidden = self.init_hidden()
@@ -65,10 +67,10 @@ class GeneticEvolutionManager:
         self.generation = 1
 
     def create_initial_brains(self) -> list:
-        return [BrainNet() for _ in range(self.population_size)]
+        return [BrainNet(input_size=32, hidden_size=64, output_size=13) for _ in range(self.population_size)]
 
     def mutate_net(self, net: BrainNet) -> BrainNet:
-        mutated_net = BrainNet()
+        mutated_net = BrainNet(input_size=net.input_size, hidden_size=net.hidden_size, output_size=net.output_size)
         mutated_net.load_state_dict(net.state_dict())
         with torch.no_grad():
             for param in mutated_net.parameters():
@@ -78,7 +80,7 @@ class GeneticEvolutionManager:
         return mutated_net
 
     def crossover_nets(self, parent1: BrainNet, parent2: BrainNet) -> BrainNet:
-        child = BrainNet()
+        child = BrainNet(input_size=parent1.input_size, hidden_size=parent1.hidden_size, output_size=parent1.output_size)
         p1_dict = parent1.state_dict()
         p2_dict = parent2.state_dict()
         child_dict = child.state_dict()
@@ -98,7 +100,7 @@ class GeneticEvolutionManager:
         new_population = []
 
         for i in range(num_elites):
-            elite_copy = BrainNet()
+            elite_copy = BrainNet(input_size=sorted_brains[i].input_size, hidden_size=sorted_brains[i].hidden_size, output_size=sorted_brains[i].output_size)
             elite_copy.load_state_dict(sorted_brains[i].state_dict())
             new_population.append(elite_copy)
 
@@ -112,8 +114,38 @@ class GeneticEvolutionManager:
         self.generation += 1
         return new_population, brains_and_fitnesses[0][1]
 
-    def save_best_brain(self, brain: BrainNet, filepath: str = "best_brain.pth") -> None:
-        torch.save(brain.state_dict(), filepath)
+    def save_best_brain(self, brain: BrainNet, filepath: str = "best_brain.zbrain") -> None:
+        save_zbrain(brain, filepath)
 
-    def load_best_brain(self, brain: BrainNet, filepath: str = "best_brain.pth") -> None:
-        brain.load_state_dict(torch.load(filepath))
+    def load_best_brain(self, brain: BrainNet, filepath: str = "best_brain.zbrain") -> None:
+        load_zbrain(brain, filepath)
+
+
+def save_zbrain(brain: BrainNet, filepath: str) -> None:
+    """Saves a BrainNet model in custom compressed FP16 binary format (.zbrain)."""
+    state = brain.state_dict()
+    half_precision_state = {k: v.cpu().half() for k, v in state.items()}
+    buffer = io.BytesIO()
+    torch.save(half_precision_state, buffer)
+    compressed = zlib.compress(buffer.getvalue(), level=9)
+    with open(filepath, "wb") as f:
+        f.write(b"ZBRAINv1")
+        f.write(compressed)
+
+
+def load_zbrain(brain: BrainNet, filepath: str) -> None:
+    """Loads a BrainNet model from custom compressed binary format (.zbrain)."""
+    with open(filepath, "rb") as f:
+        header = f.read(8)
+        if header != b"ZBRAINv1":
+            f.seek(0)
+            # Legacy fallback
+            brain.load_state_dict(torch.load(filepath, map_location=DEVICE))
+            return
+        compressed = f.read()
+
+    decompressed = zlib.decompress(compressed)
+    buffer = io.BytesIO(decompressed)
+    half_precision_state = torch.load(buffer, map_location=DEVICE)
+    float_precision_state = {k: v.float().to(DEVICE) for k, v in half_precision_state.items()}
+    brain.load_state_dict(float_precision_state)

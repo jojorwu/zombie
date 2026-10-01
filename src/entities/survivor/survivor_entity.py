@@ -29,6 +29,9 @@ class Survivor:
         self.morale = 80.0
         self.emotional_state = EmotionalState.CALM
 
+        self.visited_tiles = set()
+        self.visited_tiles.add((int(x), int(y), int(z)))
+
         self.inventory = {
             ResourceItem.FOOD: 2,
             ResourceItem.WATER: 2,
@@ -49,6 +52,22 @@ class Survivor:
     @health.setter
     def health(self, val):
         pass
+
+    def calculate_fitness(self) -> float:
+        """
+        Calculates holistic evolution fitness:
+        - Survival duration
+        - Exploration coverage (visited unique tiles)
+        - Zombie kill efficiency
+        - Average physiological & mental state (health, hunger, thirst, sleep, morale)
+        """
+        exploration_score = len(self.visited_tiles) * 1.5
+        avg_condition = (self.health + self.hunger + self.thirst + self.sleep + self.morale) / 5.0
+        condition_bonus = (avg_condition / 100.0) * (self.time_survived * 0.2)
+        kill_score = self.kills * 40.0
+        survival_score = self.time_survived * 0.5
+
+        return survival_score + exploration_score + kill_score + condition_bonus + self.score
 
     def take_damage(self, amount, target_part=None):
         with self._lock:
@@ -194,10 +213,12 @@ class Survivor:
             if self.in_vehicle:
                 self.in_vehicle.x, self.in_vehicle.y, self.in_vehicle.z = self.x, self.y, self.z
 
-        if moved and noise_events is not None:
-            vol = 17.0 if self.in_vehicle else 8.0
-            stype = "vehicle_engine" if self.in_vehicle else "footsteps"
-            noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=vol, source_type=stype))
+        if moved:
+            self.visited_tiles.add((int(self.x), int(self.y), int(self.z)))
+            if noise_events is not None:
+                vol = 17.0 if self.in_vehicle else 8.0
+                stype = "vehicle_engine" if self.in_vehicle else "footsteps"
+                noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=vol, source_type=stype))
 
     def perform_action(self, action, world, items, vehicles, zombies, animals, survivors, noise_events=None):
         """Action dispatcher executing survivor AI decisions."""

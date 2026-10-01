@@ -197,18 +197,20 @@ class SimulationEngine:
         self.env_manager.check_dynamic_item_respawn(self.items, self.factory)
         self.memory_monitor.record_tick_time(time.time() - t0)
 
-        if alive_count == 0 or self.world.current_tick >= 1200:
+        # Max simulation length = 1 month (108,000 ticks)
+        max_ticks = self.sim_cfg.get("max_ticks_per_gen", 108000)
+        if alive_count == 0 or self.world.current_tick >= max_ticks:
             self.end_generation()
 
     def end_generation(self):
         brains_and_fitnesses = []
         for i, s in enumerate(self.survivors):
-            fitness = s.score + (s.time_survived * 0.5) + (s.kills * 25.0)
+            fitness = s.calculate_fitness()
             brains_and_fitnesses.append((self.brains[i], fitness))
 
         self.brains, max_fit = self.evolution_manager.evolve_population(brains_and_fitnesses)
         if max_fit > self.best_historical_score:
             self.best_historical_score = max_fit
-            self.evolution_manager.save_best_brain(self.brains[0], "best_brain.pth")
+            self.evolution_manager.save_best_brain(self.brains[0], "best_brain.zbrain")
 
         self.reset_generation()

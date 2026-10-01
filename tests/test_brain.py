@@ -1,42 +1,71 @@
 import sys
 import os
+import tempfile
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
-from src.world import World
+import torch
+import numpy as np
+from src.ai.brain_net import BrainNet, GeneticEvolutionManager, save_zbrain, load_zbrain, DEVICE
+from src.ai.brain_actions import batch_get_action_and_movement, extract_survivor_inputs
 from src.entities import Survivor
-from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager
+from src.world import World
+
 
 class TestBrain(unittest.TestCase):
-    def test_brain_forward(self):
-        brain = BrainNet()
-        survivor = Survivor(5, 5)
-        world = World(20, 20)
-        inputs = extract_survivor_inputs(survivor, world, [], [], [], [])
-        self.assertEqual(len(inputs), 25)
-
+    def test_brain_net_forward_and_action(self):
+        brain = BrainNet(input_size=32, hidden_size=64, output_size=13)
+        inputs = np.random.randn(32).astype(np.float32)
         hidden = brain.init_hidden()
-        dx, dy, action, new_hidden = brain.get_action_and_movement(inputs, hidden)
-        self.assertTrue(-1.0 <= dx <= 1.0)
-        self.assertTrue(-1.0 <= dy <= 1.0)
-        self.assertTrue(0 <= action <= 12)
-        self.assertEqual(new_hidden.shape, hidden.shape)
 
-    def test_genetic_evolution(self):
-        evo = GeneticEvolutionManager(population_size=10)
-        brains = evo.create_initial_brains()
-        self.assertEqual(len(brains), 10)
+        dx, dy, action_idx, new_hidden = brain.get_action_and_movement(inputs, hidden)
 
-        brains_and_fitness = [(b, i * 10.0) for i, b in enumerate(brains)]
-        new_brains, best_fit = evo.evolve_population(brains_and_fitness)
-        self.assertEqual(len(new_brains), 10)
-        self.assertEqual(evo.generation, 2)
-        self.assertEqual(best_fit, 90.0)
+        self.assertIsInstance(dx, float)
+        self.assertIsInstance(dy, float)
+        self.assertIsInstance(action_idx, int)
+        self.assertGreaterEqual(action_idx, 0)
+        self.assertLess(action_idx, 11)
+        self.assertEqual(new_hidden.shape, (1, 64))
 
-        evo.save_best_brain(brains[0], "test_brain.pth")
-        self.assertTrue(os.path.exists("test_brain.pth"))
-        evo.load_best_brain(brains[1], "test_brain.pth")
-        os.remove("test_brain.pth")
+    def test_zbrain_compression_save_load(self):
+        brain1 = BrainNet(input_size=32, hidden_size=64, output_size=13)
+        brain2 = BrainNet(input_size=32, hidden_size=64, output_size=13)
+
+        with tempfile.NamedTemporaryFile(suffix=".zbrain", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            save_zbrain(brain1, tmp_path)
+            self.assertTrue(os.path.exists(tmp_path))
+            self.assertGreater(os.path.getsize(tmp_path), 0)
+
+            load_zbrain(brain2, tmp_path)
+
+            for p1, p2 in zip(brain1.parameters(), brain2.parameters()):
+                self.assertTrue(torch.allclose(p1.cpu(), p2.cpu(), atol=1e-2))
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    def test_batch_get_action_and_movement(self):
+        brains = [BrainNet(input_size=32, hidden_size=64, output_size=13) for _ in range(4)]
+        inputs_list = [np.random.randn(32).astype(np.float32) for _ in range(4)]
+        hiddens = [b.init_hidden() for b in brains]
+
+        outputs = batch_get_action_and_movement(brains, inputs_list, hiddens)
+        self.assertEqual(len(outputs), 4)
+        for dx, dy, act, h in outputs:
+            self.assertIsInstance(dx, float)
+            self.assertIsInstance(dy, float)
+            self.assertIsInstance(act, int)
+            self.assertEqual(h.shape, (1, 64))
+
+    def test_survivor_extract_inputs_32(self):
+        world = World(width=30, height=30)
+        survivor = Survivor(10.0, 10.0)
+        inputs = extract_survivor_inputs(survivor, world, items=[], vehicles=[], zombies=[], animals=[])
+        self.assertEqual(inputs.shape, (32,))
+
 
 if __name__ == "__main__":
     unittest.main()

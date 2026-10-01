@@ -19,9 +19,9 @@ class WorldGenerator:
             "x": bx, "y": by, "w": bw, "h": bh, "type": btype
         }
         world.buildings.append(building_info)
-        chunk = world.chunk_manager.get_chunk_at(bx, by)
-        if chunk:
-            chunk.buildings.append(building_info)
+
+        # Register building across all chunks that its area overlaps
+        world.chunk_manager.register_building(building_info)
 
         has_basement = False
         if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.20:

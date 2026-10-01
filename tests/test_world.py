@@ -3,7 +3,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
-from src.world import World, TileType
+from src.world import World, TileType, ChunkState
 
 class TestWorld(unittest.TestCase):
     def test_world_generation_extended_height_and_bridges(self):
@@ -39,6 +39,40 @@ class TestWorld(unittest.TestCase):
         chunk_mgr.update_active_chunks([(10, 10), (50, 50)], view_distance_chunks=1)
         self.assertIn((0, 0), chunk_mgr.active_chunks)
         self.assertIn((3, 3), chunk_mgr.active_chunks)
+
+    def test_chunk_states_and_multi_chunk_building_coverage(self):
+        world = World(width=64, height=64)
+        chunk_mgr = world.chunk_manager
+
+        # Create a large building that spans across multiple chunks (Chunk (0,0), (1,0), (0,1), (1,1))
+        large_building = {
+            "x": 10, "y": 10, "w": 12, "h": 12, "type": "residential"
+        }
+        chunk_mgr.register_building(large_building)
+
+        # Confirm building registered in all covering chunks
+        c00 = chunk_mgr.get_chunk(0, 0)
+        c10 = chunk_mgr.get_chunk(1, 0)
+        c01 = chunk_mgr.get_chunk(0, 1)
+        c11 = chunk_mgr.get_chunk(1, 1)
+
+        self.assertIn(large_building, c00.buildings)
+        self.assertIn(large_building, c10.buildings)
+        self.assertIn(large_building, c01.buildings)
+        self.assertIn(large_building, c11.buildings)
+
+        # When a survivor enters Chunk (0,0) with view_distance_chunks=0
+        chunk_mgr.update_active_chunks([(2, 2)], view_distance_chunks=0)
+
+        # All chunks covering the building MUST be set to ACTIVE state
+        self.assertEqual(c00.state, ChunkState.ACTIVE)
+        self.assertEqual(c10.state, ChunkState.ACTIVE)
+        self.assertEqual(c01.state, ChunkState.ACTIVE)
+        self.assertEqual(c11.state, ChunkState.ACTIVE)
+
+        # Unrelated far chunk (3,3) must be INACTIVE
+        c33 = chunk_mgr.get_chunk(3, 3)
+        self.assertEqual(c33.state, ChunkState.INACTIVE)
 
     def test_accelerated_time_and_cutoffs(self):
         world = World(width=100, height=100, day_length_ticks=3600, electricity_cutoff_day=7, water_cutoff_day=14)

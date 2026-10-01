@@ -132,7 +132,6 @@ class SimulationEngine:
         self.noise_events = active_noises
 
         entity_positions = [(s.x, s.y) for s in self.survivors if s.is_alive]
-        entity_positions.extend([(z.x, z.y) for z in self.zombies if z.is_alive])
         if entity_positions:
             self.world.chunk_manager.update_active_chunks(entity_positions, view_distance_chunks=2)
 
@@ -174,7 +173,14 @@ class SimulationEngine:
                 active_scents.append(st)
         self.scent_trails = active_scents
 
-        active_zombies = [z for z in self.zombies if z.is_alive]
+        active_chunk_coords = self.world.chunk_manager.active_chunks
+        chunk_size = self.world.chunk_manager.chunk_size
+
+        active_zombies = [
+            z for z in self.zombies
+            if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
+        ]
+
         z_grid = {}
         for z in active_zombies:
             cell = (int(z.x // 6.0), int(z.y // 6.0), z.z)
@@ -187,8 +193,8 @@ class SimulationEngine:
                 for z in z_sublist:
                     z.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
-            chunk_size = max(1, len(active_zombies) // 4)
-            z_chunks = [active_zombies[i:i + chunk_size] for i in range(0, len(active_zombies), chunk_size)]
+            c_size = max(1, len(active_zombies) // 4)
+            z_chunks = [active_zombies[i:i + c_size] for i in range(0, len(active_zombies), c_size)]
             futures = [SIM_EXECUTOR.submit(_update_zombie_chunk, zc) for zc in z_chunks]
             for f in futures:
                 f.result()

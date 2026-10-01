@@ -176,7 +176,7 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals):
                 break
 
     inputs[23] = has_furniture_adj
-    inputs[24] = min(1.0, (survivor.inventory.get("wood", 0) + survivor.inventory.get("metal", 0)) / 10.0)
+    inputs[24] = getattr(survivor, 'fear', 0.0) / 100.0
 
     return inputs
 

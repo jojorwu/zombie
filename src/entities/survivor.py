@@ -5,6 +5,16 @@ from src.world import TileType, DynamicLight
 from src.entities.item import ResourceItem, WEAPON_STATS
 from src.entities.sensory import NoiseEvent
 from src.entities.crafting import CraftingSystem
+from src.entities.health import AnatomicalHealth, BodyPart
+
+
+class EmotionalState:
+    CALM = "CALM"
+    CONFIDENT = "CONFIDENT"
+    PANICKED = "PANICKED"
+    TERRIFIED = "TERRIFIED"
+    ENRAGED = "ENRAGED"
+
 
 class Survivor:
     def __init__(self, x, y, z=0):
@@ -12,13 +22,22 @@ class Survivor:
         self.x = float(x)
         self.y = float(y)
         self.z = int(z)
-        self.health = 100.0
+
+        # Anatomical Body Health
+        self.body = AnatomicalHealth()
         self.hunger = 100.0
         self.thirst = 100.0
         self.sleep = 100.0
         self.energy = 100.0
         self.is_alive = True
         self.in_vehicle = None
+
+        # Psychological & Emotional Attributes
+        self.fear = 0.0      # 0.0 .. 100.0
+        self.panic = 0.0     # 0.0 .. 100.0
+        self.morale = 80.0   # 0.0 .. 100.0
+        self.emotional_state = EmotionalState.CALM
+
         self.inventory = {
             ResourceItem.FOOD: 2,
             ResourceItem.WATER: 2,
@@ -32,27 +51,84 @@ class Survivor:
         self.time_survived = 0
         self.kills = 0
 
-    def take_damage(self, amount):
+    @property
+    def health(self):
+        return self.body.overall_health_percent
+
+    @health.setter
+    def health(self, val):
+        pass  # Health managed via AnatomicalHealth body parts
+
+    def take_damage(self, amount, target_part=None):
         with self._lock:
-            self.health -= amount
-            if self.health <= 0:
-                self.health = 0
+            hit_part, actual_damage, crippled = self.body.apply_targeted_damage(amount, target_part)
+            self.fear = min(100.0, self.fear + actual_damage * 1.2)
+            self.panic = min(100.0, self.panic + actual_damage * 1.5)
+            self.morale = max(0.0, self.morale - actual_damage * 0.5)
+
+            if self.body.is_dead:
                 self.is_alive = False
+
+    def update_emotions(self, world, zombies, noise_events=None):
+        """Updates fear, panic, and morale based on surroundings, darkness, and wounds."""
+        # 1. Darkness factor
+        light = world.get_light_level(self.z)
+        if light < 0.3:
+            self.fear = min(100.0, self.fear + 0.15)
+
+        # 2. Nearby zombies factor
+        nearby_zombie_count = 0
+        for z in zombies:
+            if z.is_alive and z.z == self.z:
+                d = math.hypot(z.x - self.x, z.y - self.y)
+                if d < 8.0:
+                    nearby_zombie_count += 1
+
+        if nearby_zombie_count > 0:
+            self.fear = min(100.0, self.fear + nearby_zombie_count * 0.4)
+            if nearby_zombie_count >= 3:
+                self.panic = min(100.0, self.panic + 0.8)
+        else:
+            self.fear = max(0.0, self.fear - 0.2)
+            self.panic = max(0.0, self.panic - 0.3)
+
+        # 3. Kills boost morale
+        if self.kills > 0 and self.fear < 30.0:
+            self.morale = min(100.0, self.morale + 0.05)
+
+        # 4. State classification
+        if self.panic > 70.0 or self.fear > 80.0:
+            self.emotional_state = EmotionalState.TERRIFIED
+        elif self.panic > 40.0:
+            self.emotional_state = EmotionalState.PANICKED
+        elif self.morale > 75.0 and self.fear < 20.0:
+            self.emotional_state = EmotionalState.CONFIDENT
+        elif self.panic > 20.0 and self.morale < 30.0:
+            self.emotional_state = EmotionalState.ENRAGED
+        else:
+            self.emotional_state = EmotionalState.CALM
 
     def update_needs(self):
         if not self.is_alive:
             return
         self.time_survived += 1
+
+        # Bleeding tick
+        self.body.update_bleeding()
+        if self.body.is_dead:
+            self.is_alive = False
+            return
+
         self.hunger -= 0.025
         self.thirst -= 0.035
         self.sleep -= 0.025
 
         if self.hunger <= 0:
             self.hunger = 0
-            self.take_damage(0.2)
+            self.take_damage(0.2, BodyPart.TORSO)
         if self.thirst <= 0:
             self.thirst = 0
-            self.take_damage(0.3)
+            self.take_damage(0.3, BodyPart.TORSO)
         if self.sleep <= 0:
             self.sleep = 0
             self.energy = max(0.0, self.energy - 0.2)
@@ -80,12 +156,22 @@ class Survivor:
                     self.thirst = min(100.0, self.thirst + 45)
                     break
 
+        if self.inventory.get(ResourceItem.MEDKIT, 0) > 0 and self.body.total_bleeding > 0:
+            self.inventory[ResourceItem.MEDKIT] -= 1
+            self.body.treat_wounds()
+
         self.score += 0.1
 
     def move(self, dx, dy, world, noise_events=None, dz=0):
         if not self.is_alive:
             return
-        base_speed = 0.15
+        base_speed = 0.15 * self.body.movement_speed_multiplier
+
+        if self.emotional_state == EmotionalState.PANICKED:
+            base_speed *= 1.15  # Adrenaline rush
+        elif self.emotional_state == EmotionalState.TERRIFIED:
+            base_speed *= 0.85  # Paralyzing fear
+
         if self.in_vehicle:
             if self.in_vehicle.fuel > 0:
                 base_speed = self.in_vehicle.speed
@@ -103,7 +189,10 @@ class Survivor:
         is_raining = world.weather.is_in_rain(self.x, self.y)
         rain_factor = 0.85 if (is_raining and not self.in_vehicle) else 1.0
 
-        speed = base_speed * tile_mod * wind_factor * rain_factor
+        # Winter snow speed modifier
+        season_factor = 0.8 if getattr(world.weather, 'season', None) == "Winter" else 1.0
+
+        speed = base_speed * tile_mod * wind_factor * rain_factor * season_factor
 
         nx = self.x + dx * speed
         ny = self.y + dy * speed
@@ -129,6 +218,8 @@ class Survivor:
     def perform_action(self, action, world, items, vehicles, zombies, animals, survivors, noise_events=None):
         if not self.is_alive:
             return
+
+        self.update_emotions(world, zombies, noise_events=noise_events)
 
         if action == 1:
             from utils.p_np_math import PolynomialKnapsackSolver
@@ -196,6 +287,8 @@ class Survivor:
         elif action == 5:
             self.sleep = min(100.0, self.sleep + 1.0)
             self.energy = min(100.0, self.energy + 1.0)
+            self.fear = max(0.0, self.fear - 0.5)
+            self.panic = max(0.0, self.panic - 0.8)
 
         elif action == 6:
             best_weapon = None
@@ -221,8 +314,14 @@ class Survivor:
 
             w_stats = WEAPON_STATS.get(best_weapon, {"damage": 15.0, "range": 1.0, "noise": 4.0})
             attack_range = w_stats["range"]
-            damage = w_stats["damage"]
+            damage = w_stats["damage"] * self.body.attack_damage_multiplier
             noise_vol = w_stats["noise"]
+
+            # Panic accuracy penalty
+            if self.emotional_state == EmotionalState.PANICKED and random.random() < 0.25:
+                damage *= 0.5
+            elif self.emotional_state == EmotionalState.TERRIFIED and random.random() < 0.50:
+                damage = 0.0  # Missed due to panic
 
             if is_firearm and ammo_type:
                 self.inventory[ammo_type] -= 1
@@ -236,11 +335,13 @@ class Survivor:
             attacked = False
             for z in zombies:
                 if z.is_alive and z.z == self.z and math.hypot(z.x - self.x, z.y - self.y) <= attack_range:
-                    z.hp -= damage
-                    if z.hp <= 0:
-                        z.is_alive = False
+                    z.take_targeted_damage(damage)
+                    if not z.is_alive:
                         self.kills += 1
                         self.score += 20.0
+                        self.fear = max(0.0, self.fear - 15.0)
+                        self.panic = max(0.0, self.panic - 20.0)
+                        self.morale = min(100.0, self.morale + 10.0)
                     attacked = True
                     if noise_events is not None:
                         noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=noise_vol, source_type="attack"))

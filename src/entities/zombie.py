@@ -27,6 +27,17 @@ class Zombie:
         self.target = None
         self.investigate_pos = None
 
+    def take_targeted_damage(self, amount, target_part=None):
+        if target_part == "head" or (target_part is None and random.random() < 0.25):
+            damage = amount * 2.0
+        else:
+            damage = amount
+
+        self.hp -= damage
+        if self.hp <= 0:
+            self.is_alive = False
+        return damage
+
     def has_line_of_sight(self, tx, ty, tz, world):
         if abs(tz - self.z) > 1:
             return False

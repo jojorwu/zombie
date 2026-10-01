@@ -30,32 +30,45 @@ class BallisticsUtility:
             "max_range": 35.0,
             "base_damage": 110.0,
         },
+        ".357magnum": {
+            "mass_kg": 0.010,
+            "muzzle_velocity": 440.0,
+            "drag_coeff": 0.18,
+            "max_range": 65.0,
+            "base_damage": 85.0,
+        },
+        ".308sniper": {
+            "mass_kg": 0.011,
+            "muzzle_velocity": 850.0,
+            "drag_coeff": 0.30,
+            "max_range": 300.0,
+            "base_damage": 160.0,
+        },
+        "arrow": {
+            "mass_kg": 0.025,
+            "muzzle_velocity": 90.0,
+            "drag_coeff": 0.40,
+            "max_range": 40.0,
+            "base_damage": 75.0,
+        },
     }
 
     @classmethod
     def calculate_trajectory(cls, caliber, distance_m, wind_speed_kmh=0.0, wind_angle_rad=0.0):
-        """
-        Calculates terminal velocity, flight time, kinetic energy, wind drift, and damage at target distance.
-        """
         data = cls.CALIBERS.get(caliber, cls.CALIBERS["9mm"])
         v0 = data["muzzle_velocity"]
         m = data["mass_kg"]
         cd = data["drag_coeff"]
 
-        # Approximate flight time t = d / v_avg
-        # v(t) = v0 * exp(-cd * t)
         decay_factor = math.exp(-cd * (distance_m / 100.0))
         terminal_velocity = v0 * decay_factor
         flight_time = distance_m / max(50.0, (v0 + terminal_velocity) / 2.0)
 
-        # Kinetic Energy E_k = 0.5 * m * v^2 (Joules)
         kinetic_energy = 0.5 * m * (terminal_velocity ** 2)
 
-        # Crosswind drift
         crosswind_m_s = (wind_speed_kmh / 3.6) * math.sin(wind_angle_rad)
         wind_drift_m = 0.5 * crosswind_m_s * (flight_time ** 2)
 
-        # Damage scaling based on kinetic energy retention
         damage_scale = max(0.2, terminal_velocity / v0)
         final_damage = data["base_damage"] * damage_scale
 

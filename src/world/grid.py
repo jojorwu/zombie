@@ -133,10 +133,10 @@ TILE_WALKABLE = {
     TileType.UNDERGROUND_FLOOR: True,
     TileType.LADDER: True,
     TileType.PARKING: True,
-    TileType.ROOF: True,
-    TileType.TRASH_CAN: True,
-    TileType.CONTAINER_BOX: True,
-    TileType.MAILBOX: True,
+    TileType.ROOF: False,
+    TileType.TRASH_CAN: False,
+    TileType.CONTAINER_BOX: False,
+    TileType.MAILBOX: False,
     TileType.ROAD_HIGHWAY: True,
     TileType.SIDEWALK: True,
     TileType.CROSSWALK: True,
@@ -184,7 +184,13 @@ _OPAQUE_FOW_TILES = {
     TileType.BUILDING_WALL,
     TileType.UNDERGROUND_WALL,
     TileType.FURNITURE,
-    TileType.AIR
+    TileType.AIR,
+    TileType.TABLE,
+    TileType.CABINET,
+    TileType.REFRIGERATOR,
+    TileType.KITCHEN_COUNTER,
+    TileType.SOFA,
+    TileType.BED,
 }
 
 
@@ -443,7 +449,6 @@ class World:
         y, m, d, hh, mm = self.get_time_components()
         time_hours = hh + (mm / 60.0)
 
-        # Solar position & zenith elevation angle
         solar_angle = ((time_hours - 6.0) / 24.0) * 2.0 * math.pi
         solar_elevation = math.sin(solar_angle)
 
@@ -453,7 +458,6 @@ class World:
         else:
             solar_light = max(0.0, 0.15 + solar_elevation * 0.3)
 
-        # Lunar position & moon phase (29.5 day synodic month cycle)
         day_total = (y - 1) * 360 + (m - 1) * 30 + d
         lunar_phase_day = (day_total % 29.5)
         moon_fullness = 0.5 + 0.5 * math.cos(((lunar_phase_day - 14.75) / 29.5) * 2.0 * math.pi)

@@ -123,16 +123,20 @@ class Survivor:
             self.energy = max(0.0, self.energy - 0.2)
 
         if self.hunger < 35:
-            food_items = [ResourceItem.MRE, ResourceItem.CANNED_FOOD, ResourceItem.BREAD, ResourceItem.MEAT, ResourceItem.APPLE, ResourceItem.FOOD]
+            food_items = [
+                ResourceItem.STEAK, ResourceItem.STEW, ResourceItem.CANNED_TUNA, ResourceItem.CANNED_BEANS,
+                ResourceItem.MRE, ResourceItem.CANNED_FOOD, ResourceItem.CHOCOLATE, ResourceItem.CEREAL,
+                ResourceItem.BREAD, ResourceItem.MEAT, ResourceItem.APPLE, ResourceItem.FOOD
+            ]
             for f_item in food_items:
                 if self.inventory.get(f_item, 0) > 0:
-                    if f_item == ResourceItem.CANNED_FOOD:
+                    if f_item in (ResourceItem.CANNED_FOOD, ResourceItem.CANNED_BEANS, ResourceItem.CANNED_TUNA):
                         if self.inventory.get(ResourceItem.CAN_OPENER, 0) > 0 or self.inventory.get(ResourceItem.CHEF_KNIFE, 0) > 0 or self.inventory.get(ResourceItem.KNIFE, 0) > 0:
                             self.inventory[f_item] -= 1
-                            self.hunger = min(100.0, self.hunger + 50)
+                            self.hunger = min(100.0, self.hunger + 55)
                             break
                     else:
-                        gain = 50.0 if f_item in (ResourceItem.MRE, ResourceItem.MEAT) else 35.0
+                        gain = 55.0 if f_item in (ResourceItem.STEAK, ResourceItem.STEW, ResourceItem.MRE, ResourceItem.MEAT) else 35.0
                         self.inventory[f_item] -= 1
                         self.hunger = min(100.0, self.hunger + gain)
                         break
@@ -225,11 +229,11 @@ class Survivor:
                     ftile = world.grid[z_idx, fy, fx]
                     if ftile in (TileType.CABINET, TileType.REFRIGERATOR, TileType.KITCHEN_COUNTER, TileType.TABLE):
                         if ftile == TileType.REFRIGERATOR:
-                            found_item = random.choice([ResourceItem.MEAT, ResourceItem.BREAD, ResourceItem.WATER_BOTTLE, ResourceItem.APPLE])
+                            found_item = random.choice([ResourceItem.STEAK, ResourceItem.STEW, ResourceItem.MEAT, ResourceItem.BREAD, ResourceItem.WATER_BOTTLE, ResourceItem.CHEESE])
                         elif ftile == TileType.CABINET:
-                            found_item = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CAN_OPENER, ResourceItem.PISTOL_AMMO, ResourceItem.MEDKIT])
+                            found_item = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CANNED_BEANS, ResourceItem.CANNED_TUNA, ResourceItem.CAN_OPENER, ResourceItem.PISTOL_AMMO, ResourceItem.MEDKIT])
                         else:
-                            found_item = random.choice([ResourceItem.CHEF_KNIFE, ResourceItem.FRYING_PAN, ResourceItem.POT, ResourceItem.CUTTING_BOARD])
+                            found_item = random.choice([ResourceItem.CHEF_KNIFE, ResourceItem.KATANA, ResourceItem.FRYING_PAN, ResourceItem.POT, ResourceItem.CUTTING_BOARD])
 
                         self.inventory[found_item] = self.inventory.get(found_item, 0) + 1
                         self.score += 10.0
@@ -242,7 +246,11 @@ class Survivor:
         is_firearm = False
         ammo_type = None
 
-        firearms = [ResourceItem.RIFLE, ResourceItem.SHOTGUN, ResourceItem.PISTOL]
+        firearms = [
+            ResourceItem.SNIPER_RIFLE, ResourceItem.ASSAULT_RIFLE, ResourceItem.RIFLE,
+            ResourceItem.SHOTGUN, ResourceItem.MAGNUM, ResourceItem.SMG,
+            ResourceItem.REVOLVER, ResourceItem.PISTOL, ResourceItem.CROSSBOW
+        ]
         for fa in firearms:
             if self.inventory.get(fa, 0) > 0:
                 req_ammo = WEAPON_STATS[fa]["ammo"]
@@ -253,7 +261,11 @@ class Survivor:
                     break
 
         if not best_weapon:
-            melee_options = [ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.BASEBALL_BAT, ResourceItem.FRYING_PAN, ResourceItem.KNIFE, ResourceItem.CHEF_KNIFE, ResourceItem.WEAPON]
+            melee_options = [
+                ResourceItem.KATANA, ResourceItem.SLEDGEHAMMER, ResourceItem.MACHETE, ResourceItem.SPEAR,
+                ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.BASEBALL_BAT, ResourceItem.PIPE,
+                ResourceItem.FRYING_PAN, ResourceItem.KNIFE, ResourceItem.CHEF_KNIFE, ResourceItem.WEAPON
+            ]
             for mw in melee_options:
                 if self.inventory.get(mw, 0) > 0:
                     best_weapon = mw
@@ -265,8 +277,28 @@ class Survivor:
         stype = "pistol_shot"
 
         if is_firearm and ammo_type:
-            caliber_map = {ResourceItem.RIFLE: "5.56mm", ResourceItem.SHOTGUN: "12gauge", ResourceItem.PISTOL: "9mm"}
-            stype_map = {ResourceItem.RIFLE: "rifle_shot", ResourceItem.SHOTGUN: "shotgun_shot", ResourceItem.PISTOL: "pistol_shot"}
+            caliber_map = {
+                ResourceItem.SNIPER_RIFLE: ".308sniper",
+                ResourceItem.ASSAULT_RIFLE: "5.56mm",
+                ResourceItem.RIFLE: "5.56mm",
+                ResourceItem.SHOTGUN: "12gauge",
+                ResourceItem.MAGNUM: ".357magnum",
+                ResourceItem.SMG: "9mm",
+                ResourceItem.REVOLVER: "9mm",
+                ResourceItem.PISTOL: "9mm",
+                ResourceItem.CROSSBOW: "arrow",
+            }
+            stype_map = {
+                ResourceItem.SNIPER_RIFLE: "rifle_shot",
+                ResourceItem.ASSAULT_RIFLE: "rifle_shot",
+                ResourceItem.RIFLE: "rifle_shot",
+                ResourceItem.SHOTGUN: "shotgun_shot",
+                ResourceItem.MAGNUM: "pistol_shot",
+                ResourceItem.SMG: "pistol_shot",
+                ResourceItem.REVOLVER: "pistol_shot",
+                ResourceItem.PISTOL: "pistol_shot",
+                ResourceItem.CROSSBOW: "footsteps",
+            }
             stype = stype_map.get(best_weapon, "pistol_shot")
             caliber = caliber_map.get(best_weapon, "9mm")
             ballistics = BallisticsUtility.calculate_trajectory(

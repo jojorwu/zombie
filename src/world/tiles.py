@@ -37,6 +37,21 @@ class TileType:
     REFRIGERATOR = 34
     KITCHEN_COUNTER = 35
 
+    # New Specialized Building Furniture
+    BOOKSHELF = 36
+    OFFICE_DESK = 37
+    MEDICAL_BED = 38
+    GUN_RACK = 39
+    WEAPON_SAFE = 40
+    CASH_REGISTER = 41
+    STORE_SHELF = 42
+    SCHOOL_DESK = 43
+    WORKBENCH = 44
+    LOCKER = 45
+    TV_STAND = 46
+    DISPLAY_CASE = 47
+    FACTORY_RACK = 48
+
 
 class BuildingType:
     SUPERMARKET = "supermarket"
@@ -89,6 +104,19 @@ TILE_COLORS = {
     TileType.CABINET: (120, 80, 40),
     TileType.REFRIGERATOR: (220, 225, 230),
     TileType.KITCHEN_COUNTER: (150, 150, 150),
+    TileType.BOOKSHELF: (110, 70, 30),
+    TileType.OFFICE_DESK: (140, 100, 60),
+    TileType.MEDICAL_BED: (240, 240, 250),
+    TileType.GUN_RACK: (80, 80, 90),
+    TileType.WEAPON_SAFE: (60, 65, 70),
+    TileType.CASH_REGISTER: (200, 180, 100),
+    TileType.STORE_SHELF: (170, 150, 120),
+    TileType.SCHOOL_DESK: (165, 125, 85),
+    TileType.WORKBENCH: (130, 90, 50),
+    TileType.LOCKER: (100, 110, 120),
+    TileType.TV_STAND: (50, 50, 60),
+    TileType.DISPLAY_CASE: (210, 230, 240),
+    TileType.FACTORY_RACK: (90, 95, 100),
 }
 
 BUILDING_COLORS = {
@@ -142,6 +170,19 @@ TILE_WALKABLE = {
     TileType.CABINET: False,
     TileType.REFRIGERATOR: False,
     TileType.KITCHEN_COUNTER: False,
+    TileType.BOOKSHELF: False,
+    TileType.OFFICE_DESK: False,
+    TileType.MEDICAL_BED: False,
+    TileType.GUN_RACK: False,
+    TileType.WEAPON_SAFE: False,
+    TileType.CASH_REGISTER: False,
+    TileType.STORE_SHELF: False,
+    TileType.SCHOOL_DESK: False,
+    TileType.WORKBENCH: False,
+    TileType.LOCKER: False,
+    TileType.TV_STAND: False,
+    TileType.DISPLAY_CASE: False,
+    TileType.FACTORY_RACK: False,
 }
 
 TILE_SPEED_MODIFIERS = {

@@ -1,7 +1,7 @@
+import math
 import random
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
-
 from src.world.tiles import TileType, BuildingType, TILE_COLORS, BUILDING_COLORS, TILE_WALKABLE, TILE_SPEED_MODIFIERS
 from src.world.chunk import ChunkManager
 from src.world.weather import WeatherManager
@@ -42,11 +42,11 @@ class World:
     def idx_to_z(self, idx):
         return idx + self.z_min
 
-    def generate_world(self):
-        self.generator.generate()
-
     def build_chunk_building(self, bx, by, bw, bh, btype):
         self.generator.build_chunk_building(bx, by, bw, bh, btype)
+
+    def generate_world(self):
+        self.generator.generate()
 
     def is_walkable(self, x, y, z=0):
         ix, iy = int(x), int(y)

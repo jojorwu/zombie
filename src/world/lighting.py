@@ -17,6 +17,19 @@ _OPAQUE_FOW_TILES = {
     TileType.KITCHEN_COUNTER,
     TileType.SOFA,
     TileType.BED,
+    TileType.BOOKSHELF,
+    TileType.OFFICE_DESK,
+    TileType.MEDICAL_BED,
+    TileType.GUN_RACK,
+    TileType.WEAPON_SAFE,
+    TileType.CASH_REGISTER,
+    TileType.STORE_SHELF,
+    TileType.SCHOOL_DESK,
+    TileType.WORKBENCH,
+    TileType.LOCKER,
+    TileType.TV_STAND,
+    TileType.DISPLAY_CASE,
+    TileType.FACTORY_RACK,
 }
 
 

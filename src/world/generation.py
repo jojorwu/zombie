@@ -1,12 +1,12 @@
 import math
 import random
 import numpy as np
-from src.world.tiles import TileType, BuildingType
+from src.world.grid import TileType, BuildingType
 from utils.p_np_math import PolynomialVerifier
 
 
 class WorldGenerator:
-    """Handles terrain generation, district partitioning, road networks, and building placement."""
+    """Handles terrain generation, district partitioning, road networks, and building placement with unique furniture layouts."""
     def __init__(self, world):
         self.world = world
 
@@ -57,10 +57,38 @@ class WorldGenerator:
 
             if z == 0:
                 world.grid[z_idx, min(world.height - 1, by + bh - 1), min(world.width - 1, bx + 2)] = TileType.DOOR
-                world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.CABINET
-                world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.REFRIGERATOR if btype in (BuildingType.RESIDENTIAL, BuildingType.SUPERMARKET) else TileType.TABLE
-                world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.KITCHEN_COUNTER if btype == BuildingType.RESIDENTIAL else TileType.SOFA
-                world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.BED if btype in (BuildingType.RESIDENTIAL, BuildingType.DORMITORY) else TileType.CHAIR
+
+                if btype in (BuildingType.SUPERMARKET, BuildingType.STORE):
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.STORE_SHELF
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.REFRIGERATOR
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.STORE_SHELF
+                    world.grid[z_idx, min(world.height - 1, by + 3), min(world.width - 1, bx + 1)] = TileType.CASH_REGISTER
+                elif btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION):
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.GUN_RACK
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.WEAPON_SAFE
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.LOCKER
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.OFFICE_DESK
+                elif btype == BuildingType.HOSPITAL:
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.MEDICAL_BED
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.CABINET
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.MEDICAL_BED
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.OFFICE_DESK
+                elif btype in (BuildingType.SCHOOL, BuildingType.DORMITORY):
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.SCHOOL_DESK
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.BOOKSHELF
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.LOCKER
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.BED
+                elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.FACTORY_RACK
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.WORKBENCH
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.CONTAINER_BOX
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.LOCKER
+                else: # Residential / default
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.CABINET
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.REFRIGERATOR
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.KITCHEN_COUNTER
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.SOFA
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 3)] = TileType.TV_STAND
 
                 if bx + bw + 1 < world.width and by + bh < world.height:
                     for px in range(bx + bw, min(world.width, bx + bw + 2)):

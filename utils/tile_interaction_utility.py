@@ -4,7 +4,7 @@ from src.entities.item import ResourceItem
 class TileInteractionUtility:
     """
     Utility module for managing tile and furniture interactions:
-    - Moving / pushing furniture (cabinets, tables, sofas, beds) to create barricades or unblock paths
+    - Moving / pushing furniture (cabinets, tables, sofas, beds, safes, racks) to create barricades or unblock paths
     - Dismantling furniture for wood and metal resources
     - Fast spatial search for nearby furniture
     """
@@ -16,6 +16,19 @@ class TileInteractionUtility:
         TileType.CABINET: {"weight": 2.5, "dismantle_wood": 4, "dismantle_metal": 2},
         TileType.REFRIGERATOR: {"weight": 3.0, "dismantle_wood": 0, "dismantle_metal": 5},
         TileType.KITCHEN_COUNTER: {"weight": 2.0, "dismantle_wood": 3, "dismantle_metal": 2},
+        TileType.BOOKSHELF: {"weight": 2.5, "dismantle_wood": 5, "dismantle_metal": 1},
+        TileType.OFFICE_DESK: {"weight": 2.0, "dismantle_wood": 4, "dismantle_metal": 2},
+        TileType.MEDICAL_BED: {"weight": 2.5, "dismantle_wood": 1, "dismantle_metal": 5},
+        TileType.GUN_RACK: {"weight": 2.0, "dismantle_wood": 2, "dismantle_metal": 4},
+        TileType.WEAPON_SAFE: {"weight": 4.0, "dismantle_wood": 0, "dismantle_metal": 8},
+        TileType.CASH_REGISTER: {"weight": 1.0, "dismantle_wood": 0, "dismantle_metal": 3},
+        TileType.STORE_SHELF: {"weight": 2.5, "dismantle_wood": 2, "dismantle_metal": 4},
+        TileType.SCHOOL_DESK: {"weight": 1.0, "dismantle_wood": 2, "dismantle_metal": 1},
+        TileType.WORKBENCH: {"weight": 3.0, "dismantle_wood": 5, "dismantle_metal": 4},
+        TileType.LOCKER: {"weight": 2.5, "dismantle_wood": 0, "dismantle_metal": 5},
+        TileType.TV_STAND: {"weight": 1.5, "dismantle_wood": 2, "dismantle_metal": 2},
+        TileType.DISPLAY_CASE: {"weight": 2.0, "dismantle_wood": 2, "dismantle_metal": 3},
+        TileType.FACTORY_RACK: {"weight": 3.5, "dismantle_wood": 0, "dismantle_metal": 7},
     }
 
     MOVABLE_FURNITURE_TILES = set(MOVABLE_FURNITURE.keys())

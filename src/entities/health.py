@@ -1,5 +1,7 @@
+from typing import Dict, Any, Tuple
+
 import random
-from src.entities.item import ARMOR_STATS, ResourceItem
+from src.entities.item import ARMOR_STATS
 
 
 class BodyPart:
@@ -18,8 +20,10 @@ class AnatomicalHealth:
     - Torso: Vital body core, high health pool, body armor/jacket protection.
     - Arms/Legs: Limb protection via pads, affects movement & attack power.
     """
-    def __init__(self, max_head=35.0, max_torso=100.0, max_arm=40.0, max_leg=45.0):
-        self.parts = {
+    __slots__ = ("parts", "armor", "total_bleeding")
+
+    def __init__(self, max_head: float = 35.0, max_torso: float = 100.0, max_arm: float = 40.0, max_leg: float = 45.0) -> None:
+        self.parts: Dict[str, Dict[str, Any]] = {
             BodyPart.HEAD: {"hp": max_head, "max": max_head, "bleeding": 0.0, "crippled": False},
             BodyPart.TORSO: {"hp": max_torso, "max": max_torso, "bleeding": 0.0, "crippled": False},
             BodyPart.LEFT_ARM: {"hp": max_arm, "max": max_arm, "bleeding": 0.0, "crippled": False},
@@ -27,25 +31,25 @@ class AnatomicalHealth:
             BodyPart.LEFT_LEG: {"hp": max_leg, "max": max_leg, "bleeding": 0.0, "crippled": False},
             BodyPart.RIGHT_LEG: {"hp": max_leg, "max": max_leg, "bleeding": 0.0, "crippled": False},
         }
-        self.armor = {
+        self.armor: Dict[str, Any] = {
             "head": None,
             "torso": None,
             "limbs": None,
         }
-        self.total_bleeding = 0.0
+        self.total_bleeding: float = 0.0
 
     @property
-    def overall_health_percent(self):
+    def overall_health_percent(self) -> float:
         total_hp = sum(p["hp"] for p in self.parts.values())
         total_max = sum(p["max"] for p in self.parts.values())
         return max(0.0, min(100.0, (total_hp / total_max) * 100.0))
 
     @property
-    def is_dead(self):
+    def is_dead(self) -> bool:
         return self.parts[BodyPart.HEAD]["hp"] <= 0 or self.parts[BodyPart.TORSO]["hp"] <= 0
 
     @property
-    def movement_speed_multiplier(self):
+    def movement_speed_multiplier(self) -> float:
         multiplier = 1.0
         if self.parts[BodyPart.LEFT_LEG]["crippled"]:
             multiplier *= 0.65
@@ -56,7 +60,7 @@ class AnatomicalHealth:
         return max(0.2, multiplier)
 
     @property
-    def attack_damage_multiplier(self):
+    def attack_damage_multiplier(self) -> float:
         multiplier = 1.0
         if self.parts[BodyPart.LEFT_ARM]["crippled"]:
             multiplier *= 0.8
@@ -64,12 +68,12 @@ class AnatomicalHealth:
             multiplier *= 0.7
         return max(0.3, multiplier)
 
-    def equip_armor(self, armor_type):
+    def equip_armor(self, armor_type: str) -> None:
         if armor_type in ARMOR_STATS:
             slot = ARMOR_STATS[armor_type]["slot"]
             self.armor[slot] = armor_type
 
-    def apply_targeted_damage(self, amount, target_part=None):
+    def apply_targeted_damage(self, amount: float, target_part: str = None) -> Tuple[str, float, bool]:
         """Applies damage to specific or probabilistic body part with armor absorption."""
         if target_part is None:
             roll = random.random()
@@ -105,7 +109,7 @@ class AnatomicalHealth:
         self.total_bleeding = sum(p["bleeding"] for p in self.parts.values())
         return target_part, damage, part["crippled"]
 
-    def update_bleeding(self):
+    def update_bleeding(self) -> float:
         """Processes tick-by-tick bleeding damage across all limbs."""
         bleed_dmg = sum(p["bleeding"] for p in self.parts.values())
         if bleed_dmg > 0:
@@ -119,7 +123,7 @@ class AnatomicalHealth:
         self.total_bleeding = sum(p["bleeding"] for p in self.parts.values())
         return bleed_dmg
 
-    def treat_wounds(self):
+    def treat_wounds(self) -> None:
         """Uses medical supplies to bandage cuts and stop bleeding."""
         for p in self.parts.values():
             p["bleeding"] = 0.0

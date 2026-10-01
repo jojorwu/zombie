@@ -6,7 +6,8 @@ _FOW_RAYS = tuple(
     (math.cos(i * (2 * math.pi / _FOW_NUM_RAYS)), math.sin(i * (2 * math.pi / _FOW_NUM_RAYS)))
     for i in range(_FOW_NUM_RAYS)
 )
-_OPAQUE_FOW_TILES = {
+
+_OPAQUE_FOW_TILES = frozenset({
     TileType.BUILDING_WALL,
     TileType.UNDERGROUND_WALL,
     TileType.FURNITURE,
@@ -30,12 +31,14 @@ _OPAQUE_FOW_TILES = {
     TileType.TV_STAND,
     TileType.DISPLAY_CASE,
     TileType.FACTORY_RACK,
-}
+})
 
 
 class DynamicLight:
     """Represents a localized dynamic point/cone light source (muzzle flash, flashlight, headlight, lightning)."""
-    def __init__(self, x, y, z, radius=8.0, color=(255, 255, 200), intensity=1.0, lifetime=1):
+    __slots__ = ("x", "y", "z", "radius", "color", "intensity", "lifetime")
+
+    def __init__(self, x: float, y: float, z: int, radius: float = 8.0, color=(255, 255, 200), intensity: float = 1.0, lifetime: int = 1):
         self.x = float(x)
         self.y = float(y)
         self.z = int(z)
@@ -44,16 +47,18 @@ class DynamicLight:
         self.intensity = float(intensity)
         self.lifetime = lifetime
 
-    def update(self):
+    def update(self) -> None:
         self.lifetime -= 1
 
 
 class LightingEngine:
     """Handles ambient illumination (solar zenith & moon phases) and raycasted Fog of War (FOW)."""
+    __slots__ = ("world",)
+
     def __init__(self, world):
         self.world = world
 
-    def get_light_level(self, z=0):
+    def get_light_level(self, z: int = 0) -> float:
         """Calculates solar zenith elevation angle and 29.5-day moon phase illumination."""
         if z < 0:
             return 0.05 if not self.world.is_power_out() else 0.02
@@ -64,7 +69,6 @@ class LightingEngine:
         solar_angle = ((time_hours - 6.0) / 24.0) * 2.0 * math.pi
         solar_elevation = math.sin(solar_angle)
 
-        solar_light = 0.0
         if solar_elevation > 0:
             solar_light = math.sin(solar_elevation * (math.pi / 2.0)) * 0.85 + 0.15
         else:
@@ -87,7 +91,8 @@ class LightingEngine:
 
         return max(0.08, min(1.0, ambient))
 
-    def compute_fog_of_war(self, x, y, radius=8, z=0):
+    def compute_fog_of_war(self, x: float, y: float, radius: int = 8, z: int = 0) -> set:
+        """Fast raycasted Fog of War (FOW) computation using pre-computed direction vectors."""
         ix, iy = int(x), int(y)
         z_idx = self.world.z_to_idx(z)
         visible_tiles = {(ix, iy)}

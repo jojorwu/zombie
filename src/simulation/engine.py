@@ -130,20 +130,19 @@ class SimulationEngine:
 
             for floor_z in range(b_bottom, b_top + 1):
                 lx, ly = bx + 2, by + 1
-                if self.world.is_walkable(lx, ly, floor_z):
-                    if floor_z < 0:
-                        if btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION):
-                            base_loot = [ResourceItem.SNIPER_RIFLE, ResourceItem.ASSAULT_RIFLE, ResourceItem.MAGNUM, ResourceItem.SNIPER_AMMO, ResourceItem.KATANA]
-                        elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
-                            base_loot = [ResourceItem.FUEL, ResourceItem.SLEDGEHAMMER, ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.METAL]
-                        else:
-                            base_loot = [ResourceItem.CANNED_FOOD, ResourceItem.CANNED_TUNA, ResourceItem.MRE, ResourceItem.MEDKIT, ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE]
-                        loot_type = random.choice(base_loot)
+                if floor_z < 0:
+                    if btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION):
+                        base_loot = [ResourceItem.SNIPER_RIFLE, ResourceItem.ASSAULT_RIFLE, ResourceItem.MAGNUM, ResourceItem.SNIPER_AMMO, ResourceItem.KATANA]
+                    elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
+                        base_loot = [ResourceItem.FUEL, ResourceItem.SLEDGEHAMMER, ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.METAL]
                     else:
-                        loot_type = random.choice(possible_loot)
+                        base_loot = [ResourceItem.CANNED_FOOD, ResourceItem.CANNED_TUNA, ResourceItem.MRE, ResourceItem.MEDKIT, ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE]
+                    loot_type = random.choice(base_loot)
+                else:
+                    loot_type = random.choice(possible_loot)
 
-                    amt = random.randint(2, 6) if "ammo" in loot_type or loot_type == ResourceItem.BOLTS else random.randint(1, 2)
-                    self.items.append(self.factory.create_item(lx + 0.5, ly + 0.5, loot_type, amount=amt, z=floor_z))
+                amt = random.randint(2, 6) if "ammo" in loot_type or loot_type == ResourceItem.BOLTS else random.randint(1, 2)
+                self.items.append(self.factory.create_item(lx + 0.5, ly + 0.5, loot_type, amount=amt, z=floor_z))
 
     def reset_generation(self):
         self._recycle_entities()

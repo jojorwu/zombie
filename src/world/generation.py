@@ -6,12 +6,14 @@ from utils.p_np_math import PolynomialVerifier
 
 
 class WorldGenerator:
-    """Handles terrain generation, settlement classification, winding rivers, dense forest biomes, and multi-floor buildings up to Z=5."""
+    """Handles terrain generation, settlement classification, winding rivers, dense forest biomes, and multi-floor buildings."""
+    __slots__ = ("world", "settlement_type")
+
     def __init__(self, world, settlement_type: str = SettlementType.STANDARD_CITY):
         self.world = world
         self.settlement_type = settlement_type
 
-    def build_chunk_building(self, bx, by, bw, bh, btype):
+    def build_chunk_building(self, bx: int, by: int, bw: int, bh: int, btype: str) -> None:
         world = self.world
         building_info = {
             "x": bx, "y": by, "w": bw, "h": bh, "type": btype
@@ -52,15 +54,10 @@ class WorldGenerator:
             for y in range(by, min(world.height, by + bh)):
                 for x in range(bx, min(world.width, bx + bw)):
                     if is_underground:
-                        if x == bx or x == bx + bw - 1 or y == by or y == by + bh - 1:
-                            world.grid[z_idx, y, x] = TileType.UNDERGROUND_WALL
-                        else:
-                            world.grid[z_idx, y, x] = TileType.UNDERGROUND_FLOOR
+                        tile = TileType.UNDERGROUND_WALL if (x == bx or x == bx + bw - 1 or y == by or y == by + bh - 1) else TileType.UNDERGROUND_FLOOR
                     else:
-                        if x == bx or x == bx + bw - 1 or y == by or y == by + bh - 1:
-                            world.grid[z_idx, y, x] = TileType.BUILDING_WALL
-                        else:
-                            world.grid[z_idx, y, x] = TileType.BUILDING_FLOOR
+                        tile = TileType.BUILDING_WALL if (x == bx or x == bx + bw - 1 or y == by or y == by + bh - 1) else TileType.BUILDING_FLOOR
+                    world.grid[z_idx, y, x] = tile
                     world.building_grid[(x, y, z)] = btype
 
             if z == 0:
@@ -92,7 +89,7 @@ class WorldGenerator:
                     world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.WORKBENCH
                     world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.CONTAINER_BOX
                     world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 3)] = TileType.LOCKER
-                else: # Residential / default
+                else:
                     world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 1)] = TileType.CABINET
                     world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.REFRIGERATOR
                     world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 1)] = TileType.KITCHEN_COUNTER
@@ -115,7 +112,7 @@ class WorldGenerator:
 
             world.grid[z_idx, min(world.height - 1, by + 3), min(world.width - 1, bx + 3)] = TileType.STAIRS if (z % 2 == 0) else TileType.LADDER
 
-    def generate(self):
+    def generate(self) -> None:
         """High-performance vectorized world generator."""
         world = self.world
         g_idx = world.z_to_idx(0)
@@ -143,7 +140,6 @@ class WorldGenerator:
                 else:
                     chunk_districts[(cx, cy)] = "residential"
 
-        # Winding River Generation with Bridges
         num_rivers = random.randint(1, 2)
         for _ in range(num_rivers):
             rx = random.randint(4, world.width - 5)
@@ -160,7 +156,6 @@ class WorldGenerator:
                 ry += 1
                 rx += random.choice([-1, 0, 1])
 
-        # Road Grid Generation based on Settlement Type
         road_tile = TileType.DIRT_ROAD if self.settlement_type == SettlementType.VILLAGE else TileType.ROAD
         world.grid[g_idx, ::16, :] = TileType.ROAD_HIGHWAY if self.settlement_type != SettlementType.VILLAGE else TileType.DIRT_ROAD
         world.grid[g_idx, :, ::16] = TileType.ROAD_HIGHWAY if self.settlement_type != SettlementType.VILLAGE else TileType.DIRT_ROAD
@@ -170,7 +165,6 @@ class WorldGenerator:
         road_mask_8_y = (world.grid[g_idx, :, ::8] == TileType.GRASS)
         world.grid[g_idx, :, ::8][road_mask_8_y] = road_tile
 
-        # Sidewalks
         if self.settlement_type != SettlementType.VILLAGE:
             road_tiles = (world.grid[g_idx] == TileType.ROAD) | (world.grid[g_idx] == TileType.ROAD_HIGHWAY)
             grass_tiles = (world.grid[g_idx] == TileType.GRASS) | (world.grid[g_idx] == TileType.GRASS_DRY)

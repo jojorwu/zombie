@@ -6,7 +6,7 @@ class TileInteractionUtility:
     Utility module for managing tile and furniture interactions:
     - Moving / pushing furniture (cabinets, tables, sofas, beds) to create barricades or unblock paths
     - Dismantling furniture for wood and metal resources
-    - Barricading doors and entrances
+    - Fast spatial search for nearby furniture
     """
     MOVABLE_FURNITURE = {
         TileType.TABLE: {"weight": 1.0, "dismantle_wood": 2, "dismantle_metal": 1},
@@ -18,6 +18,30 @@ class TileInteractionUtility:
         TileType.KITCHEN_COUNTER: {"weight": 2.0, "dismantle_wood": 3, "dismantle_metal": 2},
     }
 
+    MOVABLE_FURNITURE_TILES = set(MOVABLE_FURNITURE.keys())
+
+    @staticmethod
+    def is_movable_furniture(tile_type):
+        """Fast O(1) check if tile is movable furniture."""
+        return tile_type in TileInteractionUtility.MOVABLE_FURNITURE_TILES
+
+    @staticmethod
+    def get_adjacent_furniture(world, x, y, z):
+        """Returns list of (fx, fy, tile_type) for adjacent movable furniture."""
+        z_idx = world.z_to_idx(z)
+        ix, iy = int(x), int(y)
+        w, h = world.width, world.height
+        grid_z = world.grid[z_idx]
+        movable = []
+
+        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            fx, fy = ix + dx, iy + dy
+            if 0 <= fx < w and 0 <= fy < h:
+                tile = grid_z[fy, fx]
+                if tile in TileInteractionUtility.MOVABLE_FURNITURE_TILES:
+                    movable.append((fx, fy, tile))
+        return movable
+
     @staticmethod
     def push_furniture(world, x, y, z, push_dx, push_dy):
         """Pushes furniture at (x, y, z) in direction (push_dx, push_dy) if target tile is walkable floor."""
@@ -27,7 +51,7 @@ class TileInteractionUtility:
             return False
 
         tile = world.grid[z_idx, iy, ix]
-        if tile not in TileInteractionUtility.MOVABLE_FURNITURE:
+        if tile not in TileInteractionUtility.MOVABLE_FURNITURE_TILES:
             return False
 
         tx, ty = ix + push_dx, iy + push_dy
@@ -48,7 +72,7 @@ class TileInteractionUtility:
             return False, 0, 0
 
         tile = world.grid[z_idx, iy, ix]
-        if tile in TileInteractionUtility.MOVABLE_FURNITURE:
+        if tile in TileInteractionUtility.MOVABLE_FURNITURE_TILES:
             data = TileInteractionUtility.MOVABLE_FURNITURE[tile]
             wood = data["dismantle_wood"]
             metal = data["dismantle_metal"]

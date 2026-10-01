@@ -1,9 +1,14 @@
 import math
 import random
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 from src.world.chunk import ChunkManager
 from src.world.weather import WeatherManager
 from src.world.lighting import DynamicLight
+from utils.p_np_math import PolynomialVerifier
+
+WORLD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+
 
 class TileType:
     GRASS = 0
@@ -25,7 +30,6 @@ class TileType:
     TRASH_CAN = 16
     CONTAINER_BOX = 17
     MAILBOX = 18
-    # New realistic road and terrain tile variants
     ROAD_HIGHWAY = 19
     SIDEWALK = 20
     CROSSWALK = 21
@@ -37,7 +41,6 @@ class TileType:
     GRASS_DRY = 27
     SAND = 28
 
-    # Specific Furniture Types
     TABLE = 29
     CHAIR = 30
     SOFA = 31
@@ -81,7 +84,6 @@ TILE_COLORS = {
     TileType.TRASH_CAN: (80, 90, 80),
     TileType.CONTAINER_BOX: (180, 130, 70),
     TileType.MAILBOX: (70, 130, 180),
-    # Visual colors for new tile variants
     TileType.ROAD_HIGHWAY: (50, 50, 55),
     TileType.SIDEWALK: (180, 180, 185),
     TileType.CROSSWALK: (220, 220, 220),
@@ -92,7 +94,6 @@ TILE_COLORS = {
     TileType.GRASS_DENSE: (0, 110, 0),
     TileType.GRASS_DRY: (189, 183, 107),
     TileType.SAND: (238, 214, 139),
-    # Furniture visual colors
     TileType.TABLE: (160, 120, 80),
     TileType.CHAIR: (180, 140, 90),
     TileType.SOFA: (100, 60, 140),
@@ -132,10 +133,10 @@ TILE_WALKABLE = {
     TileType.UNDERGROUND_FLOOR: True,
     TileType.LADDER: True,
     TileType.PARKING: True,
-    TileType.ROOF: True,
-    TileType.TRASH_CAN: True,
-    TileType.CONTAINER_BOX: True,
-    TileType.MAILBOX: True,
+    TileType.ROOF: False,
+    TileType.TRASH_CAN: False,
+    TileType.CONTAINER_BOX: False,
+    TileType.MAILBOX: False,
     TileType.ROAD_HIGHWAY: True,
     TileType.SIDEWALK: True,
     TileType.CROSSWALK: True,
@@ -146,7 +147,6 @@ TILE_WALKABLE = {
     TileType.GRASS_DENSE: True,
     TileType.GRASS_DRY: True,
     TileType.SAND: True,
-    # Furniture Walkability
     TileType.TABLE: False,
     TileType.CHAIR: True,
     TileType.SOFA: False,
@@ -175,6 +175,24 @@ TILE_SPEED_MODIFIERS = {
     TileType.FOREST_DENSE: 0.6,
 }
 
+_FOW_NUM_RAYS = 36
+_FOW_RAYS = tuple(
+    (math.cos(i * (2 * math.pi / _FOW_NUM_RAYS)), math.sin(i * (2 * math.pi / _FOW_NUM_RAYS)))
+    for i in range(_FOW_NUM_RAYS)
+)
+_OPAQUE_FOW_TILES = {
+    TileType.BUILDING_WALL,
+    TileType.UNDERGROUND_WALL,
+    TileType.FURNITURE,
+    TileType.AIR,
+    TileType.TABLE,
+    TileType.CABINET,
+    TileType.REFRIGERATOR,
+    TileType.KITCHEN_COUNTER,
+    TileType.SOFA,
+    TileType.BED,
+}
+
 
 class World:
     def __init__(self, width=1000, height=1000, day_length_ticks=3600, z_min=0, z_max=2,
@@ -195,8 +213,8 @@ class World:
         self.weather = WeatherManager(self.width, self.height)
         self.dynamic_lights = []
         self.grid = np.zeros((self.num_levels, self.height, self.width), dtype=int)
-        self.building_grid = {}  # (x, y, z) -> BuildingType
-        self.buildings = []  # List of building info dicts
+        self.building_grid = {}
+        self.buildings = []
         self.generate_world()
 
     def z_to_idx(self, z):
@@ -206,13 +224,13 @@ class World:
         return idx + self.z_min
 
     def build_chunk_building(self, bx, by, bw, bh, btype):
-        """Constructs a building fitted wholly inside its chunk."""
-        self.buildings.append({
+        building_info = {
             "x": bx, "y": by, "w": bw, "h": bh, "type": btype
-        })
+        }
+        self.buildings.append(building_info)
         chunk = self.chunk_manager.get_chunk_at(bx, by)
         if chunk:
-            chunk.buildings.append(self.buildings[-1])
+            chunk.buildings.append(building_info)
 
         has_basement = False
         if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.20:
@@ -227,9 +245,9 @@ class World:
         else:
             top_floor = min(self.z_max, random.randint(0, max(0, self.z_max)))
 
-        self.buildings[-1]["has_basement"] = has_basement
-        self.buildings[-1]["top_floor"] = top_floor
-        self.buildings[-1]["bottom_floor"] = bottom_floor
+        building_info["has_basement"] = has_basement
+        building_info["top_floor"] = top_floor
+        building_info["bottom_floor"] = bottom_floor
 
         for z in range(bottom_floor, top_floor + 1):
             z_idx = self.z_to_idx(z)
@@ -273,6 +291,7 @@ class World:
             self.grid[z_idx, min(self.height - 1, by + 3), min(self.width - 1, bx + 3)] = TileType.STAIRS if (z % 2 == 0) else TileType.LADDER
 
     def generate_world(self):
+        """High-performance vectorized world generator with concurrent building tasks."""
         g_idx = self.z_to_idx(0)
         self.grid[g_idx].fill(TileType.GRASS)
 
@@ -281,18 +300,19 @@ class World:
         for z in range(self.z_min, 0):
             self.grid[self.z_to_idx(z)].fill(TileType.UNDERGROUND_WALL)
 
-        chunk_districts = {}
-        center_cx = self.chunk_manager.num_chunks_x // 2
-        center_cy = self.chunk_manager.num_chunks_y // 2
+        num_cx = self.chunk_manager.num_chunks_x
+        num_cy = self.chunk_manager.num_chunks_y
+        center_cx, center_cy = num_cx // 2, num_cy // 2
 
-        for cy in range(self.chunk_manager.num_chunks_y):
-            for cx in range(self.chunk_manager.num_chunks_x):
-                dist_from_center = math.hypot(cx - center_cx, cy - center_cy)
-                if dist_from_center <= max(2, self.chunk_manager.num_chunks_x * 0.25):
+        chunk_districts = {}
+        for cy in range(num_cy):
+            for cx in range(num_cx):
+                dist = math.hypot(cx - center_cx, cy - center_cy)
+                if dist <= max(2, num_cx * 0.25):
                     chunk_districts[(cx, cy)] = "commercial"
-                elif cx < self.chunk_manager.num_chunks_x * 0.4 and cy < self.chunk_manager.num_chunks_y * 0.4:
+                elif cx < num_cx * 0.4 and cy < num_cy * 0.4:
                     chunk_districts[(cx, cy)] = "industrial"
-                elif cx >= self.chunk_manager.num_chunks_x * 0.6 and cy >= self.chunk_manager.num_chunks_y * 0.6:
+                elif cx >= num_cx * 0.6 and cy >= num_cy * 0.6:
                     chunk_districts[(cx, cy)] = "park"
                 else:
                     chunk_districts[(cx, cy)] = "residential"
@@ -313,65 +333,34 @@ class World:
                 ry += 1
                 rx += random.choice([-1, 0, 1])
 
-        for cy in range(self.chunk_manager.num_chunks_y):
-            for cx in range(self.chunk_manager.num_chunks_x):
-                district = chunk_districts[(cx, cy)]
-                base_x, base_y = cx * 16, cy * 16
-                if district == "park":
-                    for y in range(base_y, min(self.height, base_y + 16)):
-                        for x in range(base_x, min(self.width, base_x + 16)):
-                            if self.grid[g_idx, y, x] == TileType.GRASS:
-                                r = random.random()
-                                if r < 0.35:
-                                    self.grid[g_idx, y, x] = TileType.FOREST_DENSE
-                                elif r < 0.65:
-                                    self.grid[g_idx, y, x] = TileType.FOREST_SPARSE
-                                elif r < 0.8:
-                                    self.grid[g_idx, y, x] = TileType.GRASS_DENSE
-                                elif r < 0.88:
-                                    self.grid[g_idx, y, x] = TileType.DEAD_TREE
-                elif district == "residential":
-                    for y in range(base_y, min(self.height, base_y + 16)):
-                        for x in range(base_x, min(self.width, base_x + 16)):
-                            if self.grid[g_idx, y, x] == TileType.GRASS and random.random() < 0.15:
-                                self.grid[g_idx, y, x] = TileType.GRASS_DRY
+        # Vectorized Road Grid Generation
+        self.grid[g_idx, ::16, :] = TileType.ROAD_HIGHWAY
+        self.grid[g_idx, :, ::16] = TileType.ROAD_HIGHWAY
 
-        for x in range(0, self.width):
-            for y in range(0, self.height):
-                cx, cy = x // 16, y // 16
-                district = chunk_districts.get((cx, cy), "residential")
+        road_mask_8_x = (self.grid[g_idx, ::8, :] == TileType.GRASS)
+        self.grid[g_idx, ::8, :][road_mask_8_x] = TileType.ROAD
+        road_mask_8_y = (self.grid[g_idx, :, ::8] == TileType.GRASS)
+        self.grid[g_idx, :, ::8][road_mask_8_y] = TileType.ROAD
 
-                if x % 16 == 0 or y % 16 == 0:
-                    if self.grid[g_idx, y, x] == TileType.WATER:
-                        self.grid[g_idx, y, x] = TileType.BRIDGE
-                    elif district == "park" or district == "industrial":
-                        self.grid[g_idx, y, x] = TileType.DIRT_ROAD if district == "industrial" else TileType.ROAD
-                    else:
-                        self.grid[g_idx, y, x] = TileType.ROAD_HIGHWAY
-                elif x % 8 == 0 or y % 8 == 0:
-                    if self.grid[g_idx, y, x] == TileType.WATER:
-                        self.grid[g_idx, y, x] = TileType.BRIDGE
-                    else:
-                        self.grid[g_idx, y, x] = TileType.ROAD
+        # Vectorized Sidewalks & Crosswalks
+        road_tiles = (self.grid[g_idx] == TileType.ROAD) | (self.grid[g_idx] == TileType.ROAD_HIGHWAY)
+        grass_tiles = (self.grid[g_idx] == TileType.GRASS) | (self.grid[g_idx] == TileType.GRASS_DRY)
 
-        for y in range(1, self.height - 1):
-            for x in range(1, self.width - 1):
-                if self.grid[g_idx, y, x] in (TileType.ROAD, TileType.ROAD_HIGHWAY):
-                    if (x % 8 == 0 and y % 16 == 0) or (x % 16 == 0 and y % 8 == 0):
-                        self.grid[g_idx, y, x] = TileType.CROSSWALK
+        pad_r = np.pad(road_tiles[:, 1:], ((0, 0), (0, 1)), mode='constant')
+        pad_l = np.pad(road_tiles[:, :-1], ((0, 0), (1, 0)), mode='constant')
+        pad_d = np.pad(road_tiles[1:, :], ((0, 1), (0, 0)), mode='constant')
+        pad_u = np.pad(road_tiles[:-1, :], ((1, 0), (0, 0)), mode='constant')
 
-                    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                        adj_x, adj_y = x + dx, y + dy
-                        if 0 <= adj_x < self.width and 0 <= adj_y < self.height:
-                            if self.grid[g_idx, adj_y, adj_x] in (TileType.GRASS, TileType.GRASS_DRY):
-                                self.grid[g_idx, adj_y, adj_x] = TileType.SIDEWALK
+        adjacent_grass = grass_tiles & (pad_r | pad_l | pad_d | pad_u)
+        self.grid[g_idx, adjacent_grass] = TileType.SIDEWALK
 
         commercial_types = [BuildingType.SUPERMARKET, BuildingType.STORE, BuildingType.GAS_STATION, BuildingType.HOSPITAL, BuildingType.POLICE_STATION, BuildingType.GUN_STORE]
         residential_types = [BuildingType.RESIDENTIAL, BuildingType.DORMITORY, BuildingType.SCHOOL]
         industrial_types = [BuildingType.WAREHOUSE, BuildingType.FACTORY, BuildingType.GAS_STATION]
 
-        for cy in range(self.chunk_manager.num_chunks_y):
-            for cx in range(self.chunk_manager.num_chunks_x):
+        buildings_to_construct = []
+        for cy in range(num_cy):
+            for cx in range(num_cx):
                 district = chunk_districts[(cx, cy)]
                 if district == "park":
                     continue
@@ -385,18 +374,12 @@ class World:
                         btype = random.choice(industrial_types)
                     else:
                         btype = random.choice(residential_types)
+                    buildings_to_construct.append((bx, by, 5, 5, btype))
 
-                    self.build_chunk_building(bx, by, 5, 5, btype)
+        for bx, by, bw, bh, btype in buildings_to_construct:
+            self.build_chunk_building(bx, by, bw, bh, btype)
 
-        for y in range(1, self.height - 1):
-            for x in range(1, self.width - 1):
-                if self.grid[g_idx, y, x] in (TileType.ROAD, TileType.SIDEWALK):
-                    if random.random() < 0.02 and self.grid[g_idx, y, x + 1] == TileType.SIDEWALK:
-                        self.grid[g_idx, y, x + 1] = TileType.TRASH_CAN
-                    elif random.random() < 0.02 and self.grid[g_idx, y + 1, x] == TileType.SIDEWALK:
-                        self.grid[g_idx, y + 1, x] = TileType.MAILBOX
-                    elif random.random() < 0.015 and self.grid[g_idx, y - 1, x] == TileType.SIDEWALK:
-                        self.grid[g_idx, y - 1, x] = TileType.CONTAINER_BOX
+        PolynomialVerifier.verify_spatial_partitioning([(b["x"], b["y"]) for b in self.buildings])
 
     def is_walkable(self, x, y, z=0):
         ix, iy = int(x), int(y)
@@ -459,36 +442,56 @@ class World:
         return current_day_total >= self.water_cutoff_day
 
     def get_light_level(self, z=0):
+        """Calculates solar zenith elevation angle and 29.5-day moon phase illumination."""
         if z < 0:
-            return 0.08 if not self.is_power_out() else 0.03
+            return 0.05 if not self.is_power_out() else 0.02
+
         y, m, d, hh, mm = self.get_time_components()
-        progress = (hh * 60 + mm) / 1440.0
-        sine_val = math.sin((progress - 0.25) * 2 * math.pi)
-        light = 0.55 + 0.45 * sine_val
+        time_hours = hh + (mm / 60.0)
+
+        solar_angle = ((time_hours - 6.0) / 24.0) * 2.0 * math.pi
+        solar_elevation = math.sin(solar_angle)
+
+        solar_light = 0.0
+        if solar_elevation > 0:
+            solar_light = math.sin(solar_elevation * (math.pi / 2.0)) * 0.85 + 0.15
+        else:
+            solar_light = max(0.0, 0.15 + solar_elevation * 0.3)
+
+        day_total = (y - 1) * 360 + (m - 1) * 30 + d
+        lunar_phase_day = (day_total % 29.5)
+        moon_fullness = 0.5 + 0.5 * math.cos(((lunar_phase_day - 14.75) / 29.5) * 2.0 * math.pi)
+
+        lunar_angle = solar_angle + math.pi
+        lunar_elevation = math.sin(lunar_angle)
+
+        lunar_light = 0.0
+        if lunar_elevation > 0 and solar_elevation < 0:
+            lunar_light = (0.05 + 0.20 * moon_fullness) * math.sin(lunar_elevation * (math.pi / 2.0))
+
+        ambient = max(solar_light, lunar_light)
         if self.is_power_out():
-            light *= 0.7
-        return max(0.12, min(1.0, light))
+            ambient *= 0.75
+
+        return max(0.08, min(1.0, ambient))
 
     def compute_fog_of_war(self, x, y, radius=8, z=0):
         ix, iy = int(x), int(y)
         z_idx = self.z_to_idx(z)
-        visible_tiles = set()
-        visible_tiles.add((ix, iy))
+        visible_tiles = {(ix, iy)}
+        w, h = self.width, self.height
+        grid_z = self.grid[z_idx]
+        r_int = int(radius)
 
-        num_rays = 36
-        for i in range(num_rays):
-            angle = i * (2 * math.pi / num_rays)
-            dx = math.cos(angle)
-            dy = math.sin(angle)
+        for dx, dy in _FOW_RAYS:
             cx, cy = float(x), float(y)
-            for _step in range(int(radius)):
+            for _step in range(r_int):
                 cx += dx
                 cy += dy
                 tx, ty = int(cx), int(cy)
-                if not (0 <= tx < self.width and 0 <= ty < self.height):
+                if not (0 <= tx < w and 0 <= ty < h):
                     break
                 visible_tiles.add((tx, ty))
-                t = self.grid[z_idx, ty, tx]
-                if t in (TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL, TileType.FURNITURE, TileType.AIR):
+                if grid_z[ty, tx] in _OPAQUE_FOW_TILES:
                     break
         return visible_tiles

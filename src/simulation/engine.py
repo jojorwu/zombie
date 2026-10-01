@@ -4,11 +4,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from src.world import World, TileType, BuildingType
 from src.entities import Survivor, Zombie, Animal, Vehicle, ItemEntity, ResourceItem, EntityFactory
-from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager
+from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager, batch_get_action_and_movement
 from src.modding.manager import LuaModManager
 from utils.memory_monitor_utility import MemoryMonitorUtility
+from utils.electricity_utility import ElectricityUtility
+from utils.food_spoilage_utility import FoodSpoilageUtility
 
 SIM_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+
 
 class SimulationEngine:
     def __init__(self, config):
@@ -29,6 +32,11 @@ class SimulationEngine:
             water_enabled=self.sim_cfg.get("water_enabled", True)
         )
 
+        self.electricity_utility = ElectricityUtility(
+            cutoff_day=self.sim_cfg.get("electricity_cutoff_day", 7),
+            grid_enabled=self.sim_cfg.get("electricity_enabled", True)
+        )
+
         self.evolution_manager = GeneticEvolutionManager(
             population_size=self.sim_cfg["num_survivors"],
             mutation_rate=self.evo_cfg["mutation_rate"],
@@ -43,11 +51,10 @@ class SimulationEngine:
 
         self.reset_generation()
 
-    def reset_generation(self):
+    def _recycle_entities(self):
         import gc
         import torch
 
-        # Release existing entities to pool
         if hasattr(self, 'zombies'):
             for z in self.zombies:
                 self.factory.release_zombie(z)
@@ -65,20 +72,8 @@ class SimulationEngine:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        self.world.generate_world()
-        self.survivors = []
-        self.zombies = []
-        self.animals = []
-        self.vehicles = []
-        self.items = []
-        self.noise_events = []
-        self.scent_trails = []
-
-        self.hidden_states = [brain.init_hidden() for brain in self.brains]
-
-        walkable_coords = []
-        parking_coords = []
-        trash_coords = []
+    def _scan_walkable_coordinates(self):
+        walkable_coords, parking_coords, trash_coords = [], [], []
 
         for z in range(self.world.z_min, self.world.z_max + 1):
             z_idx = self.world.z_to_idx(z)
@@ -96,62 +91,39 @@ class SimulationEngine:
         random.shuffle(walkable_coords)
         random.shuffle(parking_coords)
         random.shuffle(trash_coords)
+        return walkable_coords, parking_coords, trash_coords
 
-        ground_walkable = [(x, y, z) for x, y, z in walkable_coords if z == 0]
-        random.shuffle(ground_walkable)
-
-        # 1. Spawn Animals
-        for _ in range(min(self.sim_cfg["num_animals"], len(ground_walkable))):
-            coord = ground_walkable.pop()
-            a = self.factory.create_animal(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
-            self.animals.append(a)
-
-        # 2. Spawn Vehicles
-        vehicle_spawns = parking_coords if parking_coords else ground_walkable
-        for _ in range(min(self.sim_cfg["num_vehicles"], len(vehicle_spawns))):
-            coord = vehicle_spawns.pop()
-            v = Vehicle(coord[0] + 0.5, coord[1] + 0.5, fuel=random.uniform(30.0, 80.0), z=coord[2])
-            self.vehicles.append(v)
-
-        # 3. Spawn Zombies
-        for _ in range(min(self.sim_cfg["num_zombies"], len(walkable_coords))):
-            coord = walkable_coords.pop()
-            z_ent = self.factory.create_zombie(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
-            self.zombies.append(z_ent)
-
-        # 4. Spawn Items & Loot
-        for tc in trash_coords:
-            itype = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE, ResourceItem.METAL, ResourceItem.FRYING_PAN])
-            self.items.append(self.factory.create_item(tc[0] + 0.5, tc[1] + 0.5, itype, amount=random.randint(1, 2), z=tc[2]))
-
+    def _spawn_building_loot(self):
         for b in self.world.buildings:
-            bx, by, bw, bh, btype = b["x"], b["y"], b["w"], b["h"], b["type"]
-            possible_loot = [ResourceItem.FOOD, ResourceItem.WATER]
+            bx, by, btype = b["x"], b["y"], b["type"]
+            possible_loot = [ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.CANNED_BEANS, ResourceItem.CHOCOLATE]
 
             if btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION):
                 possible_loot = [
                     ResourceItem.PISTOL, ResourceItem.SHOTGUN, ResourceItem.RIFLE,
-                    ResourceItem.PISTOL_AMMO, ResourceItem.SHOTGUN_SHELLS, ResourceItem.RIFLE_AMMO,
-                    ResourceItem.CROWBAR, ResourceItem.KNIFE
+                    ResourceItem.MAGNUM, ResourceItem.SMG, ResourceItem.SNIPER_RIFLE, ResourceItem.ASSAULT_RIFLE, ResourceItem.CROSSBOW,
+                    ResourceItem.PISTOL_AMMO, ResourceItem.SHOTGUN_SHELLS, ResourceItem.RIFLE_AMMO, ResourceItem.MAGNUM_AMMO, ResourceItem.SNIPER_AMMO, ResourceItem.BOLTS,
+                    ResourceItem.KATANA, ResourceItem.MACHETE, ResourceItem.CROWBAR, ResourceItem.KNIFE
                 ]
             elif btype == BuildingType.HOSPITAL:
                 possible_loot = [ResourceItem.MEDKIT, ResourceItem.WATER_BOTTLE]
             elif btype == BuildingType.GAS_STATION:
-                possible_loot = [ResourceItem.FUEL, ResourceItem.CROWBAR, ResourceItem.CANNED_FOOD, ResourceItem.WATER_BOTTLE]
+                possible_loot = [ResourceItem.FUEL, ResourceItem.CROWBAR, ResourceItem.PIPE, ResourceItem.CANNED_FOOD, ResourceItem.WATER_BOTTLE]
             elif btype in (BuildingType.SUPERMARKET, BuildingType.STORE):
                 possible_loot = [
-                    ResourceItem.CANNED_FOOD, ResourceItem.BREAD, ResourceItem.APPLE, ResourceItem.MRE,
+                    ResourceItem.CANNED_FOOD, ResourceItem.CANNED_BEANS, ResourceItem.CANNED_TUNA, ResourceItem.CHOCOLATE,
+                    ResourceItem.CEREAL, ResourceItem.CHEESE, ResourceItem.BREAD, ResourceItem.APPLE, ResourceItem.MRE,
                     ResourceItem.WATER_BOTTLE, ResourceItem.CAN_OPENER
                 ]
             elif btype in (BuildingType.RESIDENTIAL, BuildingType.DORMITORY, BuildingType.SCHOOL):
                 possible_loot = [
-                    ResourceItem.BREAD, ResourceItem.APPLE, ResourceItem.MEAT,
-                    ResourceItem.CHEF_KNIFE, ResourceItem.FRYING_PAN, ResourceItem.POT,
+                    ResourceItem.BREAD, ResourceItem.APPLE, ResourceItem.MEAT, ResourceItem.STEAK, ResourceItem.POTATO, ResourceItem.STEW,
+                    ResourceItem.CHEF_KNIFE, ResourceItem.FRYING_PAN, ResourceItem.POT, ResourceItem.KATANA,
                     ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE, ResourceItem.CUTTING_BOARD,
-                    ResourceItem.BASEBALL_BAT, ResourceItem.AXE
+                    ResourceItem.BASEBALL_BAT, ResourceItem.AXE, ResourceItem.PIPE
                 ]
             elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
-                possible_loot = [ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL]
+                possible_loot = [ResourceItem.AXE, ResourceItem.SLEDGEHAMMER, ResourceItem.CROWBAR, ResourceItem.SPEAR, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL]
 
             b_bottom = b.get("bottom_floor", 0)
             b_top = b.get("top_floor", 0)
@@ -161,40 +133,65 @@ class SimulationEngine:
                 if self.world.is_walkable(lx, ly, floor_z):
                     if floor_z < 0:
                         if btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION):
-                            base_loot = [ResourceItem.RIFLE, ResourceItem.SHOTGUN, ResourceItem.RIFLE_AMMO, ResourceItem.SHOTGUN_SHELLS, ResourceItem.CROWBAR]
+                            base_loot = [ResourceItem.SNIPER_RIFLE, ResourceItem.ASSAULT_RIFLE, ResourceItem.MAGNUM, ResourceItem.SNIPER_AMMO, ResourceItem.KATANA]
                         elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
-                            base_loot = [ResourceItem.FUEL, ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.METAL]
+                            base_loot = [ResourceItem.FUEL, ResourceItem.SLEDGEHAMMER, ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.METAL]
                         else:
-                            base_loot = [ResourceItem.CANNED_FOOD, ResourceItem.MRE, ResourceItem.MEDKIT, ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE]
+                            base_loot = [ResourceItem.CANNED_FOOD, ResourceItem.CANNED_TUNA, ResourceItem.MRE, ResourceItem.MEDKIT, ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE]
                         loot_type = random.choice(base_loot)
                     else:
                         loot_type = random.choice(possible_loot)
 
-                    amt = random.randint(2, 6) if "ammo" in loot_type else random.randint(1, 2)
+                    amt = random.randint(2, 6) if "ammo" in loot_type or loot_type == ResourceItem.BOLTS else random.randint(1, 2)
                     self.items.append(self.factory.create_item(lx + 0.5, ly + 0.5, loot_type, amount=amt, z=floor_z))
 
-        item_types = [
-            ResourceItem.BREAD, ResourceItem.APPLE, ResourceItem.WOOD, ResourceItem.METAL,
-            ResourceItem.WATER_BOTTLE, ResourceItem.KNIFE, ResourceItem.PISTOL_AMMO
-        ]
-        for _ in range(min(40, len(walkable_coords))):
-            coord = walkable_coords.pop()
-            itype = random.choice(item_types)
-            item = self.factory.create_item(coord[0] + 0.5, coord[1] + 0.5, itype, amount=random.randint(1, 2), z=coord[2])
-            self.items.append(item)
+    def reset_generation(self):
+        self._recycle_entities()
+        self.world.generate_world()
 
-        # 5. Spawn Survivors
-        for i in range(min(self.sim_cfg["num_survivors"], len(walkable_coords))):
+        self.survivors, self.zombies, self.animals, self.vehicles, self.items = [], [], [], [], []
+        self.noise_events, self.scent_trails = [], []
+        self.hidden_states = [brain.init_hidden() for brain in self.brains]
+
+        walkable_coords, parking_coords, trash_coords = self._scan_walkable_coordinates()
+        ground_walkable = [(x, y, z) for x, y, z in walkable_coords if z == 0]
+        random.shuffle(ground_walkable)
+
+        # 1. Spawn Animals
+        for _ in range(min(self.sim_cfg["num_animals"], len(ground_walkable))):
+            coord = ground_walkable.pop()
+            self.animals.append(self.factory.create_animal(coord[0] + 0.5, coord[1] + 0.5, z=coord[2]))
+
+        # 2. Spawn Vehicles
+        vehicle_spawns = parking_coords if parking_coords else ground_walkable
+        for _ in range(min(self.sim_cfg["num_vehicles"], len(vehicle_spawns))):
+            coord = vehicle_spawns.pop()
+            self.vehicles.append(Vehicle(coord[0] + 0.5, coord[1] + 0.5, fuel=random.uniform(30.0, 80.0), z=coord[2]))
+
+        # 3. Spawn Zombies
+        for _ in range(min(self.sim_cfg["num_zombies"], len(walkable_coords))):
             coord = walkable_coords.pop()
-            s = Survivor(coord[0] + 0.5, coord[1] + 0.5, z=coord[2])
-            self.survivors.append(s)
+            self.zombies.append(self.factory.create_zombie(coord[0] + 0.5, coord[1] + 0.5, z=coord[2]))
+
+        # 4. Spawn Trash Can Loot
+        for tc in trash_coords:
+            itype = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CANNED_BEANS, ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE, ResourceItem.METAL, ResourceItem.FRYING_PAN])
+            self.items.append(self.factory.create_item(tc[0] + 0.5, tc[1] + 0.5, itype, amount=random.randint(1, 2), z=tc[2]))
+
+        # 5. Spawn Building Contextual Loot
+        self._spawn_building_loot()
+
+        # 6. Spawn Survivors
+        for _ in range(min(self.sim_cfg["num_survivors"], len(walkable_coords))):
+            coord = walkable_coords.pop()
+            self.survivors.append(Survivor(coord[0] + 0.5, coord[1] + 0.5, z=coord[2]))
 
     def tick(self):
         t0 = time.time()
         self.world.update_day_night()
+        self.electricity_utility.update_generators()
         self.mod_manager.trigger_event("on_tick", self.world.current_tick)
 
-        # Update active noise events & recycle expired
         active_noises = []
         for ne in self.noise_events:
             ne.update()
@@ -204,7 +201,6 @@ class SimulationEngine:
                 active_noises.append(ne)
         self.noise_events = active_noises
 
-        # Update dynamic chunk activation for entities
         entity_positions = [(s.x, s.y) for s in self.survivors if s.is_alive]
         entity_positions.extend([(z.x, z.y) for z in self.zombies if z.is_alive])
         if entity_positions:
@@ -218,7 +214,6 @@ class SimulationEngine:
             active_inputs = [extract_survivor_inputs(self.survivors[i], self.world, self.items, self.vehicles, self.zombies, self.animals) for i in alive_indices]
             active_hiddens = [self.hidden_states[i] for i in alive_indices]
 
-            from src.ai.brain import batch_get_action_and_movement
             step_outputs = batch_get_action_and_movement(active_brains, active_inputs, active_hiddens)
 
             for idx, orig_i in enumerate(alive_indices):
@@ -231,13 +226,10 @@ class SimulationEngine:
                 survivor.move(dx, dy, self.world, noise_events=self.noise_events)
                 survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors, noise_events=self.noise_events)
 
-        # Leave scent trails for moving survivors
         for s in self.survivors:
-            if s.is_alive and not s.in_vehicle:
-                if self.world.current_tick % 5 == 0:
-                    self.scent_trails.append(self.factory.create_scent_trail(s.x, s.y, s.z, intensity=100.0))
+            if s.is_alive and not s.in_vehicle and self.world.current_tick % 5 == 0:
+                self.scent_trails.append(self.factory.create_scent_trail(s.x, s.y, s.z, intensity=100.0))
 
-        # Update scent trails & recycle expired
         active_scents = []
         for st in self.scent_trails:
             st.update(world=self.world)
@@ -247,12 +239,18 @@ class SimulationEngine:
                 active_scents.append(st)
         self.scent_trails = active_scents
 
-        # Multi-threaded Zombie update step across active threads
         active_zombies = [z for z in self.zombies if z.is_alive]
+        z_grid = {}
+        for z in active_zombies:
+            cell = (int(z.x // 6.0), int(z.y // 6.0), z.z)
+            if cell not in z_grid:
+                z_grid[cell] = []
+            z_grid[cell].append(z)
+
         if len(active_zombies) > 8:
             def _update_zombie_chunk(z_sublist):
                 for z in z_sublist:
-                    z.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies)
+                    z.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
             chunk_size = max(1, len(active_zombies) // 4)
             z_chunks = [active_zombies[i:i + chunk_size] for i in range(0, len(active_zombies), chunk_size)]
@@ -261,7 +259,7 @@ class SimulationEngine:
                 f.result()
         else:
             for zombie in active_zombies:
-                zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies)
+                zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
         for animal in self.animals:
             animal.update(self.world)
@@ -272,7 +270,7 @@ class SimulationEngine:
                 rx, ry = random.randint(0, self.world.width - 1), random.randint(0, self.world.height - 1)
                 rz = random.randint(self.world.z_min, self.world.z_max)
                 if self.world.is_walkable(rx, ry, rz):
-                    itype = random.choice([ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL])
+                    itype = random.choice([ResourceItem.FOOD, ResourceItem.WATER, ResourceItem.CANNED_BEANS, ResourceItem.WOOD, ResourceItem.METAL, ResourceItem.FUEL])
                     self.items.append(self.factory.create_item(rx + 0.5, ry + 0.5, itype, amount=random.randint(1, 2), z=rz))
 
         self.memory_monitor.record_tick_time(time.time() - t0)

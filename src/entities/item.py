@@ -11,28 +11,59 @@ class ResourceItem:
     MEDKIT = "medkit"
     WEAPON = "weapon"
 
-    # Melee Weapons
+    # Base Melee Weapons
     KNIFE = "knife"
     AXE = "axe"
     BASEBALL_BAT = "baseball_bat"
     CROWBAR = "crowbar"
 
-    # Firearms
+    # 5 New Melee Weapons
+    KATANA = "katana"
+    SLEDGEHAMMER = "sledgehammer"
+    MACHETE = "machete"
+    SPEAR = "spear"
+    PIPE = "pipe"
+
+    # Base Firearms
     PISTOL = "pistol"
     SHOTGUN = "shotgun"
     RIFLE = "rifle"
+
+    # 6 New Firearms
+    MAGNUM = "magnum"
+    SMG = "smg"
+    SNIPER_RIFLE = "sniper_rifle"
+    ASSAULT_RIFLE = "assault_rifle"
+    CROSSBOW = "crossbow"
+    REVOLVER = "revolver"
 
     # Ammunition
     PISTOL_AMMO = "pistol_ammo"
     SHOTGUN_SHELLS = "shotgun_shells"
     RIFLE_AMMO = "rifle_ammo"
+    MAGNUM_AMMO = "magnum_ammo"
+    SMG_AMMO = "smg_ammo"
+    SNIPER_AMMO = "sniper_ammo"
+    BOLTS = "bolts"
 
-    # Specific Foods
+    # Base Specific Foods
     CANNED_FOOD = "canned_food"
     BREAD = "bread"
     APPLE = "apple"
     MEAT = "meat"
     MRE = "mre"
+
+    # 10 New Food Items
+    CANNED_BEANS = "canned_beans"
+    CANNED_TUNA = "canned_tuna"
+    CHOCOLATE = "chocolate"
+    CEREAL = "cereal"
+    CHEESE = "cheese"
+    SOUP = "soup"
+    STEAK = "steak"
+    POTATO = "potato"
+    STEW = "stew"
+    RICE = "rice"
 
     # Kitchen Items
     FRYING_PAN = "frying_pan"
@@ -54,10 +85,25 @@ WEAPON_STATS: Dict[str, Dict[str, Any]] = {
     ResourceItem.FRYING_PAN: {"damage": 28.0, "range": 1.3, "noise": 10.0, "type": "melee"},
     ResourceItem.WEAPON: {"damage": 35.0, "range": 1.8, "noise": 6.0, "type": "melee"},
 
-    # Firearms
+    # 5 New Melee Weapons
+    ResourceItem.KATANA: {"damage": 65.0, "range": 1.8, "noise": 4.0, "type": "melee"},
+    ResourceItem.SLEDGEHAMMER: {"damage": 80.0, "range": 1.6, "noise": 14.0, "type": "melee"},
+    ResourceItem.MACHETE: {"damage": 55.0, "range": 1.5, "noise": 5.0, "type": "melee"},
+    ResourceItem.SPEAR: {"damage": 48.0, "range": 2.2, "noise": 4.0, "type": "melee"},
+    ResourceItem.PIPE: {"damage": 32.0, "range": 1.4, "noise": 8.0, "type": "melee"},
+
+    # Base Firearms
     ResourceItem.PISTOL: {"damage": 50.0, "range": 8.0, "ammo": ResourceItem.PISTOL_AMMO, "noise": 35.0, "type": "firearm"},
     ResourceItem.SHOTGUN: {"damage": 90.0, "range": 5.0, "ammo": ResourceItem.SHOTGUN_SHELLS, "noise": 55.0, "type": "firearm"},
     ResourceItem.RIFLE: {"damage": 120.0, "range": 14.0, "ammo": ResourceItem.RIFLE_AMMO, "noise": 45.0, "type": "firearm"},
+
+    # 6 New Firearms
+    ResourceItem.MAGNUM: {"damage": 85.0, "range": 10.0, "ammo": ResourceItem.MAGNUM_AMMO, "noise": 50.0, "type": "firearm"},
+    ResourceItem.SMG: {"damage": 40.0, "range": 7.0, "ammo": ResourceItem.SMG_AMMO, "noise": 38.0, "type": "firearm"},
+    ResourceItem.SNIPER_RIFLE: {"damage": 160.0, "range": 22.0, "ammo": ResourceItem.SNIPER_AMMO, "noise": 60.0, "type": "firearm"},
+    ResourceItem.ASSAULT_RIFLE: {"damage": 70.0, "range": 12.0, "ammo": ResourceItem.RIFLE_AMMO, "noise": 45.0, "type": "firearm"},
+    ResourceItem.CROSSBOW: {"damage": 75.0, "range": 9.0, "ammo": ResourceItem.BOLTS, "noise": 2.0, "type": "firearm"},
+    ResourceItem.REVOLVER: {"damage": 55.0, "range": 8.0, "ammo": ResourceItem.PISTOL_AMMO, "noise": 38.0, "type": "firearm"},
 }
 
 

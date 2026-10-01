@@ -1,5 +1,6 @@
 import sys
 import math
+import numpy as np
 import pygame
 from src.world import TileType, TILE_COLORS, BUILDING_COLORS
 from src.entities import ResourceItem
@@ -35,12 +36,17 @@ class RendererUI:
         self.theme_list = [UITheme.DARK, UITheme.NEON, UITheme.TACTICAL, UITheme.RETRO]
         self.theme_idx = 0
 
+        max_tile = max(TILE_COLORS.keys())
+        self.palette = [TILE_COLORS.get(i, (50, 50, 50)) for i in range(max_tile + 1)]
+
         map_draw_width = (self.width - 300) // self.tile_size
         map_draw_height = self.height // self.tile_size
         if HAS_RUST_VULKAN:
             self.rust_renderer = rust_vulkan_render.VulkanTileRenderer(map_draw_width, map_draw_height, self.tile_size)
+            self.rust_dimensions = (map_draw_width, map_draw_height)
         else:
             self.rust_renderer = None
+            self.rust_dimensions = (0, 0)
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -113,28 +119,69 @@ class RendererUI:
         max_y = min(self.sim.world.height, min_y + map_draw_height)
         min_y = max(0, max_y - map_draw_height)
 
-        for y in range(min_y, max_y):
-            for x in range(min_x, max_x):
-                screen_px = (x - min_x) * self.tile_size
-                screen_py = (y - min_y) * self.tile_size
+        if HAS_RUST_VULKAN and self.rust_renderer is not None:
+            if self.rust_dimensions != (map_draw_width, map_draw_height):
+                self.rust_renderer = rust_vulkan_render.VulkanTileRenderer(map_draw_width, map_draw_height, self.tile_size)
+                self.rust_dimensions = (map_draw_width, map_draw_height)
 
-                if visible_tiles is not None and (x, y) not in visible_tiles:
-                    color = (10, 10, 10)
-                else:
-                    ttype = self.sim.world.grid[z_idx, y, x]
-                    if ttype == TileType.BUILDING_FLOOR and (x, y, cur_z) in self.sim.world.building_grid:
-                        btype = self.sim.world.building_grid[(x, y, cur_z)]
-                        base_color = BUILDING_COLORS.get(btype, TILE_COLORS[ttype])
+            grid_sub = self.sim.world.grid[z_idx, min_y:max_y, min_x:max_x]
+            grid_bytes = grid_sub.astype(np.uint8).tobytes()
+
+            b_override = np.zeros((max_y - min_y, max_x - min_x, 3), dtype=np.uint8)
+            for (bx, by, bz), btype in self.sim.world.building_grid.items():
+                if bz == cur_z and min_x <= bx < max_x and min_y <= by < max_y:
+                    sub_y, sub_x = by - min_y, bx - min_x
+                    if grid_sub[sub_y, sub_x] == TileType.BUILDING_FLOOR:
+                        b_override[sub_y, sub_x] = BUILDING_COLORS.get(btype, TILE_COLORS[TileType.BUILDING_FLOOR])
+            b_bytes = b_override.tobytes()
+
+            if visible_tiles is not None:
+                fog_mask = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
+                for (vx, vy) in visible_tiles:
+                    if min_x <= vx < max_x and min_y <= vy < max_y:
+                        fog_mask[vy - min_y, vx - min_x] = 1
+                fog_bytes = fog_mask.tobytes()
+            else:
+                fog_bytes = None
+
+            light_factor = light if cur_z >= 0 else 0.8
+            pixel_buf = self.rust_renderer.render_viewport_bytes(
+                grid_bytes,
+                b_bytes,
+                self.palette,
+                light_factor,
+                fog_bytes
+            )
+
+            viewport_surf = pygame.image.frombuffer(
+                pixel_buf,
+                (map_draw_width * self.tile_size, map_draw_height * self.tile_size),
+                "RGBA"
+            )
+            self.screen.blit(viewport_surf, (0, 0))
+        else:
+            for y in range(min_y, max_y):
+                for x in range(min_x, max_x):
+                    screen_px = (x - min_x) * self.tile_size
+                    screen_py = (y - min_y) * self.tile_size
+
+                    if visible_tiles is not None and (x, y) not in visible_tiles:
+                        color = (10, 10, 10)
                     else:
-                        base_color = TILE_COLORS[ttype]
+                        ttype = self.sim.world.grid[z_idx, y, x]
+                        if ttype == TileType.BUILDING_FLOOR and (x, y, cur_z) in self.sim.world.building_grid:
+                            btype = self.sim.world.building_grid[(x, y, cur_z)]
+                            base_color = BUILDING_COLORS.get(btype, TILE_COLORS[ttype])
+                        else:
+                            base_color = TILE_COLORS[ttype]
 
-                    color = (
-                        int(base_color[0] * (light if cur_z >= 0 else 0.8)),
-                        int(base_color[1] * (light if cur_z >= 0 else 0.8)),
-                        int(base_color[2] * (light if cur_z >= 0 else 0.8))
-                    )
-                rect = (screen_px, screen_py, self.tile_size, self.tile_size)
-                pygame.draw.rect(self.screen, color, rect)
+                        color = (
+                            int(base_color[0] * (light if cur_z >= 0 else 0.8)),
+                            int(base_color[1] * (light if cur_z >= 0 else 0.8)),
+                            int(base_color[2] * (light if cur_z >= 0 else 0.8))
+                        )
+                    rect = (screen_px, screen_py, self.tile_size, self.tile_size)
+                    pygame.draw.rect(self.screen, color, rect)
 
         def to_screen(wx, wy):
             return int((wx - min_x) * self.tile_size), int((wy - min_y) * self.tile_size)

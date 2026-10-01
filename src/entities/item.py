@@ -1,7 +1,7 @@
 from typing import Dict, Any
 
 class ResourceItem:
-    """Enumeration of all collectible resources, tools, food items, and weapons in the game."""
+    """Enumeration of all collectible resources, tools, food items, weapons, and armor in the game."""
     # Generic Resources
     FOOD = "food"
     WATER = "water"
@@ -46,6 +46,12 @@ class ResourceItem:
     SNIPER_AMMO = "sniper_ammo"
     BOLTS = "bolts"
 
+    # Armor Items
+    HELMET = "helmet"
+    BODY_ARMOR = "body_armor"
+    LEATHER_JACKET = "leather_jacket"
+    PADS = "pads"
+
     # Base Specific Foods
     CANNED_FOOD = "canned_food"
     BREAD = "bread"
@@ -65,6 +71,10 @@ class ResourceItem:
     STEW = "stew"
     RICE = "rice"
 
+    # Foraged Forest Food
+    MUSHROOM = "mushroom"
+    BERRIES = "berries"
+
     # Kitchen Items
     FRYING_PAN = "frying_pan"
     POT = "pot"
@@ -72,6 +82,14 @@ class ResourceItem:
     CAN_OPENER = "can_opener"
     WATER_BOTTLE = "water_bottle"
     CUTTING_BOARD = "cutting_board"
+
+
+ARMOR_STATS: Dict[str, Dict[str, Any]] = {
+    ResourceItem.HELMET: {"slot": "head", "reduction": 0.50, "durability": 100.0},
+    ResourceItem.BODY_ARMOR: {"slot": "torso", "reduction": 0.60, "durability": 150.0},
+    ResourceItem.LEATHER_JACKET: {"slot": "torso", "reduction": 0.25, "durability": 80.0},
+    ResourceItem.PADS: {"slot": "limbs", "reduction": 0.35, "durability": 90.0},
+}
 
 
 # Detailed Properties for Weapons & Tools

@@ -1,7 +1,7 @@
 import math
 import random
 import numpy as np
-from src.world.grid import TileType, BuildingType
+from src.world.tiles import TileType, BuildingType
 from utils.p_np_math import PolynomialVerifier
 
 

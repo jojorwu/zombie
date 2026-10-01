@@ -5,22 +5,31 @@ from src.entities.sensory import NoiseEvent, ScentTrail
 from src.entities.animal import Animal
 
 class ObjectPool:
+    """
+    High-performance O(1) object pool using set-based ID tracking to eliminate
+    deque linear scan overhead during entity recycling.
+    """
     def __init__(self, create_fn, max_size=1000):
         self.create_fn = create_fn
         self.max_size = max_size
         self.pool = collections.deque()
+        self.pooled_ids = set()
 
     def get(self, *args, **kwargs):
         if self.pool:
             obj = self.pool.pop()
+            self.pooled_ids.discard(id(obj))
             if hasattr(obj, "reset"):
                 obj.reset(*args, **kwargs)
             return obj
         return self.create_fn(*args, **kwargs)
 
     def release(self, obj):
-        if len(self.pool) < self.max_size:
+        obj_id = id(obj)
+        if len(self.pool) < self.max_size and obj_id not in self.pooled_ids:
             self.pool.append(obj)
+            self.pooled_ids.add(obj_id)
+
 
 class EntityFactory:
     """

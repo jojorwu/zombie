@@ -7,7 +7,7 @@ from utils.p_np_math import PolynomialVerifier, PNPComplexityEngine
 from utils.mod_utility import ModUtility
 from utils.dev_utility import DevUtility
 from utils.pathfinding_utility import PathfindingUtility
-from utils.vehicle_utility import VehicleRegistry, VehicleType
+from utils.vehicle_utility import VehicleRegistry, VehicleType, VehiclePhysicsUtility
 from utils.tile_interaction_utility import TileInteractionUtility
 from src.ai.pathfinding import AStar3D
 from src.world import World, TileType, ChunkManager
@@ -79,7 +79,7 @@ class TestUtilitiesAndMath(unittest.TestCase):
         )
         truck = VehicleRegistry.create_vehicle("armored_truck", 10.0, 10.0, z=0)
         self.assertEqual(truck.trunk_capacity, 80)
-        self.assertEqual(truck.durability, 300.0)
+        self.assertEqual(truck.physics.mass, 1200.0)
 
         # Test trunk storage
         self.assertTrue(truck.store_in_trunk("food", 5))
@@ -96,6 +96,23 @@ class TestUtilitiesAndMath(unittest.TestCase):
         success, amount = TileInteractionUtility.siphon_fuel_from_pump(world, 5, 5, 0, inventory)
         self.assertTrue(success)
         self.assertEqual(inventory.get("fuel", 0), 2)
+
+    def test_cdda_vehicle_parts_and_physics(self):
+        v = VehicleRegistry.create_vehicle("sedan", 5.0, 5.0, z=0)
+        self.assertIn("engine", v.parts)
+        self.assertIn("bumper", v.parts)
+
+        # Test engine operation check
+        self.assertTrue(v.can_start_engine())
+
+        # Test physics customization
+        VehiclePhysicsUtility.customize_physics(v, mass=1500.0, max_speed=0.6)
+        self.assertEqual(v.physics.mass, 1500.0)
+        self.assertEqual(v.physics.max_speed, 0.6)
+
+        # Test physics throttle acceleration
+        v.update_physics(throttle=1.0, steer=0.0)
+        self.assertGreater(v.physics.speed, 0.0)
 
 if __name__ == "__main__":
     unittest.main()

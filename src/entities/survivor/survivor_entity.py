@@ -195,11 +195,9 @@ class Survivor:
             base_speed *= 0.85
 
         if self.in_vehicle:
-            if self.in_vehicle.fuel > 0:
-                base_speed = self.in_vehicle.speed
-                self.in_vehicle.fuel -= 0.05
-            else:
-                base_speed = 0.05
+            self.in_vehicle.update_physics(throttle=dx if abs(dx) > abs(dy) else dy, steer=dy if abs(dy) > abs(dx) else dx, world=world)
+            self.x, self.y = self.in_vehicle.x, self.in_vehicle.y
+            base_speed = self.in_vehicle.speed
 
         tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
 

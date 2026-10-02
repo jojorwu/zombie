@@ -202,6 +202,19 @@ class SimulationEngine:
             for zombie in active_zombies:
                 zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
+        # Vehicle-Zombie Momentum Collision Processing
+        for v in self.vehicles:
+            if v.is_occupied() and v.speed > 0.05:
+                v_x, v_y, v_sp = v.x, v.y, v.speed
+                for z in active_zombies:
+                    if z.is_alive and z.z == v.z and (z.x - v_x)**2 + (z.y - v_y)**2 < 1.44:
+                        collision_damage = v_sp * 250.0 * (v.physics.mass / 1000.0)
+                        z.take_targeted_damage(collision_damage)
+                        v.physics.velocity_x *= 0.85
+                        v.physics.velocity_y *= 0.85
+                        if "bumper" in v.parts:
+                            v.parts["bumper"].damage(10.0)
+
         for animal in self.animals:
             animal.update(self.world)
 

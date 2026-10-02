@@ -88,6 +88,17 @@ class ResourceItem:
     WATER_BOTTLE = "water_bottle"
     CUTTING_BOARD = "cutting_board"
 
+    # Natural & Crafting Resources
+    STICK = "stick"
+    STONE = "stone"
+    RAGS = "rags"
+    CLOTHES = "clothes"
+    STONE_AXE = "stone_axe"
+
+    # Books & Skill Unlocks
+    BOOK = "book"
+    SKILL_BOOK = "skill_book"
+
 
 ARMOR_STATS: Dict[str, Dict[str, Any]] = {
     ResourceItem.HELMET: {"slot": "head", "reduction": 0.50, "durability": 100.0},
@@ -103,6 +114,7 @@ WEAPON_STATS: Dict[str, Dict[str, Any]] = {
     ResourceItem.KNIFE: {"damage": 25.0, "range": 1.2, "noise": 3.0, "type": "melee"},
     ResourceItem.CHEF_KNIFE: {"damage": 22.0, "range": 1.2, "noise": 3.0, "type": "melee"},
     ResourceItem.AXE: {"damage": 45.0, "range": 1.5, "noise": 8.0, "type": "melee"},
+    ResourceItem.STONE_AXE: {"damage": 38.0, "range": 1.4, "noise": 7.0, "type": "melee"},
     ResourceItem.BASEBALL_BAT: {"damage": 30.0, "range": 1.6, "noise": 6.0, "type": "melee"},
     ResourceItem.CROWBAR: {"damage": 35.0, "range": 1.4, "noise": 7.0, "type": "melee"},
     ResourceItem.FRYING_PAN: {"damage": 28.0, "range": 1.3, "noise": 10.0, "type": "melee"},

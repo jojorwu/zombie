@@ -81,6 +81,21 @@ class TileInteractionUtility:
         return False
 
     @staticmethod
+    def harvest_bush_sticks(world, x, y, z, inventory):
+        """Allows survivors to harvest sticks/branches from forest bushes at (x, y, z)."""
+        z_idx = world.z_to_idx(z)
+        ix, iy = int(x), int(y)
+        if not (0 <= ix < world.width and 0 <= iy < world.height):
+            return False, 0
+
+        tile = world.grid[z_idx, iy, ix]
+        if tile == TileType.BUSH:
+            inventory[ResourceItem.STICK] = inventory.get(ResourceItem.STICK, 0) + 2
+            world.grid[z_idx, iy, ix] = TileType.GRASS
+            return True, 2
+        return False, 0
+
+    @staticmethod
     def siphon_fuel_from_pump(world, x, y, z, inventory):
         """Allows survivors to siphon fuel from gas station pumps at (x, y, z) into inventory."""
         z_idx = world.z_to_idx(z)

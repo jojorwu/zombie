@@ -180,6 +180,13 @@ class WorldGenerator:
                     if 0 <= tx < world.width and 0 <= step_y < world.height and random.random() < 0.4:
                         world.grid[g_idx, step_y, tx] = TileType.SAND
 
+        # Spawn forest bushes and stones across forest biomes
+        for y_f in range(world.height):
+            for x_f in range(world.width):
+                if world.grid[g_idx, y_f, x_f] in (TileType.FOREST, TileType.FOREST_DENSE, TileType.FOREST_SPARSE):
+                    if random.random() < 0.15:
+                        world.grid[g_idx, y_f, x_f] = TileType.BUSH
+
         road_tile = TileType.DIRT_ROAD if self.settlement_type == SettlementType.VILLAGE else TileType.ROAD
         world.grid[g_idx, ::16, :] = TileType.ROAD_HIGHWAY if self.settlement_type != SettlementType.VILLAGE else TileType.DIRT_ROAD
         world.grid[g_idx, :, ::16] = TileType.ROAD_HIGHWAY if self.settlement_type != SettlementType.VILLAGE else TileType.DIRT_ROAD

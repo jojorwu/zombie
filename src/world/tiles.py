@@ -61,6 +61,7 @@ class TileType:
     DOOR_OPEN = 54
     DOOR_LOCKED = 55
     GAS_PUMP = 56
+    BUSH = 57
 
 
 class BuildingType:
@@ -141,6 +142,7 @@ TILE_COLORS = {
     TileType.CURTAIN_OPEN: (220, 200, 180),
     TileType.CURTAIN_CLOSED: (180, 50, 50),
     TileType.GAS_PUMP: (230, 80, 40),
+    TileType.BUSH: (34, 120, 34),
 }
 
 BUILDING_COLORS = {
@@ -215,6 +217,7 @@ TILE_WALKABLE = {
     TileType.CURTAIN_OPEN: True,
     TileType.CURTAIN_CLOSED: False,
     TileType.GAS_PUMP: False,
+    TileType.BUSH: True,
 }
 
 TILE_SPEED_MODIFIERS = {

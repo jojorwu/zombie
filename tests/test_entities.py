@@ -5,6 +5,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import unittest
 from src.world import World, TileType
 from src.entities import Survivor, Zombie, Vehicle, Animal, ItemEntity, ResourceItem, CraftingSystem, NoiseEvent, ZombieState
+from utils.item_state_utility import ItemStateUtility, ItemConditionState
+from utils.tile_interaction_utility import TileInteractionUtility
 
 class TestEntities(unittest.TestCase):
     def test_zombie_vision_and_hearing_ai(self):
@@ -130,6 +132,41 @@ class TestEntities(unittest.TestCase):
         zombie.update(world, [], [])
         self.assertEqual(zombie.state, ZombieState.INVESTIGATE)
         self.assertGreater(zombie.memory_timer, 0)
+
+    def test_cdda_crafting_books_and_bushes(self):
+        inventory = {
+            ResourceItem.CLOTHES: 2,
+            ResourceItem.SKILL_BOOK: 1,
+            ResourceItem.STICK: 2,
+            ResourceItem.STONE: 2,
+        }
+
+        # 1. Rip clothes into rags
+        self.assertTrue(CraftingSystem.rip_clothes_into_rags(inventory))
+        self.assertGreaterEqual(inventory[ResourceItem.RAGS], 3)
+
+        # 2. Advanced crafting locked before reading book
+        self.assertFalse(CraftingSystem.can_craft(inventory, ResourceItem.STONE_AXE))
+
+        # 3. Read skill book -> unlocks Stone Axe recipe
+        self.assertTrue(CraftingSystem.read_skill_book(inventory))
+        self.assertTrue(CraftingSystem.can_craft(inventory, ResourceItem.STONE_AXE))
+
+        # 4. Craft Stone Axe
+        self.assertTrue(CraftingSystem.craft(inventory, ResourceItem.STONE_AXE))
+        self.assertEqual(inventory.get(ResourceItem.STONE_AXE, 0), 1)
+
+        # 5. Item state utility
+        ItemStateUtility.set_durability("knife_1", 80.0)
+        self.assertEqual(ItemStateUtility.get_condition("knife_1"), ItemConditionState.GOOD)
+
+        # 6. Bush stick harvesting
+        world = World(width=20, height=20)
+        z_idx = world.z_to_idx(0)
+        world.grid[z_idx, 4, 4] = TileType.BUSH
+        succ, sticks = TileInteractionUtility.harvest_bush_sticks(world, 4, 4, 0, inventory)
+        self.assertTrue(succ)
+        self.assertEqual(sticks, 2)
 
 if __name__ == "__main__":
     unittest.main()

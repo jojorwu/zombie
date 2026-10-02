@@ -78,13 +78,23 @@ class AStar3D:
             for dx, dy, cost in _DIRECTIONS_8:
                 nx, ny = x + dx, y + dy
                 n_pos = (nx, ny, z)
-                if n_pos not in closed_set and self.world.is_walkable(nx, ny, z):
-                    tentative_g = g + cost
-                    if tentative_g < g_scores.get(n_pos, 1e9):
-                        g_scores[n_pos] = tentative_g
-                        parents[n_pos] = pos
-                        h = math.hypot(nx - gx, ny - gy) + abs(z - gz) * 3.0
-                        heapq.heappush(open_heap, (tentative_g + h, tentative_g, nx, ny, z))
+                if n_pos not in closed_set:
+                    is_walk = self.world.is_walkable(nx, ny, z)
+                    # Check breakable doors/windows
+                    is_breakable = False
+                    if not is_walk and 0 <= z_idx < num_levels and 0 <= nx < self.world.width and 0 <= ny < self.world.height:
+                        t = w_grid[z_idx, ny, nx]
+                        if t in (TileType.DOOR, TileType.DOOR_LOCKED, TileType.WINDOW, TileType.CURTAIN_CLOSED):
+                            is_breakable = True
+
+                    if is_walk or is_breakable:
+                        step_penalty = 3.0 if is_breakable else 0.0
+                        tentative_g = g + cost + step_penalty
+                        if tentative_g < g_scores.get(n_pos, 1e9):
+                            g_scores[n_pos] = tentative_g
+                            parents[n_pos] = pos
+                            h = math.hypot(nx - gx, ny - gy) + abs(z - gz) * 3.0
+                            heapq.heappush(open_heap, (tentative_g + h, tentative_g, nx, ny, z))
 
             if 0 <= z_idx < num_levels:
                 current_tile = w_grid[z_idx, y, x]

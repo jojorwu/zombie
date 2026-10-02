@@ -1,12 +1,27 @@
 class ElectricityUtility:
     """
     Utility module for managing municipal power grid cutoffs, fuel generators,
-    and building appliance electrification.
+    light switches, and building appliance electrification.
     """
     def __init__(self, cutoff_day=7, grid_enabled=True):
         self.cutoff_day = cutoff_day
         self.grid_enabled = grid_enabled
         self.generators = []  # dicts: {x, y, z, fuel, active}
+        self.switches = {}  # (x, y, z) -> active: bool
+
+    def register_switch(self, x: int, y: int, z: int, active: bool = False):
+        self.switches[(int(x), int(y), int(z))] = active
+
+    def toggle_switch(self, x: int, y: int, z: int) -> bool:
+        pos = (int(x), int(y), int(z))
+        if pos in self.switches:
+            self.switches[pos] = not self.switches[pos]
+            return self.switches[pos]
+        self.switches[pos] = True
+        return True
+
+    def is_switch_active(self, x: int, y: int, z: int) -> bool:
+        return self.switches.get((int(x), int(y), int(z)), False)
 
     def is_power_active(self, world, x=None, y=None, z=None):
         """Checks if power grid is online or if localized generator is powered."""

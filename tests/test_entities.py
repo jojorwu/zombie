@@ -5,6 +5,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import unittest
 from src.world import World, TileType
 from src.entities import Survivor, Zombie, Vehicle, Animal, ItemEntity, ResourceItem, CraftingSystem, NoiseEvent, ZombieState
+from utils.item_state_utility import ItemStateUtility, ItemConditionState
+from utils.tile_interaction_utility import TileInteractionUtility
 
 class TestEntities(unittest.TestCase):
     def test_zombie_vision_and_hearing_ai(self):
@@ -99,6 +101,101 @@ class TestEntities(unittest.TestCase):
         # Test flocking vector calculation
         flock_vec = zombie1.compute_flocking_vector([zombie1, zombie2])
         self.assertIsNotNone(flock_vec)
+
+    def test_zombie_infection_grab_and_memory(self):
+        world = World(width=30, height=30)
+        world.grid[:, 5, 4:20] = TileType.GRASS
+
+        config = {
+            "zombie": {
+                "speed": 0.08,
+                "damage": 10.0,
+                "bite_infection_chance": 1.0,
+                "grab_slowdown": 0.5,
+                "memory_duration_ticks": 50,
+                "pathfinding_max_nodes": 100
+            }
+        }
+
+        zombie = Zombie(5.0, 5.0, z=0, config=config)
+        survivor = Survivor(5.5, 5.0, z=0)
+
+        # Zombie attacks survivor -> triggers grab slowdown and infection
+        zombie.update(world, [survivor], [])
+        self.assertTrue(survivor.is_infected)
+        self.assertEqual(survivor.grab_slowdown_factor, 0.5)
+
+        # Test memory persistence when survivor vanishes/out of sight
+        survivor.x = 25.0  # Move out of sight/range
+        zombie.state = ZombieState.CHASE
+        zombie.target = (5.5, 5.0, 0)
+        zombie.update(world, [], [])
+        self.assertEqual(zombie.state, ZombieState.INVESTIGATE)
+        self.assertGreater(zombie.memory_timer, 0)
+
+    def test_zombie_anatomical_health_and_crawling(self):
+        zombie = Zombie(5.0, 5.0, z=0)
+        self.assertTrue(hasattr(zombie, "body"))
+        self.assertFalse(zombie.body.is_dead)
+
+        # Damage both legs -> zombie becomes a crawler
+        zombie.take_targeted_damage(35.0, target_part="left_leg")
+        zombie.take_targeted_damage(35.0, target_part="right_leg")
+        self.assertEqual(zombie.body.movement_speed_multiplier, 0.25)
+
+    def test_zombie_hurt_response_and_vehicle_vision(self):
+        world = World(width=20, height=20)
+        g_idx = world.z_to_idx(0)
+        world.grid[g_idx, 5, 4:15] = TileType.GRASS
+        world.current_tick = 1800  # Daylight
+        zombie = Zombie(5.0, 5.0, z=0)
+        survivor = Survivor(12.0, 5.0, z=0)
+        vehicle = Vehicle(12.0, 5.0, z=0)
+        survivor.in_vehicle = vehicle
+
+        # 1. Zombie sees survivor inside vehicle
+        seen = zombie.check_vision(world, [survivor])
+        self.assertIsNotNone(seen)
+
+        # 2. Hurt response when attacked from behind
+        zombie.take_targeted_damage(10.0, attacker_pos=(15.0, 15.0, 0))
+        self.assertEqual(zombie.state, ZombieState.INVESTIGATE)
+        self.assertEqual(zombie.investigate_pos, (15.0, 15.0, 0))
+
+    def test_cdda_crafting_books_and_bushes(self):
+        inventory = {
+            ResourceItem.CLOTHES: 2,
+            ResourceItem.SKILL_BOOK: 1,
+            ResourceItem.STICK: 2,
+            ResourceItem.STONE: 2,
+        }
+
+        # 1. Rip clothes into rags
+        self.assertTrue(CraftingSystem.rip_clothes_into_rags(inventory))
+        self.assertGreaterEqual(inventory[ResourceItem.RAGS], 3)
+
+        # 2. Advanced crafting locked before reading book
+        self.assertFalse(CraftingSystem.can_craft(inventory, ResourceItem.STONE_AXE))
+
+        # 3. Read skill book -> unlocks Stone Axe recipe
+        self.assertTrue(CraftingSystem.read_skill_book(inventory))
+        self.assertTrue(CraftingSystem.can_craft(inventory, ResourceItem.STONE_AXE))
+
+        # 4. Craft Stone Axe
+        self.assertTrue(CraftingSystem.craft(inventory, ResourceItem.STONE_AXE))
+        self.assertEqual(inventory.get(ResourceItem.STONE_AXE, 0), 1)
+
+        # 5. Item state utility
+        ItemStateUtility.set_durability("knife_1", 80.0)
+        self.assertEqual(ItemStateUtility.get_condition("knife_1"), ItemConditionState.GOOD)
+
+        # 6. Bush stick harvesting
+        world = World(width=20, height=20)
+        z_idx = world.z_to_idx(0)
+        world.grid[z_idx, 4, 4] = TileType.BUSH
+        succ, sticks = TileInteractionUtility.harvest_bush_sticks(world, 4, 4, 0, inventory)
+        self.assertTrue(succ)
+        self.assertEqual(sticks, 2)
 
 if __name__ == "__main__":
     unittest.main()

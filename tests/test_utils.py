@@ -7,6 +7,8 @@ from utils.p_np_math import PolynomialVerifier, PNPComplexityEngine
 from utils.mod_utility import ModUtility
 from utils.dev_utility import DevUtility
 from utils.pathfinding_utility import PathfindingUtility
+from utils.vehicle_utility import VehicleRegistry, VehicleType, VehiclePhysicsUtility
+from utils.tile_interaction_utility import TileInteractionUtility
 from src.ai.pathfinding import AStar3D
 from src.world import World, TileType, ChunkManager
 
@@ -63,6 +65,59 @@ class TestUtilitiesAndMath(unittest.TestCase):
         bench_res = dev.run_math_benchmarks()
         self.assertIn("matrix_time_ms", bench_res)
         self.assertIn("pnp_time_ms", bench_res)
+
+    def test_vehicle_utility_and_gas_pumps(self):
+        # Test custom vehicle model registration
+        VehicleRegistry.register_vehicle_type(
+            model_id="armored_truck",
+            name="Armored SWAT Truck",
+            speed=0.25,
+            max_fuel=180.0,
+            trunk_capacity=80,
+            durability=300.0,
+            noise_level=25.0
+        )
+        truck = VehicleRegistry.create_vehicle("armored_truck", 10.0, 10.0, z=0)
+        self.assertEqual(truck.trunk_capacity, 80)
+        self.assertEqual(truck.physics.mass, 1200.0)
+
+        # Test trunk storage
+        self.assertTrue(truck.store_in_trunk("food", 5))
+        self.assertEqual(truck.trunk_inventory.get("food", 0), 5)
+        taken = truck.take_from_trunk("food", 2)
+        self.assertEqual(taken, 2)
+        self.assertEqual(truck.trunk_inventory.get("food", 0), 3)
+
+        # Test gas pump fuel siphoning
+        world = World(width=20, height=20)
+        z_idx = world.z_to_idx(0)
+        world.grid[z_idx, 5, 5] = TileType.GAS_PUMP
+        inventory = {}
+        success, amount = TileInteractionUtility.siphon_fuel_from_pump(world, 5, 5, 0, inventory)
+        self.assertTrue(success)
+        self.assertEqual(inventory.get("fuel", 0), 2)
+
+    def test_cdda_vehicle_parts_and_physics(self):
+        v = VehicleRegistry.create_vehicle("sedan", 5.0, 5.0, z=0)
+        self.assertIn("engine", v.parts)
+        self.assertIn("bumper", v.parts)
+
+        # Test engine operation check
+        self.assertTrue(v.can_start_engine())
+
+        # Test physics customization
+        VehiclePhysicsUtility.customize_physics(v, mass=1500.0, max_speed=0.6)
+        self.assertEqual(v.physics.mass, 1500.0)
+        self.assertEqual(v.physics.max_speed, 0.6)
+
+        # Test physics throttle acceleration
+        v.update_physics(throttle=1.0, steer=0.0)
+        self.assertGreater(v.physics.speed, 0.0)
+
+        # Test high speed braking momentum
+        v.physics.velocity_x = 0.4
+        v.update_physics(brake=True)
+        self.assertGreater(v.physics.speed, 0.0)  # Vehicle does not stop instantly at high speed
 
 if __name__ == "__main__":
     unittest.main()

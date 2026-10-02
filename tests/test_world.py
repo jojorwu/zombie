@@ -4,6 +4,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import unittest
 from src.world import World, TileType, ChunkState
+from src.entities.item import MetalQuality
+from utils.item_state_utility import ItemStateUtility
 
 class TestWorld(unittest.TestCase):
     def test_world_generation_extended_height_and_bridges(self):
@@ -143,6 +145,30 @@ class TestWorld(unittest.TestCase):
         basement_count = sum(1 for b in world.buildings if b.get("has_basement", False))
         self.assertGreaterEqual(basement_count, 0)
         self.assertLess(world.get_light_level(z=-1), world.get_light_level(z=0))
+
+    def test_post_apocalyptic_elements_and_lockpicking(self):
+        world = World(width=20, height=20)
+        z_idx = world.z_to_idx(0)
+
+        # 1. Lockpicking door
+        world.grid[z_idx, 5, 5] = TileType.DOOR_LOCKED
+        from src.entities.item import ResourceItem
+        from utils.tile_interaction_utility import TileInteractionUtility
+        inventory = {ResourceItem.LOCKPICK: 1}
+        success = TileInteractionUtility.lockpick_door_or_safe(world, 5, 5, 0, inventory)
+        self.assertTrue(success)
+        self.assertEqual(world.grid[z_idx, 5, 5], TileType.DOOR_OPEN)
+
+        # 2. Lockpicking safe
+        world.grid[z_idx, 6, 6] = TileType.WEAPON_SAFE
+        success = TileInteractionUtility.lockpick_door_or_safe(world, 6, 6, 0, inventory)
+        self.assertTrue(success)
+        self.assertGreater(inventory.get(ResourceItem.MONEY, 0), 0)
+
+        # 3. Dynamic Fog of War sight radius during night
+        world.current_tick = 0  # Midnight (00:00)
+        fov_tiles = world.compute_fog_of_war(10, 10, radius=8, z=0)
+        self.assertGreater(len(fov_tiles), 0)
 
 if __name__ == "__main__":
     unittest.main()

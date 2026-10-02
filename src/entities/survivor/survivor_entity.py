@@ -29,8 +29,16 @@ class Survivor:
         self.morale = 80.0
         self.emotional_state = EmotionalState.CALM
 
+        self.is_infected = False
+        self.infection_progress = 0.0
+        self.grab_slowdown_timer = 0
+        self.grab_slowdown_factor = 1.0
+
+        self.facing_angle = 0.0
         self.visited_tiles = set()
+        self.discovered_tiles = set()
         self.visited_tiles.add((int(x), int(y), int(z)))
+        self.discovered_tiles.add((int(x), int(y), int(z)))
 
         self.inventory = {
             ResourceItem.FOOD: 2,
@@ -122,6 +130,17 @@ class Survivor:
         self.thirst -= 0.035
         self.sleep -= 0.025
 
+        if self.grab_slowdown_timer > 0:
+            self.grab_slowdown_timer -= 1
+            if self.grab_slowdown_timer <= 0:
+                self.grab_slowdown_factor = 1.0
+
+        if self.is_infected:
+            self.infection_progress = min(100.0, self.infection_progress + 0.1)
+            self.take_damage(0.1, BodyPart.TORSO)
+            if self.infection_progress >= 100.0:
+                self.is_alive = False
+
         if self.hunger <= 0:
             self.hunger = 0
             self.take_damage(0.2, BodyPart.TORSO)
@@ -168,7 +187,7 @@ class Survivor:
     def move(self, dx, dy, world, noise_events=None, dz=0):
         if not self.is_alive:
             return
-        base_speed = 0.15 * self.body.movement_speed_multiplier
+        base_speed = 0.15 * self.body.movement_speed_multiplier * self.grab_slowdown_factor
 
         if self.emotional_state == EmotionalState.PANICKED:
             base_speed *= 1.15
@@ -176,11 +195,9 @@ class Survivor:
             base_speed *= 0.85
 
         if self.in_vehicle:
-            if self.in_vehicle.fuel > 0:
-                base_speed = self.in_vehicle.speed
-                self.in_vehicle.fuel -= 0.05
-            else:
-                base_speed = 0.05
+            self.in_vehicle.update_physics(throttle=dx if abs(dx) > abs(dy) else dy, steer=dy if abs(dy) > abs(dx) else dx, world=world)
+            self.x, self.y = self.in_vehicle.x, self.in_vehicle.y
+            base_speed = self.in_vehicle.speed
 
         tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
 
@@ -196,6 +213,9 @@ class Survivor:
 
         speed = base_speed * tile_mod * wind_factor * rain_factor * season_factor
 
+        if abs(dx) > 0.001 or abs(dy) > 0.001:
+            self.facing_angle = math.atan2(dy, dx)
+
         nx = self.x + dx * speed
         ny = self.y + dy * speed
         target_z = max(world.z_min, min(world.z_max, int(round(self.z + dz))))
@@ -207,14 +227,22 @@ class Survivor:
             moved = True
             if self.in_vehicle:
                 self.in_vehicle.x, self.in_vehicle.y, self.in_vehicle.z = self.x, self.y, self.z
-        elif world.is_walkable(nx, ny, self.z):
-            self.x, self.y = nx, ny
+        elif world.is_walkable(nx, self.y, self.z):
+            self.x = nx
             moved = True
             if self.in_vehicle:
-                self.in_vehicle.x, self.in_vehicle.y, self.in_vehicle.z = self.x, self.y, self.z
+                self.in_vehicle.x = self.x
+        elif world.is_walkable(self.x, ny, self.z):
+            self.y = ny
+            moved = True
+            if self.in_vehicle:
+                self.in_vehicle.y = self.y
 
         if moved:
             self.visited_tiles.add((int(self.x), int(self.y), int(self.z)))
+            current_fov = world.compute_fog_of_war(self.x, self.y, radius=8, z=self.z, facing_angle=self.facing_angle, fov_degrees=180.0)
+            for tx, ty in current_fov:
+                self.discovered_tiles.add((tx, ty, self.z))
             if noise_events is not None:
                 vol = 17.0 if self.in_vehicle else 8.0
                 stype = "vehicle_engine" if self.in_vehicle else "footsteps"

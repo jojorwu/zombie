@@ -17,7 +17,7 @@ class SimulationEngine:
     """Main simulation controller coordinating world ticks, AI decisions, entity updates, and evolution."""
     def __init__(self, config):
         self.mod_manager = LuaModManager()
-        self.factory = EntityFactory()
+        self.factory = EntityFactory(config=config)
         self.memory_monitor = MemoryMonitorUtility()
         self.config = config
         self.sim_cfg = config["simulation"]
@@ -109,8 +109,9 @@ class SimulationEngine:
             itype = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CANNED_BEANS, ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE, ResourceItem.METAL, ResourceItem.FRYING_PAN])
             self.items.append(self.factory.create_item(tc[0] + 0.5, tc[1] + 0.5, itype, amount=random.randint(1, 2), z=tc[2]))
 
-        # 5. Spawn Building Contextual Loot
+        # 5. Spawn Building Contextual Loot & Street Corpses
         self.spawner.spawn_building_loot(self.items)
+        self.spawner.spawn_street_corpses_and_loot(self.items, num_corpses=20)
 
         # 6. Spawn Survivors
         for _ in range(min(self.sim_cfg["num_survivors"], len(walkable_coords))):
@@ -132,7 +133,6 @@ class SimulationEngine:
         self.noise_events = active_noises
 
         entity_positions = [(s.x, s.y) for s in self.survivors if s.is_alive]
-        entity_positions.extend([(z.x, z.y) for z in self.zombies if z.is_alive])
         if entity_positions:
             self.world.chunk_manager.update_active_chunks(entity_positions, view_distance_chunks=2)
 
@@ -149,6 +149,11 @@ class SimulationEngine:
             for idx, orig_i in enumerate(alive_indices):
                 survivor = self.survivors[orig_i]
                 survivor.update_needs()
+
+                if not survivor.is_alive and survivor.is_infected:
+                    new_z = self.factory.create_zombie(survivor.x, survivor.y, z=survivor.z)
+                    self.zombies.append(new_z)
+                    continue
 
                 dx, dy, action, new_hidden = step_outputs[idx]
                 self.hidden_states[orig_i] = new_hidden
@@ -169,7 +174,14 @@ class SimulationEngine:
                 active_scents.append(st)
         self.scent_trails = active_scents
 
-        active_zombies = [z for z in self.zombies if z.is_alive]
+        active_chunk_coords = self.world.chunk_manager.active_chunks
+        chunk_size = self.world.chunk_manager.chunk_size
+
+        active_zombies = [
+            z for z in self.zombies
+            if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
+        ]
+
         z_grid = {}
         for z in active_zombies:
             cell = (int(z.x // 6.0), int(z.y // 6.0), z.z)
@@ -182,14 +194,27 @@ class SimulationEngine:
                 for z in z_sublist:
                     z.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
-            chunk_size = max(1, len(active_zombies) // 4)
-            z_chunks = [active_zombies[i:i + chunk_size] for i in range(0, len(active_zombies), chunk_size)]
+            c_size = max(1, len(active_zombies) // 4)
+            z_chunks = [active_zombies[i:i + c_size] for i in range(0, len(active_zombies), c_size)]
             futures = [SIM_EXECUTOR.submit(_update_zombie_chunk, zc) for zc in z_chunks]
             for f in futures:
                 f.result()
         else:
             for zombie in active_zombies:
                 zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
+
+        # Vehicle-Zombie Momentum Collision Processing
+        for v in self.vehicles:
+            if v.is_occupied() and v.speed > 0.05:
+                v_x, v_y, v_sp = v.x, v.y, v.speed
+                for z in active_zombies:
+                    if z.is_alive and z.z == v.z and (z.x - v_x)**2 + (z.y - v_y)**2 < 1.44:
+                        collision_damage = v_sp * 250.0 * (v.physics.mass / 1000.0)
+                        z.take_targeted_damage(collision_damage)
+                        v.physics.velocity_x *= 0.85
+                        v.physics.velocity_y *= 0.85
+                        if "bumper" in v.parts:
+                            v.parts["bumper"].damage(10.0)
 
         for animal in self.animals:
             animal.update(self.world)

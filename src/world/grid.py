@@ -114,5 +114,5 @@ class World:
     def get_light_level(self, z=0):
         return self.lighting_engine.get_light_level(z)
 
-    def compute_fog_of_war(self, x, y, radius=8, z=0):
-        return self.lighting_engine.compute_fog_of_war(x, y, radius, z)
+    def compute_fog_of_war(self, x, y, radius=8, z=0, facing_angle=None, fov_degrees=180.0):
+        return self.lighting_engine.compute_fog_of_war(x, y, radius, z, facing_angle=facing_angle, fov_degrees=fov_degrees)

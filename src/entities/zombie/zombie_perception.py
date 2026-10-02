@@ -40,9 +40,11 @@ class ZombiePerception:
         zx, zy, zz = zombie.x, zombie.y, zombie.z
 
         for s in survivors:
-            if s.is_alive and not s.in_vehicle:
+            if s.is_alive:
+                # Zombies notice survivors even inside vehicles
+                range_bonus = 3.0 if s.in_vehicle else 0.0
                 d = math.hypot(s.x - zx, s.y - zy) + abs(s.z - zz) * 3.0
-                if d <= min_d and ZombiePerception.has_line_of_sight(zombie, s.x, s.y, s.z, world):
+                if d <= (min_d + range_bonus) and ZombiePerception.has_line_of_sight(zombie, s.x, s.y, s.z, world):
                     min_d = d
                     closest_surv = s
         return closest_surv

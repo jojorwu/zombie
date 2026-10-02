@@ -68,6 +68,7 @@ class BallisticsUtility:
 
         crosswind_m_s = (wind_speed_kmh / 3.6) * math.sin(wind_angle_rad)
         wind_drift_m = 0.5 * crosswind_m_s * (flight_time ** 2)
+        bullet_drop_m = 0.5 * 9.81 * (flight_time ** 2)
 
         damage_scale = max(0.2, terminal_velocity / v0)
         final_damage = data["base_damage"] * damage_scale
@@ -77,5 +78,6 @@ class BallisticsUtility:
             "flight_time_s": round(flight_time, 3),
             "kinetic_energy_j": round(kinetic_energy, 1),
             "wind_drift_m": round(wind_drift_m, 2),
+            "bullet_drop_m": round(bullet_drop_m, 2),
             "damage": round(final_damage, 1),
         }

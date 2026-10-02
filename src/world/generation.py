@@ -35,9 +35,9 @@ class WorldGenerator:
         world.chunk_manager.register_building(building_info)
 
         has_basement = False
-        if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.20:
+        if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.35:
             has_basement = True
-        elif btype in (BuildingType.WAREHOUSE, BuildingType.GUN_STORE) and random.random() < 0.40:
+        elif btype in (BuildingType.WAREHOUSE, BuildingType.GUN_STORE) and random.random() < 0.50:
             has_basement = True
 
         bottom_floor = -1 if (has_basement and world.z_min <= -1) else 0
@@ -75,6 +75,10 @@ class WorldGenerator:
                 world.grid[z_idx, min(world.height - 1, by + bh - 1), min(world.width - 1, bx + 2)] = door_tile
                 world.grid[z_idx, min(world.height - 1, by), min(world.width - 1, bx + 2)] = TileType.WINDOW
 
+                if has_basement:
+                    # Place trapdoor leading down to hidden basement
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + bw - 2)] = TileType.TRAPDOOR
+
                 if btype in (BuildingType.SUPERMARKET, BuildingType.STORE):
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.STORE_SHELF, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.REFRIGERATOR, b_id, btype)
@@ -95,6 +99,19 @@ class WorldGenerator:
                     self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.BOOKSHELF, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.LOCKER, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.BED, b_id, btype)
+                elif btype == BuildingType.GAS_STATION:
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.STORE_SHELF, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.CASH_REGISTER, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.REFRIGERATOR, b_id, btype)
+                    # Outdoor Gas Pumps
+                    if bx + bw < world.width and by + bh < world.height:
+                        world.grid[z_idx, min(world.height - 1, by + bh), min(world.width - 1, bx + 1)] = TileType.GAS_PUMP
+                        world.grid[z_idx, min(world.height - 1, by + bh), min(world.width - 1, bx + 3)] = TileType.GAS_PUMP
+                elif btype == BuildingType.AUTO_REPAIR_SHOP:
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.WORKBENCH, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.LOCKER, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.CONTAINER_BOX, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.FACTORY_RACK, b_id, btype)
                 elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.FACTORY_RACK, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.WORKBENCH, b_id, btype)
@@ -106,6 +123,15 @@ class WorldGenerator:
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.KITCHEN_COUNTER, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.SOFA, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 1), z, TileType.TV_STAND, b_id, btype)
+                    # Bathroom & Appliance Furniture
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 3), z, TileType.TOILET, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 3), z, TileType.BATHTUB, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 3), z, TileType.SINK, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 4), min(world.height - 1, by + 1), z, TileType.WARDROBE, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 4), min(world.height - 1, by + 2), z, TileType.OVEN, b_id, btype)
+                    # Light Switch & Fixture
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.LIGHT_SWITCH
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 2)] = TileType.LIGHT_FIXTURE
 
                 if bx + bw + 1 < world.width and by + bh < world.height:
                     for px in range(bx + bw, min(world.width, bx + bw + 2)):
@@ -151,21 +177,33 @@ class WorldGenerator:
                 else:
                     chunk_districts[(cx, cy)] = "residential"
 
+        # Simplex/Perlin-style organic river and terrain noise generation
         num_rivers = random.randint(1, 2)
         for _ in range(num_rivers):
-            rx = random.randint(4, world.width - 5)
+            rx = float(random.randint(10, world.width - 11))
             ry = 0
-            for _step in range(world.height):
-                if 0 <= rx < world.width and 0 <= ry < world.height:
-                    world.grid[g_idx, ry, rx] = TileType.WATER
-                    if rx + 1 < world.width:
-                        world.grid[g_idx, ry, rx + 1] = TileType.WATER
-                    if rx - 1 >= 0 and random.random() < 0.3:
-                        world.grid[g_idx, ry, rx - 1] = TileType.SAND
-                    if rx + 2 < world.width and random.random() < 0.3:
-                        world.grid[g_idx, ry, rx + 2] = TileType.SAND
-                ry += 1
-                rx += random.choice([-1, 0, 1])
+            freq_a = random.uniform(0.02, 0.05)
+            freq_b = random.uniform(0.08, 0.12)
+            amplitude = random.uniform(12.0, 25.0)
+
+            for step_y in range(world.height):
+                offset = math.sin(step_y * freq_a) * amplitude + math.cos(step_y * freq_b) * (amplitude * 0.5)
+                cur_x = int(rx + offset)
+                for w_off in range(-1, 2):
+                    tx = cur_x + w_off
+                    if 0 <= tx < world.width and 0 <= step_y < world.height:
+                        world.grid[g_idx, step_y, tx] = TileType.WATER
+                for s_off in (-2, 2):
+                    tx = cur_x + s_off
+                    if 0 <= tx < world.width and 0 <= step_y < world.height and random.random() < 0.4:
+                        world.grid[g_idx, step_y, tx] = TileType.SAND
+
+        # Spawn forest bushes and stones across forest biomes
+        for y_f in range(world.height):
+            for x_f in range(world.width):
+                if world.grid[g_idx, y_f, x_f] in (TileType.FOREST, TileType.FOREST_DENSE, TileType.FOREST_SPARSE):
+                    if random.random() < 0.15:
+                        world.grid[g_idx, y_f, x_f] = TileType.BUSH
 
         road_tile = TileType.DIRT_ROAD if self.settlement_type == SettlementType.VILLAGE else TileType.ROAD
         world.grid[g_idx, ::16, :] = TileType.ROAD_HIGHWAY if self.settlement_type != SettlementType.VILLAGE else TileType.DIRT_ROAD
@@ -190,7 +228,7 @@ class WorldGenerator:
 
         commercial_types = [BuildingType.SUPERMARKET, BuildingType.STORE, BuildingType.GAS_STATION, BuildingType.HOSPITAL, BuildingType.POLICE_STATION, BuildingType.GUN_STORE]
         residential_types = [BuildingType.RESIDENTIAL, BuildingType.DORMITORY, BuildingType.SCHOOL]
-        industrial_types = [BuildingType.WAREHOUSE, BuildingType.FACTORY, BuildingType.GAS_STATION]
+        industrial_types = [BuildingType.WAREHOUSE, BuildingType.FACTORY, BuildingType.GAS_STATION, BuildingType.AUTO_REPAIR_SHOP]
 
         buildings_to_construct = []
         for cy in range(num_cy):
@@ -212,5 +250,14 @@ class WorldGenerator:
 
         for bx, by, bw, bh, btype in buildings_to_construct:
             self.build_chunk_building(bx, by, bw, bh, btype)
+
+        # Spawn Post-Apocalyptic Ruin/Decay Barricades and Blockades
+        for _ in range(int(world.width * world.height * 0.0003)):
+            rx = random.randint(10, world.width - 10)
+            ry = random.randint(10, world.height - 10)
+            if world.grid[g_idx, ry, rx] == TileType.ROAD:
+                world.grid[g_idx, ry, rx] = TileType.SANDBAG
+                if rx + 1 < world.width:
+                    world.grid[g_idx, ry, rx + 1] = TileType.BARBED_WIRE
 
         PolynomialVerifier.verify_spatial_partitioning([(b["x"], b["y"]) for b in world.buildings])

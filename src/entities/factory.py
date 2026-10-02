@@ -36,11 +36,12 @@ class EntityFactory:
     Factory with object pooling for efficient entity allocation/deallocation,
     minimizing garbage collection overhead during high-entity count simulations.
     """
-    def __init__(self):
-        self._zombie_pool = ObjectPool(lambda x=0, y=0, hp=50.0, z=0: Zombie(x, y, hp, z))
+    def __init__(self, config=None):
+        self.config = config
+        self._zombie_pool = ObjectPool(lambda x=0, y=0, hp=50.0, z=0: Zombie(x, y, hp, z, config=self.config))
         self._scent_pool = ObjectPool(lambda x=0, y=0, z=0, intensity=100.0: ScentTrail(x, y, z, intensity))
         self._noise_pool = ObjectPool(lambda x=0, y=0, z=0, volume=10.0, lifetime=5, source_type="general": NoiseEvent(x, y, z, volume, lifetime, source_type))
-        self._item_pool = ObjectPool(lambda x=0, y=0, item_type="", amount=1, z=0: ItemEntity(x, y, item_type, amount, z))
+        self._item_pool = ObjectPool(lambda x=0, y=0, item_type="", amount=1, z=0, contents=None: ItemEntity(x, y, item_type, amount, z, contents=contents))
         self._animal_pool = ObjectPool(lambda x=0, y=0, hp=30.0, z=0: Animal(x, y, hp, z))
 
     def create_zombie(self, x, y, hp=50.0, z=0):
@@ -51,6 +52,10 @@ class EntityFactory:
         zombie.state = ZombieState.IDLE
         zombie.target = None
         zombie.investigate_pos = None
+        zombie.memory_timer = 0
+        zombie.last_known_target_pos = None
+        zombie.current_path = []
+        zombie.path_target_pos = None
         return zombie
 
     def release_zombie(self, zombie):
@@ -77,12 +82,13 @@ class EntityFactory:
     def release_noise_event(self, noise):
         self._noise_pool.release(noise)
 
-    def create_item(self, x, y, item_type, amount=1, z=0):
+    def create_item(self, x, y, item_type, amount=1, z=0, contents=None):
         item = self._item_pool.get(x, y, item_type, amount, z)
         item.x, item.y, item.z = float(x), float(y), int(z)
         item.item_type = item_type
         item.amount = amount
         item.collected = False
+        item.contents = contents if contents is not None else {}
         return item
 
     def release_item(self, item):

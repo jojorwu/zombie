@@ -34,6 +34,22 @@ class EntitySpawner:
         random.shuffle(trash_coords)
         return walkable_coords, parking_coords, trash_coords
 
+    def spawn_street_corpses_and_loot(self, items_list: list, num_corpses: int = 15) -> None:
+        """Spawns lootable dead human corpses on streets and sidewalks containing random gear and ammo."""
+        walkable, parking, trash = self.scan_walkable_coordinates()
+        street_coords = [(x, y, z) for x, y, z in walkable if z == 0 and self.world.grid[self.world.z_to_idx(z), y, x] in (TileType.ROAD, TileType.SIDEWALK, TileType.CROSSWALK)]
+        random.shuffle(street_coords)
+
+        for _ in range(min(num_corpses, len(street_coords))):
+            cx, cy, cz = street_coords.pop()
+            corpse_loot = random.choice([
+                ResourceItem.PISTOL_AMMO, ResourceItem.SHOTGUN_SHELLS, ResourceItem.RIFLE_AMMO,
+                ResourceItem.CANNED_FOOD, ResourceItem.WATER_BOTTLE, ResourceItem.KNIFE,
+                ResourceItem.MONEY, ResourceItem.CLOTHES, ResourceItem.MEDKIT
+            ])
+            # Container item representing lootable human corpse
+            items_list.append(self.factory.create_item(cx + 0.5, cy + 0.5, ResourceItem.CRATE, amount=1, z=cz, contents={corpse_loot: random.randint(1, 3)}))
+
     def spawn_building_loot(self, items_list: list) -> None:
         """Spawns contextual loot across floors and basements in buildings."""
         for b in self.world.buildings:
@@ -73,8 +89,13 @@ class EntitySpawner:
             for floor_z in range(b_bottom, b_top + 1):
                 lx, ly = bx + 2, by + 1
                 if floor_z < 0:
-                    if btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION):
-                        base_loot = [ResourceItem.SNIPER_RIFLE, ResourceItem.ASSAULT_RIFLE, ResourceItem.MAGNUM, ResourceItem.SNIPER_AMMO, ResourceItem.KATANA]
+                    if btype in (BuildingType.GUN_STORE, BuildingType.POLICE_STATION, BuildingType.RESIDENTIAL):
+                        base_loot = [
+                            ResourceItem.PISTOL, ResourceItem.SHOTGUN, ResourceItem.RIFLE,
+                            ResourceItem.SNIPER_RIFLE, ResourceItem.ASSAULT_RIFLE, ResourceItem.MAGNUM,
+                            ResourceItem.PISTOL_AMMO, ResourceItem.RIFLE_AMMO, ResourceItem.SHOTGUN_SHELLS,
+                            ResourceItem.KATANA, ResourceItem.MACHETE, ResourceItem.AXE
+                        ]
                     elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
                         base_loot = [ResourceItem.FUEL, ResourceItem.SLEDGEHAMMER, ResourceItem.AXE, ResourceItem.CROWBAR, ResourceItem.METAL]
                     else:

@@ -60,6 +60,40 @@ class TileType:
     CURTAIN_CLOSED = 53
     DOOR_OPEN = 54
     DOOR_LOCKED = 55
+    GAS_PUMP = 56
+    BUSH = 57
+
+    # Expanded Wall Variants
+    WALL_BRICK = 58
+    WALL_CONCRETE = 59
+    WALL_WOOD = 60
+    WALL_REINFORCED = 61
+
+    # Expanded Floor Variants
+    FLOOR_WOOD = 62
+    FLOOR_TILE = 63
+    FLOOR_CONCRETE = 64
+    FLOOR_CARPET = 65
+
+    # Expanded Roof Variants
+    ROOF_METAL = 66
+    ROOF_TILE = 67
+    ROOF_CONCRETE = 68
+
+    # Expanded Interior Bathroom & Home Furniture
+    TOILET = 69
+    BATHTUB = 70
+    SINK = 71
+    WARDROBE = 72
+    OVEN = 73
+    WASHING_MACHINE = 74
+    LIGHT_SWITCH = 75
+    LIGHT_FIXTURE = 76
+
+    # Ruin & Post-Apocalyptic Barricades
+    SANDBAG = 77
+    BARBED_WIRE = 78
+    TRAPDOOR = 79
 
 
 class BuildingType:
@@ -74,6 +108,7 @@ class BuildingType:
     SCHOOL = "school"
     WAREHOUSE = "warehouse"
     FACTORY = "factory"
+    AUTO_REPAIR_SHOP = "auto_repair_shop"
 
 
 class SettlementType:
@@ -139,6 +174,30 @@ TILE_COLORS = {
     TileType.WINDOW_BROKEN: (100, 149, 237),
     TileType.CURTAIN_OPEN: (220, 200, 180),
     TileType.CURTAIN_CLOSED: (180, 50, 50),
+    TileType.GAS_PUMP: (230, 80, 40),
+    TileType.BUSH: (34, 120, 34),
+    TileType.WALL_BRICK: (140, 50, 40),
+    TileType.WALL_CONCRETE: (110, 110, 115),
+    TileType.WALL_WOOD: (150, 100, 50),
+    TileType.WALL_REINFORCED: (70, 75, 85),
+    TileType.FLOOR_WOOD: (180, 130, 70),
+    TileType.FLOOR_TILE: (220, 220, 225),
+    TileType.FLOOR_CONCRETE: (130, 130, 135),
+    TileType.FLOOR_CARPET: (100, 60, 80),
+    TileType.ROOF_METAL: (120, 130, 140),
+    TileType.ROOF_TILE: (170, 70, 50),
+    TileType.ROOF_CONCRETE: (100, 100, 105),
+    TileType.TOILET: (240, 240, 250),
+    TileType.BATHTUB: (230, 235, 245),
+    TileType.SINK: (210, 215, 225),
+    TileType.WARDROBE: (120, 70, 30),
+    TileType.OVEN: (60, 60, 65),
+    TileType.WASHING_MACHINE: (220, 220, 230),
+    TileType.LIGHT_SWITCH: (255, 255, 180),
+    TileType.LIGHT_FIXTURE: (255, 250, 200),
+    TileType.SANDBAG: (190, 180, 130),
+    TileType.BARBED_WIRE: (120, 125, 130),
+    TileType.TRAPDOOR: (110, 75, 35),
 }
 
 BUILDING_COLORS = {
@@ -153,6 +212,7 @@ BUILDING_COLORS = {
     BuildingType.SCHOOL: (200, 190, 170),
     BuildingType.WAREHOUSE: (120, 110, 100),
     BuildingType.FACTORY: (140, 130, 110),
+    BuildingType.AUTO_REPAIR_SHOP: (200, 100, 50),
 }
 
 TILE_WALKABLE = {
@@ -212,6 +272,30 @@ TILE_WALKABLE = {
     TileType.WINDOW_BROKEN: True,
     TileType.CURTAIN_OPEN: True,
     TileType.CURTAIN_CLOSED: False,
+    TileType.GAS_PUMP: False,
+    TileType.BUSH: True,
+    TileType.WALL_BRICK: False,
+    TileType.WALL_CONCRETE: False,
+    TileType.WALL_WOOD: False,
+    TileType.WALL_REINFORCED: False,
+    TileType.FLOOR_WOOD: True,
+    TileType.FLOOR_TILE: True,
+    TileType.FLOOR_CONCRETE: True,
+    TileType.FLOOR_CARPET: True,
+    TileType.ROOF_METAL: False,
+    TileType.ROOF_TILE: False,
+    TileType.ROOF_CONCRETE: False,
+    TileType.TOILET: False,
+    TileType.BATHTUB: False,
+    TileType.SINK: False,
+    TileType.WARDROBE: False,
+    TileType.OVEN: False,
+    TileType.WASHING_MACHINE: False,
+    TileType.LIGHT_SWITCH: True,
+    TileType.LIGHT_FIXTURE: True,
+    TileType.SANDBAG: False,
+    TileType.BARBED_WIRE: True,
+    TileType.TRAPDOOR: True,
 }
 
 TILE_SPEED_MODIFIERS = {

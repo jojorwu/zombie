@@ -94,7 +94,7 @@ class SurvivorActions:
 
         for z in zombies:
             if z.is_alive and z.z == survivor.z and math.hypot(z.x - survivor.x, z.y - survivor.y) <= attack_range:
-                z.take_targeted_damage(damage)
+                z.take_targeted_damage(damage, attacker_pos=(survivor.x, survivor.y, survivor.z))
                 if not z.is_alive:
                     survivor.kills += 1
                     survivor.score += 20.0

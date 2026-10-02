@@ -143,6 +143,25 @@ class TestEntities(unittest.TestCase):
         zombie.take_targeted_damage(35.0, target_part="right_leg")
         self.assertEqual(zombie.body.movement_speed_multiplier, 0.25)
 
+    def test_zombie_hurt_response_and_vehicle_vision(self):
+        world = World(width=20, height=20)
+        g_idx = world.z_to_idx(0)
+        world.grid[g_idx, 5, 4:15] = TileType.GRASS
+        world.current_tick = 1800  # Daylight
+        zombie = Zombie(5.0, 5.0, z=0)
+        survivor = Survivor(12.0, 5.0, z=0)
+        vehicle = Vehicle(12.0, 5.0, z=0)
+        survivor.in_vehicle = vehicle
+
+        # 1. Zombie sees survivor inside vehicle
+        seen = zombie.check_vision(world, [survivor])
+        self.assertIsNotNone(seen)
+
+        # 2. Hurt response when attacked from behind
+        zombie.take_targeted_damage(10.0, attacker_pos=(15.0, 15.0, 0))
+        self.assertEqual(zombie.state, ZombieState.INVESTIGATE)
+        self.assertEqual(zombie.investigate_pos, (15.0, 15.0, 0))
+
     def test_cdda_crafting_books_and_bushes(self):
         inventory = {
             ResourceItem.CLOTHES: 2,

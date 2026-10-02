@@ -44,11 +44,15 @@ class Zombie:
         self.path_target_pos = None
         self.astar_engine = None
 
-    def take_targeted_damage(self, amount, target_part=None):
+    def take_targeted_damage(self, amount, target_part=None, attacker_pos=None):
         hit_part, actual_damage, crippled = self.body.apply_targeted_damage(amount, target_part)
         self.hp = self.body.overall_health_percent
         if self.body.is_dead:
             self.is_alive = False
+        elif attacker_pos:
+            self.state = ZombieState.INVESTIGATE
+            self.investigate_pos = (attacker_pos[0], attacker_pos[1], attacker_pos[2])
+            self.memory_timer = self.memory_duration_ticks
         return actual_damage
 
     def has_line_of_sight(self, tx, ty, tz, world):
@@ -106,13 +110,15 @@ class Zombie:
             self.memory_timer = self.memory_duration_ticks
         else:
             if self.state == ZombieState.CHASE:
-                if self.memory_timer > 0 and self.last_known_target_pos:
+                self.state = ZombieState.INVESTIGATE
+                self.investigate_pos = self.last_known_target_pos or self.target
+                self.target = None
+
+            if self.state == ZombieState.INVESTIGATE:
+                if self.memory_timer > 0:
                     self.memory_timer -= 1
-                    self.state = ZombieState.INVESTIGATE
-                    self.investigate_pos = self.last_known_target_pos
                 else:
                     self.state = ZombieState.IDLE
-                    self.target = None
                     self.investigate_pos = None
                     self.last_known_target_pos = None
 
@@ -201,7 +207,10 @@ class Zombie:
             elif world.is_walkable(self.x, ny, nz):
                 self.y, self.z = ny, nz
             else:
-                self.attack_or_break_obstacle(world, nx, ny, noise_events=noise_events)
+                if not self.attack_or_break_obstacle(world, nx, ny, noise_events=noise_events):
+                    for off_x, off_y in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        if self.attack_or_break_obstacle(world, self.x + off_x, self.y + off_y, noise_events=noise_events):
+                            break
                 self.current_path = []
         else:
             if random.random() < 0.3:

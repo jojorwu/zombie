@@ -76,6 +76,7 @@ class BuildingType:
     SCHOOL = "school"
     WAREHOUSE = "warehouse"
     FACTORY = "factory"
+    AUTO_REPAIR_SHOP = "auto_repair_shop"
 
 
 class SettlementType:
@@ -157,6 +158,7 @@ BUILDING_COLORS = {
     BuildingType.SCHOOL: (200, 190, 170),
     BuildingType.WAREHOUSE: (120, 110, 100),
     BuildingType.FACTORY: (140, 130, 110),
+    BuildingType.AUTO_REPAIR_SHOP: (200, 100, 50),
 }
 
 TILE_WALKABLE = {

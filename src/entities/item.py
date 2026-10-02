@@ -95,6 +95,13 @@ class ResourceItem:
     CLOTHES = "clothes"
     STONE_AXE = "stone_axe"
 
+    # Vehicle Fuel & Repair Items
+    GAS_CANISTER = "gas_canister"
+    CAR_BATTERY = "car_battery"
+    SPARE_WHEEL = "spare_wheel"
+    ENGINE_PARTS = "engine_parts"
+    WRENCH = "wrench"
+
     # Books & Skill Unlocks
     BOOK = "book"
     SKILL_BOOK = "skill_book"

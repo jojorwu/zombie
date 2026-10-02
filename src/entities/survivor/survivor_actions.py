@@ -127,6 +127,38 @@ class SurvivorActions:
                 return
 
     @staticmethod
+    def repair_vehicle_parts(survivor, vehicle) -> bool:
+        """Repairs vehicle parts if survivor possesses wrench and spare parts."""
+        if not vehicle:
+            return False
+
+        if survivor.inventory.get(ResourceItem.WRENCH, 0) <= 0:
+            return False
+
+        repaired = False
+        if survivor.inventory.get(ResourceItem.ENGINE_PARTS, 0) > 0 and vehicle.parts.get("engine") and vehicle.parts["engine"].hp < vehicle.parts["engine"].max_hp:
+            survivor.inventory[ResourceItem.ENGINE_PARTS] -= 1
+            vehicle.parts["engine"].repair(40.0)
+            repaired = True
+        elif survivor.inventory.get(ResourceItem.SPARE_WHEEL, 0) > 0:
+            for w in ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"]:
+                if w in vehicle.parts and vehicle.parts[w].hp < vehicle.parts[w].max_hp:
+                    survivor.inventory[ResourceItem.SPARE_WHEEL] -= 1
+                    vehicle.parts[w].repair(50.0)
+                    repaired = True
+                    break
+        elif survivor.inventory.get(ResourceItem.CAR_BATTERY, 0) > 0 and vehicle.parts.get("battery") and vehicle.parts["battery"].hp < vehicle.parts["battery"].max_hp:
+            survivor.inventory[ResourceItem.CAR_BATTERY] -= 1
+            vehicle.parts["battery"].repair(60.0)
+            repaired = True
+        elif survivor.inventory.get(ResourceItem.METAL, 0) > 0 and vehicle.parts.get("bumper") and vehicle.parts["bumper"].hp < vehicle.parts["bumper"].max_hp:
+            survivor.inventory[ResourceItem.METAL] -= 1
+            vehicle.parts["bumper"].repair(30.0)
+            repaired = True
+
+        return repaired
+
+    @staticmethod
     def push_furniture(survivor, world, noise_events):
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)

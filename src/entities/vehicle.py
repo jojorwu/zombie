@@ -109,24 +109,30 @@ class Vehicle:
     def update_physics(self, throttle: float = 0.0, steer: float = 0.0, brake: bool = False, world=None):
         """Updates CDDA-style vehicle physics, engine operation, wheel condition, and position."""
         p = self.physics
+        cur_sp = p.speed
+
         if self.can_start_engine() and throttle != 0.0:
             engine_mult = (self.parts["engine"].condition_percent / 100.0) if "engine" in self.parts else 1.0
             wheel_cond = sum(self.parts[w].condition_percent for w in ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"] if w in self.parts) / 400.0
 
             acc = p.acceleration * throttle * engine_mult * max(0.2, wheel_cond)
-            p.heading_angle += steer * p.steer_rate * (1.0 if p.speed > 0.01 else 0.0)
+            p.heading_angle += steer * p.steer_rate * (1.0 if cur_sp > 0.01 else 0.0)
 
             p.velocity_x += math.cos(p.heading_angle) * acc
             p.velocity_y += math.sin(p.heading_angle) * acc
 
             self.fuel = max(0.0, self.fuel - 0.03 * abs(throttle))
 
+        wheel_avg = sum(self.parts[w].condition_percent for w in ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"] if w in self.parts) / 400.0 if self.parts else 1.0
+
         if brake:
-            p.velocity_x *= max(0.0, 1.0 - p.brake_force)
-            p.velocity_y *= max(0.0, 1.0 - p.brake_force)
+            # Momentum stopping inertia: braking force scales inversely with current speed so high-speed vehicles require realistic stopping distance
+            effective_brake = p.brake_force * max(0.15, (1.0 / (1.0 + cur_sp * 3.0))) * max(0.3, wheel_avg)
+            p.velocity_x *= max(0.0, 1.0 - effective_brake)
+            p.velocity_y *= max(0.0, 1.0 - effective_brake)
         else:
-            p.velocity_x *= (1.0 - p.friction)
-            p.velocity_y *= (1.0 - p.friction)
+            p.velocity_x *= (1.0 - p.friction * (2.0 - wheel_avg))
+            p.velocity_y *= (1.0 - p.friction * (2.0 - wheel_avg))
 
         cur_sp = p.speed
         if cur_sp > p.max_speed:

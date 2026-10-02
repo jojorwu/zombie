@@ -103,6 +103,11 @@ class WorldGenerator:
                     if bx + bw < world.width and by + bh < world.height:
                         world.grid[z_idx, min(world.height - 1, by + bh), min(world.width - 1, bx + 1)] = TileType.GAS_PUMP
                         world.grid[z_idx, min(world.height - 1, by + bh), min(world.width - 1, bx + 3)] = TileType.GAS_PUMP
+                elif btype == BuildingType.AUTO_REPAIR_SHOP:
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.WORKBENCH, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.LOCKER, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.CONTAINER_BOX, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.FACTORY_RACK, b_id, btype)
                 elif btype in (BuildingType.WAREHOUSE, BuildingType.FACTORY):
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.FACTORY_RACK, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.WORKBENCH, b_id, btype)
@@ -210,7 +215,7 @@ class WorldGenerator:
 
         commercial_types = [BuildingType.SUPERMARKET, BuildingType.STORE, BuildingType.GAS_STATION, BuildingType.HOSPITAL, BuildingType.POLICE_STATION, BuildingType.GUN_STORE]
         residential_types = [BuildingType.RESIDENTIAL, BuildingType.DORMITORY, BuildingType.SCHOOL]
-        industrial_types = [BuildingType.WAREHOUSE, BuildingType.FACTORY, BuildingType.GAS_STATION]
+        industrial_types = [BuildingType.WAREHOUSE, BuildingType.FACTORY, BuildingType.GAS_STATION, BuildingType.AUTO_REPAIR_SHOP]
 
         buildings_to_construct = []
         for cy in range(num_cy):

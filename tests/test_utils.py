@@ -114,5 +114,10 @@ class TestUtilitiesAndMath(unittest.TestCase):
         v.update_physics(throttle=1.0, steer=0.0)
         self.assertGreater(v.physics.speed, 0.0)
 
+        # Test high speed braking momentum
+        v.physics.velocity_x = 0.4
+        v.update_physics(brake=True)
+        self.assertGreater(v.physics.speed, 0.0)  # Vehicle does not stop instantly at high speed
+
 if __name__ == "__main__":
     unittest.main()

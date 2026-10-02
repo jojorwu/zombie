@@ -4,7 +4,7 @@ import math
 class ZombieFlocking:
     """Handles spatial grid bucketing and flocking/boids cohesion behaviors for zombie hordes."""
     @staticmethod
-    def compute_flocking_vector(zombie, all_zombies, neighbor_radius=6.0, spatial_grid=None):
+    def compute_flocking_vector(zombie, all_zombies, neighbor_radius=6.0, spatial_grid=None, spatial_cell_size=6.0):
         if not all_zombies:
             return 0.0, 0.0
 
@@ -15,7 +15,7 @@ class ZombieFlocking:
         zx, zy, zz = zombie.x, zombie.y, zombie.z
 
         if spatial_grid is not None:
-            cx, cy = int(zx // neighbor_radius), int(zy // neighbor_radius)
+            cx, cy = int(zx // spatial_cell_size), int(zy // spatial_cell_size)
             for dcx in (-1, 0, 1):
                 for dcy in (-1, 0, 1):
                     neighbors = spatial_grid.get((cx + dcx, cy + dcy, zz), None)

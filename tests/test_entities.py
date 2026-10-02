@@ -133,6 +133,16 @@ class TestEntities(unittest.TestCase):
         self.assertEqual(zombie.state, ZombieState.INVESTIGATE)
         self.assertGreater(zombie.memory_timer, 0)
 
+    def test_zombie_anatomical_health_and_crawling(self):
+        zombie = Zombie(5.0, 5.0, z=0)
+        self.assertTrue(hasattr(zombie, "body"))
+        self.assertFalse(zombie.body.is_dead)
+
+        # Damage both legs -> zombie becomes a crawler
+        zombie.take_targeted_damage(35.0, target_part="left_leg")
+        zombie.take_targeted_damage(35.0, target_part="right_leg")
+        self.assertEqual(zombie.body.movement_speed_multiplier, 0.25)
+
     def test_cdda_crafting_books_and_bushes(self):
         inventory = {
             ResourceItem.CLOTHES: 2,

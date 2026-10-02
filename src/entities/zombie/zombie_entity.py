@@ -5,6 +5,7 @@ from src.entities.zombie.zombie_perception import ZombiePerception
 from src.entities.zombie.zombie_flock import ZombieFlocking
 from src.entities.sensory import NoiseEvent
 from src.ai.pathfinding import AStar3D
+from src.entities.health import AnatomicalHealth, BodyPart
 
 
 class ZombieState:
@@ -20,8 +21,9 @@ class Zombie:
         self.x = float(x)
         self.y = float(y)
         self.z = int(z)
-        self.hp = hp
-        self.max_hp = hp
+        self.body = AnatomicalHealth(max_head=25.0, max_torso=60.0, max_arm=25.0, max_leg=30.0)
+        self.hp = self.body.overall_health_percent
+        self.max_hp = 100.0
         self.is_alive = True
 
         z_cfg = config.get("zombie", {}) if config else {}
@@ -43,15 +45,11 @@ class Zombie:
         self.astar_engine = None
 
     def take_targeted_damage(self, amount, target_part=None):
-        if target_part == "head" or (target_part is None and random.random() < 0.25):
-            damage = amount * 2.0
-        else:
-            damage = amount
-
-        self.hp -= damage
-        if self.hp <= 0:
+        hit_part, actual_damage, crippled = self.body.apply_targeted_damage(amount, target_part)
+        self.hp = self.body.overall_health_percent
+        if self.body.is_dead:
             self.is_alive = False
-        return damage
+        return actual_damage
 
     def has_line_of_sight(self, tx, ty, tz, world):
         return ZombiePerception.has_line_of_sight(self, tx, ty, tz, world)
@@ -174,7 +172,7 @@ class Zombie:
 
             angle = math.atan2(ty - self.y, tx - self.x)
             tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
-            cur_speed = self.speed * tile_mod
+            cur_speed = self.speed * tile_mod * self.body.movement_speed_multiplier
 
             vx = math.cos(angle) + flock_dx * 0.5
             vy = math.sin(angle) + flock_dy * 0.5
@@ -219,9 +217,11 @@ class Zombie:
             if survivor.is_alive and not survivor.in_vehicle and survivor.z == self.z:
                 dist = math.hypot(survivor.x - self.x, survivor.y - self.y)
                 if dist < 0.8:
-                    survivor.take_damage(self.damage)
+                    applied_dmg = self.damage * self.body.attack_damage_multiplier
+                    survivor.take_damage(applied_dmg)
                     survivor.grab_slowdown_timer = 20
-                    survivor.grab_slowdown_factor = min(survivor.grab_slowdown_factor, self.grab_slowdown)
+                    slow_fac = self.grab_slowdown if self.body.attack_damage_multiplier > 0.5 else 0.8
+                    survivor.grab_slowdown_factor = min(survivor.grab_slowdown_factor, slow_fac)
                     if not survivor.is_infected and random.random() < self.bite_infection_chance:
                         survivor.is_infected = True
                     self.state = ZombieState.ATTACK

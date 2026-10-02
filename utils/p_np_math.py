@@ -124,7 +124,7 @@ class PolynomialKnapsackSolver:
         selected_items = []
         w = w_max
         for i in range(n, 0, -1):
-            if dp[i, w] != dp[i - 1, w]:
+            if not math.isclose(float(dp[i, w]), float(dp[i - 1, w]), abs_tol=1e-4):
                 selected_items.append(formatted_items[i - 1][3])
                 w -= formatted_items[i - 1][1]
 
@@ -166,8 +166,10 @@ class PolynomialTSPSolver:
                     p1, p2 = route[i - 1], route[i]
                     p3, p4 = route[j], route[j + 1]
 
-                    d1 = math.hypot(p1[0] - p2[0], p1[1] - p2[1]) + math.hypot(p3[0] - p4[0], p3[1] - p4[1])
-                    d2 = math.hypot(p1[0] - p3[0], p1[1] - p3[1]) + math.hypot(p2[0] - p4[0], p2[1] - p4[1])
+                    d1 = (math.hypot(p1[0] - p2[0], p1[1] - p2[1]) + abs(p1[2] - p2[2]) * 3.0 +
+                          math.hypot(p3[0] - p4[0], p3[1] - p4[1]) + abs(p3[2] - p4[2]) * 3.0)
+                    d2 = (math.hypot(p1[0] - p3[0], p1[1] - p3[1]) + abs(p1[2] - p3[2]) * 3.0 +
+                          math.hypot(p2[0] - p4[0], p2[1] - p4[1]) + abs(p2[2] - p4[2]) * 3.0)
 
                     if d2 < d1:
                         route[i:j + 1] = reversed(route[i:j + 1])

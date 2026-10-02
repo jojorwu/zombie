@@ -1,12 +1,13 @@
 import math
 
+
 class BallisticsUtility:
     """
     Utility module for realistic firearm ballistics simulation:
     - Bullet velocity decay and aerodynamic air drag
     - Wind deflection and crosswind drift
     - Gravitational bullet drop
-    - Terminal kinetic energy calculation (Joules) and penetration
+    - Terminal kinetic energy calculation (Joules) and damage scaling
     """
     CALIBERS = {
         "9mm": {
@@ -60,14 +61,15 @@ class BallisticsUtility:
         m = data["mass_kg"]
         cd = data["drag_coeff"]
 
-        decay_factor = math.exp(-cd * (distance_m / 100.0))
+        dist = max(0.1, float(distance_m))
+        decay_factor = math.exp(-cd * (dist / 100.0))
         terminal_velocity = v0 * decay_factor
-        flight_time = distance_m / max(50.0, (v0 + terminal_velocity) / 2.0)
+        flight_time = dist / max(50.0, (v0 + terminal_velocity) / 2.0)
 
         kinetic_energy = 0.5 * m * (terminal_velocity ** 2)
 
         crosswind_m_s = (wind_speed_kmh / 3.6) * math.sin(wind_angle_rad)
-        wind_drift_m = 0.5 * crosswind_m_s * (flight_time ** 2)
+        wind_drift_m = 0.1 * crosswind_m_s * (flight_time ** 1.5)
         bullet_drop_m = 0.5 * 9.81 * (flight_time ** 2)
 
         damage_scale = max(0.2, terminal_velocity / v0)

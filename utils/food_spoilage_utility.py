@@ -1,20 +1,33 @@
 import random
 from src.entities.item import ResourceItem
 
+
 class FoodSpoilageUtility:
     """
     Utility module for food perishability, refrigeration, and spoilage simulation:
-    - Fresh perishable foods (meat, bread, apples, steak, cheese) decay over time.
+    - Fresh perishable foods (meat, steak, bread, apples, cheese, berries, mushrooms, stew, soup) decay over time.
     - Cold storage inside powered refrigerators reduces decay rate by 80%.
-    - Canned/mre items do not spoil.
+    - Canned items, MREs, cereal, and dry rice do not spoil.
     - High ambient temperatures accelerate spoilage.
     """
     PERISHABLE_SPOIL_RATES = {
-        ResourceItem.BREAD: 0.05,       # Per tick decay
+        ResourceItem.MEAT: 0.10,        # Per tick decay
+        ResourceItem.STEAK: 0.10,
+        ResourceItem.STEW: 0.06,
+        ResourceItem.SOUP: 0.06,
+        ResourceItem.BREAD: 0.05,
+        ResourceItem.CHEESE: 0.04,
+        ResourceItem.BERRIES: 0.03,
+        ResourceItem.MUSHROOM: 0.03,
         ResourceItem.APPLE: 0.02,
-        ResourceItem.MEAT: 0.10,
+        ResourceItem.POTATO: 0.01,
         ResourceItem.CANNED_FOOD: 0.0,  # Non-perishable
+        ResourceItem.CANNED_BEANS: 0.0,
+        ResourceItem.CANNED_TUNA: 0.0,
         ResourceItem.MRE: 0.0,
+        ResourceItem.CEREAL: 0.0,
+        ResourceItem.RICE: 0.0,
+        ResourceItem.CHOCOLATE: 0.0,
     }
 
     @classmethod
@@ -22,14 +35,14 @@ class FoodSpoilageUtility:
         """
         Calculates updated freshness (1.0 = fresh, 0.0 = spoiled/rotten) after a decay interval.
         """
-        base_rate = cls.PERISHABLE_SPOIL_RATES.get(item_type, 0.01)
+        base_rate = cls.PERISHABLE_SPOIL_RATES.get(item_type, 0.0)
         if base_rate <= 0.0:
             return current_freshness  # Non-perishable
 
         # Refrigeration effect
         decay_modifier = 1.0
         if is_refrigerated and power_online:
-            decay_modifier *= 0.20  # 80% slower decay
+            decay_modifier *= 0.20  # 80% slower decay in cold storage
 
         # Temperature effect (heat accelerates rot)
         if ambient_temp_c > 20.0:

@@ -19,21 +19,33 @@ class ItemStateUtility:
     _item_metal_quality: Dict[str, str] = {}
 
     @classmethod
-    def set_metal_quality(cls, item_key: str, quality: str):
-        cls._item_metal_quality[item_key] = quality
+    def _get_key(cls, item: Any) -> str:
+        if isinstance(item, str):
+            return item
+        if hasattr(item, "item_id"):
+            return str(item.item_id)
+        if hasattr(item, "id"):
+            return str(item.id)
+        return f"{getattr(item, 'item_type', 'item')}_{id(item)}"
 
     @classmethod
-    def get_metal_quality(cls, item_key: str) -> str:
-        return cls._item_metal_quality.get(item_key, MetalQuality.IRON)
+    def set_metal_quality(cls, item: Any, quality: str):
+        k = cls._get_key(item)
+        cls._item_metal_quality[k] = quality
 
     @classmethod
-    def get_metal_damage_multiplier(cls, item_key: str) -> float:
-        q = cls.get_metal_quality(item_key)
+    def get_metal_quality(cls, item: Any) -> str:
+        k = cls._get_key(item)
+        return cls._item_metal_quality.get(k, MetalQuality.IRON)
+
+    @classmethod
+    def get_metal_damage_multiplier(cls, item: Any) -> float:
+        q = cls.get_metal_quality(item)
         return METAL_QUALITY_MULTIPLIERS.get(q, {}).get("damage_mult", 1.0)
 
     @classmethod
-    def get_condition(cls, item_key: str) -> ItemConditionState:
-        dur = cls._item_durability.get(item_key, 100.0)
+    def get_condition(cls, item: Any) -> ItemConditionState:
+        dur = cls.get_durability(item)
         if dur >= 90.0:
             return ItemConditionState.PRISTINE
         elif dur >= 65.0:
@@ -45,23 +57,27 @@ class ItemStateUtility:
         return ItemConditionState.BROKEN
 
     @classmethod
-    def set_durability(cls, item_key: str, durability: float):
-        cls._item_durability[item_key] = max(0.0, min(100.0, float(durability)))
+    def set_durability(cls, item: Any, durability: float):
+        k = cls._get_key(item)
+        cls._item_durability[k] = max(0.0, min(100.0, float(durability)))
 
     @classmethod
-    def get_durability(cls, item_key: str) -> float:
-        return cls._item_durability.get(item_key, 100.0)
+    def get_durability(cls, item: Any) -> float:
+        k = cls._get_key(item)
+        return cls._item_durability.get(k, 100.0)
 
     @classmethod
-    def damage_item(cls, item_key: str, amount: float) -> float:
-        current = cls.get_durability(item_key)
+    def damage_item(cls, item: Any, amount: float) -> float:
+        k = cls._get_key(item)
+        current = cls.get_durability(k)
         new_dur = max(0.0, current - amount)
-        cls._item_durability[item_key] = new_dur
+        cls._item_durability[k] = new_dur
         return new_dur
 
     @classmethod
-    def repair_item(cls, item_key: str, amount: float) -> float:
-        current = cls.get_durability(item_key)
+    def repair_item(cls, item: Any, amount: float) -> float:
+        k = cls._get_key(item)
+        current = cls.get_durability(k)
         new_dur = min(100.0, current + amount)
-        cls._item_durability[item_key] = new_dur
+        cls._item_durability[k] = new_dur
         return new_dur

@@ -1,12 +1,23 @@
-from src.world import TileType
+from src.world.tiles import TileType, TILE_WALKABLE
 from src.entities.item import ResourceItem
+
+
+def _get_restored_ground_tile(world, ix: int, iy: int, z: int) -> int:
+    """Determines the appropriate ground tile to restore when furniture or vegetation is removed."""
+    if z < 0:
+        return TileType.UNDERGROUND_FLOOR
+    if hasattr(world, "building_grid") and (ix, iy) in world.building_grid:
+        return TileType.BUILDING_FLOOR
+    return TileType.GRASS
+
 
 class TileInteractionUtility:
     """
     Utility module for managing tile and furniture interactions:
     - Moving / pushing furniture (cabinets, tables, sofas, beds, safes, racks) to create barricades or unblock paths
     - Dismantling furniture for wood and metal resources
-    - Fast spatial search for nearby furniture
+    - Lockpicking locked doors and weapon safes
+    - Siphoning fuel and harvesting natural resources
     """
     MOVABLE_FURNITURE = {
         TileType.TABLE: {"weight": 1.0, "dismantle_wood": 2, "dismantle_metal": 1},
@@ -57,7 +68,7 @@ class TileInteractionUtility:
 
     @staticmethod
     def push_furniture(world, x, y, z, push_dx, push_dy):
-        """Pushes furniture at (x, y, z) in direction (push_dx, push_dy) if target tile is walkable floor."""
+        """Pushes furniture at (x, y, z) in direction (push_dx, push_dy) if target tile is a walkable floor/ground."""
         z_idx = world.z_to_idx(z)
         ix, iy = int(x), int(y)
         if not (0 <= ix < world.width and 0 <= iy < world.height):
@@ -70,9 +81,10 @@ class TileInteractionUtility:
         tx, ty = ix + push_dx, iy + push_dy
         if 0 <= tx < world.width and 0 <= ty < world.height:
             target_tile = world.grid[z_idx, ty, tx]
-            if target_tile in (TileType.BUILDING_FLOOR, TileType.UNDERGROUND_FLOOR, TileType.GRASS, TileType.SIDEWALK):
+            # Verify target tile is walkable floor/ground and not already occupied by another piece of furniture
+            if TILE_WALKABLE.get(target_tile, False) and target_tile not in TileInteractionUtility.MOVABLE_FURNITURE_TILES:
                 world.grid[z_idx, ty, tx] = tile
-                world.grid[z_idx, iy, ix] = TileType.BUILDING_FLOOR if z >= 0 else TileType.UNDERGROUND_FLOOR
+                world.grid[z_idx, iy, ix] = _get_restored_ground_tile(world, ix, iy, z)
 
                 # Move state in state manager if available
                 if hasattr(world, 'furniture_state_manager'):
@@ -146,7 +158,7 @@ class TileInteractionUtility:
             inventory[ResourceItem.WOOD] = inventory.get(ResourceItem.WOOD, 0) + wood
             inventory[ResourceItem.METAL] = inventory.get(ResourceItem.METAL, 0) + metal
 
-            world.grid[z_idx, iy, ix] = TileType.BUILDING_FLOOR if z >= 0 else TileType.UNDERGROUND_FLOOR
+            world.grid[z_idx, iy, ix] = _get_restored_ground_tile(world, ix, iy, z)
 
             # Remove state from state manager if available
             if hasattr(world, 'furniture_state_manager'):

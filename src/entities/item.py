@@ -1,5 +1,22 @@
 from typing import Dict, Any, List, Optional
 
+class MetalQuality:
+    SCRAP = "scrap_metal"
+    IRON = "iron"
+    STEEL = "steel"
+    HARDENED_STEEL = "hardened_steel"
+    TITANIUM = "titanium"
+
+
+METAL_QUALITY_MULTIPLIERS = {
+    MetalQuality.SCRAP: {"damage_mult": 0.8, "durability_mult": 0.7},
+    MetalQuality.IRON: {"damage_mult": 1.0, "durability_mult": 1.0},
+    MetalQuality.STEEL: {"damage_mult": 1.25, "durability_mult": 1.4},
+    MetalQuality.HARDENED_STEEL: {"damage_mult": 1.5, "durability_mult": 1.8},
+    MetalQuality.TITANIUM: {"damage_mult": 1.8, "durability_mult": 2.5},
+}
+
+
 class ResourceItem:
     """Enumeration of all collectible resources, tools, food items, weapons, and armor in the game."""
     # Generic Resources

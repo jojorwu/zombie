@@ -119,6 +119,15 @@ class WorldGenerator:
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.KITCHEN_COUNTER, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.SOFA, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 1), z, TileType.TV_STAND, b_id, btype)
+                    # Bathroom & Appliance Furniture
+                    self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 3), z, TileType.TOILET, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 3), z, TileType.BATHTUB, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 3), z, TileType.SINK, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 4), min(world.height - 1, by + 1), z, TileType.WARDROBE, b_id, btype)
+                    self._place_and_register_furniture(min(world.width - 1, bx + 4), min(world.height - 1, by + 2), z, TileType.OVEN, b_id, btype)
+                    # Light Switch & Fixture
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.LIGHT_SWITCH
+                    world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 2)] = TileType.LIGHT_FIXTURE
 
                 if bx + bw + 1 < world.width and by + bh < world.height:
                     for px in range(bx + bw, min(world.width, bx + bw + 2)):

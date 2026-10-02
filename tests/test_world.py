@@ -4,6 +4,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import unittest
 from src.world import World, TileType, ChunkState
+from src.entities.item import MetalQuality
+from utils.item_state_utility import ItemStateUtility
 
 class TestWorld(unittest.TestCase):
     def test_world_generation_extended_height_and_bridges(self):

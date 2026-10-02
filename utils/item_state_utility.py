@@ -10,9 +10,26 @@ class ItemConditionState(Enum):
     BROKEN = auto()
 
 
+from src.entities.item import MetalQuality, METAL_QUALITY_MULTIPLIERS
+
+
 class ItemStateUtility:
-    """Developer utility for managing item conditions, durability decay, spoilage, and repair."""
+    """Developer utility for managing item conditions, metal quality purity, durability decay, spoilage, and repair."""
     _item_durability: Dict[str, float] = {}
+    _item_metal_quality: Dict[str, str] = {}
+
+    @classmethod
+    def set_metal_quality(cls, item_key: str, quality: str):
+        cls._item_metal_quality[item_key] = quality
+
+    @classmethod
+    def get_metal_quality(cls, item_key: str) -> str:
+        return cls._item_metal_quality.get(item_key, MetalQuality.IRON)
+
+    @classmethod
+    def get_metal_damage_multiplier(cls, item_key: str) -> float:
+        q = cls.get_metal_quality(item_key)
+        return METAL_QUALITY_MULTIPLIERS.get(q, {}).get("damage_mult", 1.0)
 
     @classmethod
     def get_condition(cls, item_key: str) -> ItemConditionState:

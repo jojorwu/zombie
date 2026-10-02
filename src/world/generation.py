@@ -35,9 +35,9 @@ class WorldGenerator:
         world.chunk_manager.register_building(building_info)
 
         has_basement = False
-        if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.20:
+        if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.35:
             has_basement = True
-        elif btype in (BuildingType.WAREHOUSE, BuildingType.GUN_STORE) and random.random() < 0.40:
+        elif btype in (BuildingType.WAREHOUSE, BuildingType.GUN_STORE) and random.random() < 0.50:
             has_basement = True
 
         bottom_floor = -1 if (has_basement and world.z_min <= -1) else 0

@@ -109,8 +109,9 @@ class SimulationEngine:
             itype = random.choice([ResourceItem.CANNED_FOOD, ResourceItem.CANNED_BEANS, ResourceItem.CAN_OPENER, ResourceItem.WATER_BOTTLE, ResourceItem.METAL, ResourceItem.FRYING_PAN])
             self.items.append(self.factory.create_item(tc[0] + 0.5, tc[1] + 0.5, itype, amount=random.randint(1, 2), z=tc[2]))
 
-        # 5. Spawn Building Contextual Loot
+        # 5. Spawn Building Contextual Loot & Street Corpses
         self.spawner.spawn_building_loot(self.items)
+        self.spawner.spawn_street_corpses_and_loot(self.items, num_corpses=20)
 
         # 6. Spawn Survivors
         for _ in range(min(self.sim_cfg["num_survivors"], len(walkable_coords))):

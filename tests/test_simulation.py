@@ -50,6 +50,21 @@ class TestSimulation(unittest.TestCase):
         # Far zombie position remains unchanged (frozen in inactive chunk)
         self.assertEqual((sim.zombies[1].x, sim.zombies[1].y), z2_initial_pos)
 
+    def test_street_corpse_spawning_and_ballistics(self):
+        with open("config.json", "r") as f:
+            config = json.load(f).copy()
+        sim = SimulationEngine(config)
+
+        # Verify street corpses are spawned in items
+        corpses = [i for i in sim.items if i.contents]
+        self.assertGreater(len(corpses), 0)
+
+        # Test Ballistics Utility Bullet Drop
+        from utils.ballistics_utility import BallisticsUtility
+        traj = BallisticsUtility.calculate_trajectory("5.56mm", distance_m=100.0)
+        self.assertIn("bullet_drop_m", traj)
+        self.assertGreater(traj["bullet_drop_m"], 0.0)
+
     def test_generation_reset_and_evolution(self):
         with open("config.json", "r") as f:
             config = json.load(f)

@@ -119,6 +119,12 @@ class ResourceItem:
     ENGINE_PARTS = "engine_parts"
     WRENCH = "wrench"
 
+    # Money & Valuables
+    MONEY = "money"
+    GOLD_INGOT = "gold_ingot"
+    JEWELRY = "jewelry"
+    LOCKPICK = "lockpick"
+
     # Books & Skill Unlocks
     BOOK = "book"
     SKILL_BOOK = "skill_book"

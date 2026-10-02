@@ -81,6 +81,26 @@ class TileInteractionUtility:
         return False
 
     @staticmethod
+    def lockpick_door_or_safe(world, x, y, z, inventory):
+        """Allows survivors with a lockpick, crowbar, or hammer to open locked doors and weapon safes."""
+        z_idx = world.z_to_idx(z)
+        ix, iy = int(x), int(y)
+        if not (0 <= ix < world.width and 0 <= iy < world.height):
+            return False
+
+        tile = world.grid[z_idx, iy, ix]
+        if tile == TileType.DOOR_LOCKED:
+            if inventory.get(ResourceItem.LOCKPICK, 0) > 0 or inventory.get(ResourceItem.CROWBAR, 0) > 0:
+                world.grid[z_idx, iy, ix] = TileType.DOOR_OPEN
+                return True
+        elif tile == TileType.WEAPON_SAFE:
+            if inventory.get(ResourceItem.LOCKPICK, 0) > 0:
+                inventory[ResourceItem.MONEY] = inventory.get(ResourceItem.MONEY, 0) + 150
+                inventory[ResourceItem.JEWELRY] = inventory.get(ResourceItem.JEWELRY, 0) + 1
+                return True
+        return False
+
+    @staticmethod
     def harvest_bush_sticks(world, x, y, z, inventory):
         """Allows survivors to harvest sticks/branches from forest bushes at (x, y, z)."""
         z_idx = world.z_to_idx(z)

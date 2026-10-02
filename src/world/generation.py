@@ -75,6 +75,10 @@ class WorldGenerator:
                 world.grid[z_idx, min(world.height - 1, by + bh - 1), min(world.width - 1, bx + 2)] = door_tile
                 world.grid[z_idx, min(world.height - 1, by), min(world.width - 1, bx + 2)] = TileType.WINDOW
 
+                if has_basement:
+                    # Place trapdoor leading down to hidden basement
+                    world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + bw - 2)] = TileType.TRAPDOOR
+
                 if btype in (BuildingType.SUPERMARKET, BuildingType.STORE):
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.STORE_SHELF, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.REFRIGERATOR, b_id, btype)
@@ -246,5 +250,14 @@ class WorldGenerator:
 
         for bx, by, bw, bh, btype in buildings_to_construct:
             self.build_chunk_building(bx, by, bw, bh, btype)
+
+        # Spawn Post-Apocalyptic Ruin/Decay Barricades and Blockades
+        for _ in range(int(world.width * world.height * 0.0003)):
+            rx = random.randint(10, world.width - 10)
+            ry = random.randint(10, world.height - 10)
+            if world.grid[g_idx, ry, rx] == TileType.ROAD:
+                world.grid[g_idx, ry, rx] = TileType.SANDBAG
+                if rx + 1 < world.width:
+                    world.grid[g_idx, ry, rx + 1] = TileType.BARBED_WIRE
 
         PolynomialVerifier.verify_spatial_partitioning([(b["x"], b["y"]) for b in world.buildings])

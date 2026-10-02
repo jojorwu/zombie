@@ -93,14 +93,20 @@ class LightingEngine:
 
     def compute_fog_of_war(self, x: float, y: float, radius: int = 8, z: int = 0, facing_angle: float = None, fov_degrees: float = 180.0) -> set:
         """
-        Symmetric Raycasting Fog of War with directional Field-Of-View (FOV) cone filtering.
+        Dynamic raycasted Fog of War with weather/darkness sight radius constraints and FOV cone filtering.
         """
         ix, iy = int(x), int(y)
         z_idx = self.world.z_to_idx(z)
         visible_tiles = {(ix, iy)}
         w, h = self.world.width, self.world.height
         grid_z = self.world.grid[z_idx]
-        r_int = int(radius)
+
+        # Constrain sight radius dynamically based on ambient lighting and heavy rain/snowstorms
+        ambient_light = self.get_light_level(z)
+        weather_penalty = 2 if self.world.weather.is_in_rain(x, y) else 0
+        effective_radius = max(3, int(radius * ambient_light) - weather_penalty)
+
+        r_int = effective_radius
 
         half_fov = math.radians(fov_degrees / 2.0) if facing_angle is not None else None
 

@@ -90,6 +90,11 @@ class TileType:
     LIGHT_SWITCH = 75
     LIGHT_FIXTURE = 76
 
+    # Ruin & Post-Apocalyptic Barricades
+    SANDBAG = 77
+    BARBED_WIRE = 78
+    TRAPDOOR = 79
+
 
 class BuildingType:
     SUPERMARKET = "supermarket"
@@ -190,6 +195,9 @@ TILE_COLORS = {
     TileType.WASHING_MACHINE: (220, 220, 230),
     TileType.LIGHT_SWITCH: (255, 255, 180),
     TileType.LIGHT_FIXTURE: (255, 250, 200),
+    TileType.SANDBAG: (190, 180, 130),
+    TileType.BARBED_WIRE: (120, 125, 130),
+    TileType.TRAPDOOR: (110, 75, 35),
 }
 
 BUILDING_COLORS = {
@@ -285,6 +293,9 @@ TILE_WALKABLE = {
     TileType.WASHING_MACHINE: False,
     TileType.LIGHT_SWITCH: True,
     TileType.LIGHT_FIXTURE: True,
+    TileType.SANDBAG: False,
+    TileType.BARBED_WIRE: True,
+    TileType.TRAPDOOR: True,
 }
 
 TILE_SPEED_MODIFIERS = {

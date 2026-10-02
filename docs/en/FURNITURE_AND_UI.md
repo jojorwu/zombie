@@ -1,14 +1,20 @@
-# Furniture, Sound Occlusion & UI Themes Guide
+# Furniture, Sound Occlusion, UI Themes & PZ Container Inventories
 
-## Furniture & Container Searching
-The map generator populates building interiors with detailed room furniture:
-- **Furniture Types**: Tables, Chairs, Sofas, Beds, Cabinets, Refrigerators, Kitchen Counters, Bookshelves, Desks, Gun Racks, Weapon Safes, Cash Registers, Lockers, Store Shelves, Workbenches, Factory Racks.
+## Furniture, Containers & Project Zomboid Inventories (`ContainerUtility`)
+The map generator populates building interiors with detailed room furniture and containers featuring strict weight capacity limits (kg) in Project Zomboid style:
+- **Furniture Capacities**:
+  - Wardrobes: 60 kg
+  - Cabinets: 50 kg
+  - Store Shelves: 50 kg
+  - Refrigerators: 40 kg (Cooling reduces food spoilage by 80%)
+  - Freezers: 20 kg (Sub-zero freezing reduces food spoilage by 95%)
+  - Lockers & Factory Racks: 40 - 80 kg
+  - Weapon Safes & Gun Racks: 30 - 35 kg
+  - Desks & Tables: 25 kg
 - **Interactivity & Searching**:
   - Survivors can search adjacent furniture containers when looting (`survivor_looting.py`).
-  - **Refrigerators**: Yield meats, bread, water bottles, apples, and perishable produce.
-  - **Cabinets & Safes**: Yield canned food, can openers, ammo, medkits, money, and jewelry.
-  - **Gun Racks & Lockers**: Yield rifles, shotguns, handguns, and tactical body armor.
-  - **Bookshelves**: Yield skill books (`read_skill_book`) that unlock advanced crafting recipes like stone axes.
+  - **Bag Weight Reduction**: Backpacks and duffel bags placed inside containers or worn by survivors reduce effective weight of stored contents by 70%-80%.
+  - **Item Transfers**: `ContainerUtility.transfer_item` allows seamless item transfers between survivors, backpacks, furniture, vehicle trunks, floor tiles, and corpses.
 
 ## Acoustic Sound Physics & Wall Occlusion
 Acoustic sound propagation (`SoundUtility`) models decibel Sound Pressure Level (dB SPL) physics:

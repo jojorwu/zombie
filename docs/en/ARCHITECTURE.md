@@ -26,7 +26,7 @@ The simulation engine is organized into modular subpackages under `src/`:
 - **`item.py`**: `ResourceItem`, ballistics specifications, `MetalQuality` tiers, and perishable food properties.
 - **`factory.py`**: `EntityFactory` with high-performance `ObjectPool` allocation for zombies, scents, noises, items, and animals.
 - **`health.py`**: `AnatomicalHealth` model tracking head, torso, and limb health pools, dismemberment, and crippling.
-- **`state_manager.py`**: `FurnitureStateManager` and `ItemStateManager` maintaining detailed conditions, durability, spoilage, and container inventories.
+- **`state_manager.py`**: `FurnitureStateManager` and `ItemStateManager` maintaining detailed conditions, durability, spoilage, Project Zomboid container capacity (`capacity_kg`), and contents.
 
 ### 4. `src/simulation/`
 - **`engine.py`**: `SimulationEngine` running tick updates, active chunk management, entity state updates, loot spawning, and generation resets.
@@ -41,7 +41,7 @@ The simulation engine is organized into modular subpackages under `src/`:
 - **`camera.py`**: `Camera` viewport panning and zooming logic.
 
 ### 6. `src/modding/`
-- **`manager.py`**: `LuaModManager` loading and executing Lua mod scripts in `mods/` using `lupa`.
+- **`manager.py`**: `LuaModManager` loading and executing Lua mod scripts in `mods/` using `lupa`, exposing `ContainerUtility` API.
 
 ### 7. `utils/`
-Extensible utility tools including `tile_interaction_utility.py`, `p_np_math.py`, `vehicle_utility.py`, `ballistics_utility.py`, `food_spoilage_utility.py`, `electricity_utility.py`, `sound_utility.py`, `item_state_utility.py`, `mod_utility.py`, `dev_utility.py`, `memory_monitor_utility.py`, `plant_utility.py`, `animal_utility.py`, and `pathfinding_utility.py`.
+Extensible utility tools including `container_utility.py` (Project Zomboid style inventory weights & capacities), `tile_interaction_utility.py`, `p_np_math.py`, `vehicle_utility.py`, `ballistics_utility.py`, `food_spoilage_utility.py`, `electricity_utility.py`, `sound_utility.py`, `item_state_utility.py`, `mod_utility.py`, `dev_utility.py`, `memory_monitor_utility.py`, `plant_utility.py`, `animal_utility.py`, and `pathfinding_utility.py`.

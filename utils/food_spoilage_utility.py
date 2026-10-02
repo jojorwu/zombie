@@ -6,7 +6,8 @@ class FoodSpoilageUtility:
     """
     Utility module for food perishability, refrigeration, and spoilage simulation:
     - Fresh perishable foods (meat, steak, bread, apples, cheese, berries, mushrooms, stew, soup) decay over time.
-    - Cold storage inside powered refrigerators reduces decay rate by 80%.
+    - Cold storage inside powered refrigerators reduces decay rate by 80% (0.2x).
+    - Sub-zero freezing inside powered freezers halts/reduces decay by 95% (0.05x).
     - Canned items, MREs, cereal, and dry rice do not spoil.
     - High ambient temperatures accelerate spoilage.
     """
@@ -31,18 +32,22 @@ class FoodSpoilageUtility:
     }
 
     @classmethod
-    def calculate_spoilage_decay(cls, item_type, current_freshness, ambient_temp_c, is_refrigerated=False, power_online=True):
+    def calculate_spoilage_decay(cls, item_type, current_freshness, ambient_temp_c, is_refrigerated=False, is_freezer=False, power_online=True):
         """
         Calculates updated freshness (1.0 = fresh, 0.0 = spoiled/rotten) after a decay interval.
+        Freezer storage slows decay by 95%, Refrigerator by 80%.
         """
         base_rate = cls.PERISHABLE_SPOIL_RATES.get(item_type, 0.0)
         if base_rate <= 0.0:
             return current_freshness  # Non-perishable
 
-        # Refrigeration effect
+        # Refrigeration & Freezer effect
         decay_modifier = 1.0
-        if is_refrigerated and power_online:
-            decay_modifier *= 0.20  # 80% slower decay in cold storage
+        if power_online:
+            if is_freezer:
+                decay_modifier *= 0.05  # 95% slower decay (frozen)
+            elif is_refrigerated:
+                decay_modifier *= 0.20  # 80% slower decay in cold storage
 
         # Temperature effect (heat accelerates rot)
         if ambient_temp_c > 20.0:

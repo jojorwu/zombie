@@ -26,7 +26,7 @@
 - **`item.py`**: `ResourceItem`, свойства баллистики, уровни качества металла (`MetalQuality`) и скоропортящиеся продукты.
 - **`factory.py`**: `EntityFactory` с пулом объектов (`ObjectPool`) для зомби, запахов, шумов, предметов и животных.
 - **`health.py`**: Анатомическая модель здоровья (`AnatomicalHealth`), отслеживающая состояние головы, торса и конечностей, травмы и расчленение.
-- **`state_manager.py`**: `FurnitureStateManager` и `ItemStateManager` для отслеживания состояния мебели, прочности и содержимого контейнеров.
+- **`state_manager.py`**: `FurnitureStateManager` и `ItemStateManager` для отслеживания состояния мебели, прочности, вместимости инвентаря в стиле Project Zomboid (`capacity_kg`) и содержимого контейнеров.
 
 ### 4. `src/simulation/`
 - **`engine.py`**: `SimulationEngine` симуляционного цикла, обновление чанков, спавн предметов и сброс поколений.
@@ -41,7 +41,7 @@
 - **`camera.py`**: `Camera` панорамирования и зумирования.
 
 ### 6. `src/modding/`
-- **`manager.py`**: `LuaModManager` для загрузки и выполнения скриптов Lua из `mods/` с использованием `lupa`.
+- **`manager.py`**: `LuaModManager` для загрузки и выполнения скриптов Lua из `mods/` с использованием `lupa`, экспортирующий API `ContainerUtility`.
 
 ### 7. `utils/`
-Модули утилит: `tile_interaction_utility.py`, `p_np_math.py`, `vehicle_utility.py`, `ballistics_utility.py`, `food_spoilage_utility.py`, `electricity_utility.py`, `sound_utility.py`, `item_state_utility.py`, `mod_utility.py`, `dev_utility.py`, `memory_monitor_utility.py`, `plant_utility.py`, `animal_utility.py` и `pathfinding_utility.py`.
+Модули утилит: `container_utility.py` (инвентарь, вес предметов и вместимость контейнеров в стиле Project Zomboid), `tile_interaction_utility.py`, `p_np_math.py`, `vehicle_utility.py`, `ballistics_utility.py`, `food_spoilage_utility.py`, `electricity_utility.py`, `sound_utility.py`, `item_state_utility.py`, `mod_utility.py`, `dev_utility.py`, `memory_monitor_utility.py`, `plant_utility.py`, `animal_utility.py` и `pathfinding_utility.py`.

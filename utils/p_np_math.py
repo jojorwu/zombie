@@ -1,6 +1,7 @@
 import math
 import numpy as np
 from src.entities.item import ResourceItem
+from utils.container_utility import ContainerUtility
 
 
 class PolynomialVerifier:
@@ -44,7 +45,7 @@ class PolynomialVerifier:
 class PolynomialKnapsackSolver:
     """
     Polynomial / Pseudo-Polynomial O(N * W) Dynamic Programming solver for NP-Hard 0/1 Knapsack.
-    Used by survivors to optimize inventory item selection based on item weight vs survival utility value.
+    Used by survivors to optimize inventory item selection based on item weight (kg) vs survival utility value.
     """
     ITEM_VALUES = {
         ResourceItem.MEDKIT: 100.0,
@@ -71,31 +72,6 @@ class PolynomialKnapsackSolver:
         ResourceItem.WEAPON: 30.0,
     }
 
-    ITEM_WEIGHTS = {
-        ResourceItem.MEDKIT: 2,
-        ResourceItem.PISTOL: 3,
-        ResourceItem.RIFLE: 6,
-        ResourceItem.SHOTGUN: 7,
-        ResourceItem.PISTOL_AMMO: 1,
-        ResourceItem.RIFLE_AMMO: 1,
-        ResourceItem.SHOTGUN_SHELLS: 1,
-        ResourceItem.CANNED_FOOD: 2,
-        ResourceItem.MRE: 2,
-        ResourceItem.WATER_BOTTLE: 2,
-        ResourceItem.AXE: 5,
-        ResourceItem.CROWBAR: 4,
-        ResourceItem.KNIFE: 1,
-        ResourceItem.CHEF_KNIFE: 1,
-        ResourceItem.BREAD: 1,
-        ResourceItem.APPLE: 1,
-        ResourceItem.WOOD: 3,
-        ResourceItem.METAL: 4,
-        ResourceItem.FUEL: 5,
-        ResourceItem.FOOD: 1,
-        ResourceItem.WATER: 1,
-        ResourceItem.WEAPON: 3,
-    }
-
     @classmethod
     def optimize_inventory(cls, item_list, max_capacity=20):
         if not item_list:
@@ -105,11 +81,11 @@ class PolynomialKnapsackSolver:
         for item in item_list:
             itype = item.item_type if hasattr(item, 'item_type') else item
             val = cls.ITEM_VALUES.get(itype, 10.0)
-            weight = cls.ITEM_WEIGHTS.get(itype, 1)
+            weight = max(1, int(round(ContainerUtility.get_item_weight(itype) * 2.0)))
             formatted_items.append((itype, weight, val, item))
 
         n = len(formatted_items)
-        w_max = int(max_capacity)
+        w_max = int(round(max_capacity * 2.0))
 
         dp = np.zeros((n + 1, w_max + 1), dtype=np.float32)
 

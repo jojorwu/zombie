@@ -8,6 +8,7 @@ import torch
 import numpy as np
 from src.ai.brain_net import BrainNet, GeneticEvolutionManager, save_zbrain, load_zbrain, DEVICE
 from src.ai.brain_actions import batch_get_action_and_movement, extract_survivor_inputs
+from src.ai.hierarchical_ai import HierarchicalDecisionPlanner, HighLevelGoal
 from src.entities import Survivor
 from src.world import World
 
@@ -65,6 +66,21 @@ class TestBrain(unittest.TestCase):
         survivor = Survivor(10.0, 10.0)
         inputs = extract_survivor_inputs(survivor, world, items=[], vehicles=[], zombies=[], animals=[])
         self.assertEqual(inputs.shape, (57,))
+
+    def test_hierarchical_decision_planner(self):
+        planner = HierarchicalDecisionPlanner(goal_eval_interval=10)
+        world = World(width=30, height=30)
+        survivor = Survivor(10.0, 10.0)
+
+        goal = planner.evaluate_goal(survivor, world, items=[], vehicles=[], zombies=[], animals=[])
+        self.assertIsInstance(goal, HighLevelGoal)
+
+        dx, dy, action = planner.execute_low_level_behaviour(
+            survivor, world, items=[], vehicles=[], zombies=[], animals=[], raw_dx=0.5, raw_dy=0.0, raw_action=0
+        )
+        self.assertIsInstance(dx, float)
+        self.assertIsInstance(dy, float)
+        self.assertIsInstance(action, int)
 
 
 if __name__ == "__main__":

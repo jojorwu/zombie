@@ -104,9 +104,11 @@ class GeneticEvolutionManager:
             elite_copy.load_state_dict(sorted_brains[i].state_dict())
             new_population.append(elite_copy)
 
+        parent_pool = sorted_brains[:max(2, num_elites + 2)]
         while len(new_population) < self.population_size:
-            p1 = random.choice(sorted_brains[:num_elites + 2])
-            p2 = random.choice(sorted_brains[:num_elites + 2])
+            p1 = random.choice(parent_pool)
+            p2_candidates = [p for p in parent_pool if p is not p1]
+            p2 = random.choice(p2_candidates) if p2_candidates else p1
             child = self.crossover_nets(p1, p2)
             child = self.mutate_net(child)
             new_population.append(child)

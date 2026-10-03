@@ -38,6 +38,7 @@ class Survivor:
         self.facing_angle = 0.0
         self.visited_tiles = set()
         self.discovered_tiles = set()
+        self.spatial_memory = {}  # {entity_id/category: (x, y, z, tick_timestamp)}
         self.visited_tiles.add((int(x), int(y), int(z)))
         self.discovered_tiles.add((int(x), int(y), int(z)))
 

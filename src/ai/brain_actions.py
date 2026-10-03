@@ -76,8 +76,38 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
         return results
 
 
+def check_line_of_sight(world, x0: float, y0: float, x1: float, y1: float, z: int) -> bool:
+    """Raycast check between two points on the same Z level to verify Line-of-Sight."""
+    ix0, iy0 = int(x0), int(y0)
+    ix1, iy1 = int(x1), int(y1)
+
+    dx = abs(ix1 - ix0)
+    dy = abs(iy1 - iy0)
+    sx = 1 if ix0 < ix1 else -1
+    sy = 1 if iy0 < iy1 else -1
+    err = dx - dy
+
+    curr_x, curr_y = ix0, iy0
+
+    while True:
+        if not world.is_walkable(curr_x + 0.5, curr_y + 0.5, z):
+            if (curr_x, curr_y) != (ix0, iy0) and (curr_x, curr_y) != (ix1, iy1):
+                return False
+        if curr_x == ix1 and curr_y == iy1:
+            break
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            curr_x += sx
+        if e2 < dx:
+            err += dx
+            curr_y += sy
+
+    return True
+
+
 def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) -> np.ndarray:
-    """Extracts 57 numerical input features (32 status/closest entity inputs + 25 local 5x5 spatial grid inputs) for PyTorch neural network inference."""
+    """Extracts 57 numerical input features with Raycast Line-of-Sight perception masking and spatial memory."""
     inputs = np.zeros(57, dtype=np.float32)
     inputs[0] = survivor.health / 100.0
     inputs[1] = survivor.hunger / 100.0
@@ -88,29 +118,51 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     inputs[6] = 1.0 if survivor.inventory.get("weapon", 0) > 0 or survivor.inventory.get("pistol", 0) > 0 else 0.0
     inputs[7] = 1.0 if survivor.inventory.get("medkit", 0) > 0 else 0.0
 
-    def find_closest_fast(entities, max_dist: float = 15.0):
+    current_tick = getattr(world, 'current_tick', 0)
+
+    def find_closest_visible_or_remembered(entities, category_key: str, max_dist: float = 15.0):
         min_dist = max_dist
         best_dx, best_dy, best_dz = 0.0, 0.0, 0.0
         sx, sy, sz = survivor.x, survivor.y, survivor.z
 
         for e in entities:
             if getattr(e, 'is_alive', True) and not getattr(e, 'collected', False):
+                ez = getattr(e, 'z', 0)
                 dx = e.x - sx
                 dy = e.y - sy
-                dz = getattr(e, 'z', 0) - sz
+                dz = ez - sz
                 d = math.hypot(dx, dy) + abs(dz) * 2.0
-                if d < min_dist:
-                    min_dist = d
+
+                if d < max_dist and ez == sz:
+                    if check_line_of_sight(world, sx, sy, e.x, e.y, int(sz)):
+                        # Store in survivor's spatial memory
+                        if hasattr(survivor, 'spatial_memory'):
+                            survivor.spatial_memory[category_key] = (e.x, e.y, ez, current_tick)
+                        if d < min_dist:
+                            min_dist = d
+                            best_dx = dx / max_dist
+                            best_dy = dy / max_dist
+                            best_dz = dz / 20.0
+
+        # Memory Fallback if no directly visible entity found
+        if min_dist == max_dist and hasattr(survivor, 'spatial_memory') and category_key in survivor.spatial_memory:
+            mx, my, mz, mtick = survivor.spatial_memory[category_key]
+            # Retain memory for 300 ticks (~10 seconds)
+            if current_tick - mtick <= 300 and int(mz) == int(sz):
+                dx = mx - sx
+                dy = my - sy
+                d = math.hypot(dx, dy)
+                if d < max_dist:
                     best_dx = dx / max_dist
                     best_dy = dy / max_dist
-                    best_dz = dz / 20.0
 
         return best_dx, best_dy, best_dz
 
-    inputs[8], inputs[9], inputs[10] = find_closest_fast(zombies)
-    inputs[11], inputs[12], inputs[13] = find_closest_fast(items)
-    inputs[14], inputs[15], inputs[16] = find_closest_fast(vehicles)
-    inputs[17], inputs[18], inputs[19] = find_closest_fast(animals)
+    inputs[8], inputs[9], inputs[10] = find_closest_visible_or_remembered(zombies, "zombie")
+    inputs[11], inputs[12], inputs[13] = find_closest_visible_or_remembered(items, "item")
+    inputs[14], inputs[15], inputs[16] = find_closest_visible_or_remembered(vehicles, "vehicle")
+    inputs[17], inputs[18], inputs[19] = find_closest_visible_or_remembered(animals, "animal")
+
     inputs[20] = 1.0 if world.is_walkable(survivor.x + 0.5, survivor.y, survivor.z) else 0.0
     inputs[21] = 1.0 if world.is_walkable(survivor.x, survivor.y + 0.5, survivor.z) else 0.0
     inputs[22] = float(survivor.z) / 20.0
@@ -118,10 +170,10 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     from utils.tile_interaction_utility import TileInteractionUtility
     z_idx = world.z_to_idx(survivor.z)
     has_furniture_adj = 0.0
-    sx, sy = int(survivor.x), int(survivor.y)
+    sx_i, sy_i = int(survivor.x), int(survivor.y)
 
     for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-        fx, fy = sx + dx, sy + dy
+        fx, fy = sx_i + dx, sy_i + dy
         if 0 <= fx < world.width and 0 <= fy < world.height:
             if world.grid[z_idx, fy, fx] in TileInteractionUtility.MOVABLE_FURNITURE_TILES:
                 has_furniture_adj = 1.0
@@ -130,7 +182,7 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     inputs[23] = has_furniture_adj
     inputs[24] = getattr(survivor, 'fear', 0.0) / 100.0
 
-    # 7 New Inputs for expanded BrainNet (Total: 32)
+    # 7 Inputs for expanded BrainNet (Total: 32)
     inputs[25] = getattr(survivor, 'panic', 0.0) / 100.0
     inputs[26] = getattr(survivor, 'morale', 50.0) / 100.0
 
@@ -152,7 +204,6 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
 
     # 25 Local Spatial Grid Vision Inputs (5x5 matrix around survivor)
     idx_grid = 32
-    sx_i, sy_i = int(survivor.x), int(survivor.y)
     z_val = survivor.z
 
     for dy_g in range(-2, 3):

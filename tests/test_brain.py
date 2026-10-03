@@ -7,10 +7,11 @@ import unittest
 import torch
 import numpy as np
 from src.ai.brain_net import BrainNet, GeneticEvolutionManager, save_zbrain, load_zbrain, DEVICE
-from src.ai.brain_actions import batch_get_action_and_movement, extract_survivor_inputs
+from src.ai.brain_actions import batch_get_action_and_movement, extract_survivor_inputs, check_line_of_sight
 from src.ai.hierarchical_ai import HierarchicalDecisionPlanner, HighLevelGoal
 from src.entities import Survivor
-from src.world import World
+from src.entities.zombie import Zombie
+from src.world import World, TileType
 
 
 class TestBrain(unittest.TestCase):
@@ -81,6 +82,24 @@ class TestBrain(unittest.TestCase):
         self.assertIsInstance(dx, float)
         self.assertIsInstance(dy, float)
         self.assertIsInstance(action, int)
+
+    def test_check_line_of_sight_and_spatial_memory(self):
+        world = World(width=30, height=30)
+        survivor = Survivor(10.0, 10.0)
+        zombie = Zombie(15.0, 10.0)
+
+        # Direct LOS clear path
+        self.assertTrue(check_line_of_sight(world, survivor.x, survivor.y, zombie.x, zombie.y, 0))
+
+        # Place wall between survivor and zombie
+        z_idx = world.z_to_idx(0)
+        world.grid[z_idx, 10, 12] = TileType.WALL_BRICK.value
+        self.assertFalse(check_line_of_sight(world, survivor.x, survivor.y, zombie.x, zombie.y, 0))
+
+        # Verify extract_survivor_inputs uses spatial memory when blocked
+        survivor.spatial_memory["zombie"] = (15.0, 10.0, 0, world.current_tick)
+        inputs = extract_survivor_inputs(survivor, world, items=[], vehicles=[], zombies=[zombie], animals=[])
+        self.assertNotEqual(inputs[8], 0.0)  # Should use remembered dx
 
 
 if __name__ == "__main__":

@@ -10,8 +10,11 @@ _FOW_RAYS = tuple(
 _OPAQUE_FOW_TILES = frozenset({
     TileType.BUILDING_WALL,
     TileType.UNDERGROUND_WALL,
+    TileType.WALL_BRICK,
+    TileType.WALL_CONCRETE,
+    TileType.WALL_WOOD,
+    TileType.WALL_REINFORCED,
     TileType.FURNITURE,
-    TileType.AIR,
     TileType.TABLE,
     TileType.CABINET,
     TileType.REFRIGERATOR,

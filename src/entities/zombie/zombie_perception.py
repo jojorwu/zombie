@@ -2,8 +2,24 @@ import math
 import random
 from src.world.tiles import TileType
 
-_OPAQUE_VIS_TILES = {TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL, TileType.FURNITURE}
-_WALL_TILES = {TileType.BUILDING_WALL, TileType.UNDERGROUND_WALL}
+_OPAQUE_VIS_TILES = {
+    TileType.BUILDING_WALL,
+    TileType.UNDERGROUND_WALL,
+    TileType.WALL_BRICK,
+    TileType.WALL_CONCRETE,
+    TileType.WALL_WOOD,
+    TileType.WALL_REINFORCED,
+    TileType.FURNITURE
+}
+
+_WALL_TILES = {
+    TileType.BUILDING_WALL,
+    TileType.UNDERGROUND_WALL,
+    TileType.WALL_BRICK,
+    TileType.WALL_CONCRETE,
+    TileType.WALL_WOOD,
+    TileType.WALL_REINFORCED
+}
 
 
 class ZombiePerception:

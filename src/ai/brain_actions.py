@@ -142,8 +142,8 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     else:
         inputs[27], inputs[28], inputs[29] = 1.0, 1.0, 1.0
 
-    # Building shelter indicator
-    building = world.building_grid.get((int(survivor.x), int(survivor.y), int(survivor.z)))
+    # Building shelter indicator (2D coordinate lookup)
+    building = world.building_grid.get((int(survivor.x), int(survivor.y)))
     inputs[30] = 1.0 if building is not None else 0.0
 
     # Exploration coverage indicator

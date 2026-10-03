@@ -76,6 +76,11 @@ class AStar3D:
             z_idx = self.world.z_to_idx(z)
 
             for dx, dy, cost in _DIRECTIONS_8:
+                # Prevent diagonal corner cutting through solid wall corners
+                if abs(dx) == 1 and abs(dy) == 1:
+                    if not self.world.is_walkable(x + dx, y, z) and not self.world.is_walkable(x, y + dy, z):
+                        continue
+
                 nx, ny = x + dx, y + dy
                 n_pos = (nx, ny, z)
                 if n_pos not in closed_set:

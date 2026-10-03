@@ -1,4 +1,5 @@
 import math
+from utils.container_utility import ContainerUtility
 
 
 class VehiclePart:
@@ -52,7 +53,7 @@ class Vehicle:
         self.model_type = model_type
         self.driver = None  # Reference to Survivor if inside
         self.trunk_inventory = {}
-        self.trunk_capacity = 30
+        self.trunk_capacity = 80.0  # Capacity in kg (PZ Style)
         self.noise_level = 18.0
 
         # Vehicle Physics Engine
@@ -106,8 +107,8 @@ class Vehicle:
             return False
         return True
 
-    def update_physics(self, throttle: float = 0.0, steer: float = 0.0, brake: bool = False, world=None):
-        """Updates CDDA-style vehicle physics, engine operation, wheel condition, and position."""
+    def update_physics(self, throttle: float = 0.0, steer: float = 0.0, brake: bool = False, world=None, noise_events=None):
+        """Updates CDDA-style vehicle physics, engine operation, wheel condition, acoustic noise, and driver Z synchronization."""
         p = self.physics
         cur_sp = p.speed
 
@@ -123,10 +124,14 @@ class Vehicle:
 
             self.fuel = max(0.0, self.fuel - 0.03 * abs(throttle))
 
+            # Emit acoustic engine noise to alert nearby zombie hordes
+            if noise_events is not None:
+                from src.entities.sensory import NoiseEvent
+                noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=self.noise_level, source_type="vehicle_engine"))
+
         wheel_avg = sum(self.parts[w].condition_percent for w in ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"] if w in self.parts) / 400.0 if self.parts else 1.0
 
         if brake:
-            # Momentum stopping inertia: braking force scales inversely with current speed so high-speed vehicles require realistic stopping distance
             effective_brake = p.brake_force * max(0.15, (1.0 / (1.0 + cur_sp * 3.0))) * max(0.3, wheel_avg)
             p.velocity_x *= max(0.0, 1.0 - effective_brake)
             p.velocity_y *= max(0.0, 1.0 - effective_brake)
@@ -145,7 +150,7 @@ class Vehicle:
         if world and world.is_walkable(nx, ny, self.z):
             self.x, self.y = nx, ny
             if self.driver:
-                self.driver.x, self.driver.y = self.x, self.y
+                self.driver.x, self.driver.y, self.driver.z = self.x, self.y, self.z
         elif world:
             # Collision impact with wall or obstacle
             impact_damage = cur_sp * 150.0 * p.collision_factor
@@ -156,18 +161,14 @@ class Vehicle:
             p.velocity_x = -p.velocity_x * 0.3
             p.velocity_y = -p.velocity_y * 0.3
 
+            if self.driver:
+                self.driver.x, self.driver.y, self.driver.z = self.x, self.y, self.z
+
     def store_in_trunk(self, item_type: str, amount: int = 1) -> bool:
-        current_items = sum(self.trunk_inventory.values())
-        if current_items + amount <= self.trunk_capacity:
-            self.trunk_inventory[item_type] = self.trunk_inventory.get(item_type, 0) + amount
-            return True
-        return False
+        """Stores items in vehicle trunk using Project Zomboid ContainerUtility weight rules."""
+        success, added = ContainerUtility.add_item_to_container(self, item_type, amount)
+        return success
 
     def take_from_trunk(self, item_type: str, amount: int = 1) -> int:
-        available = self.trunk_inventory.get(item_type, 0)
-        taken = min(available, amount)
-        if taken > 0:
-            self.trunk_inventory[item_type] -= taken
-            if self.trunk_inventory[item_type] <= 0:
-                del self.trunk_inventory[item_type]
-        return taken
+        """Takes items from vehicle trunk using ContainerUtility."""
+        return ContainerUtility.remove_item_from_container(self, item_type, amount)

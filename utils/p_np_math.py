@@ -1,6 +1,7 @@
 import math
 import numpy as np
 from src.entities.item import ResourceItem
+from utils.container_utility import ContainerUtility
 
 
 class PolynomialVerifier:
@@ -44,7 +45,7 @@ class PolynomialVerifier:
 class PolynomialKnapsackSolver:
     """
     Polynomial / Pseudo-Polynomial O(N * W) Dynamic Programming solver for NP-Hard 0/1 Knapsack.
-    Used by survivors to optimize inventory item selection based on item weight vs survival utility value.
+    Used by survivors to optimize inventory item selection based on item weight (kg) vs survival utility value.
     """
     ITEM_VALUES = {
         ResourceItem.MEDKIT: 100.0,
@@ -71,31 +72,6 @@ class PolynomialKnapsackSolver:
         ResourceItem.WEAPON: 30.0,
     }
 
-    ITEM_WEIGHTS = {
-        ResourceItem.MEDKIT: 2,
-        ResourceItem.PISTOL: 3,
-        ResourceItem.RIFLE: 6,
-        ResourceItem.SHOTGUN: 7,
-        ResourceItem.PISTOL_AMMO: 1,
-        ResourceItem.RIFLE_AMMO: 1,
-        ResourceItem.SHOTGUN_SHELLS: 1,
-        ResourceItem.CANNED_FOOD: 2,
-        ResourceItem.MRE: 2,
-        ResourceItem.WATER_BOTTLE: 2,
-        ResourceItem.AXE: 5,
-        ResourceItem.CROWBAR: 4,
-        ResourceItem.KNIFE: 1,
-        ResourceItem.CHEF_KNIFE: 1,
-        ResourceItem.BREAD: 1,
-        ResourceItem.APPLE: 1,
-        ResourceItem.WOOD: 3,
-        ResourceItem.METAL: 4,
-        ResourceItem.FUEL: 5,
-        ResourceItem.FOOD: 1,
-        ResourceItem.WATER: 1,
-        ResourceItem.WEAPON: 3,
-    }
-
     @classmethod
     def optimize_inventory(cls, item_list, max_capacity=20):
         if not item_list:
@@ -105,11 +81,11 @@ class PolynomialKnapsackSolver:
         for item in item_list:
             itype = item.item_type if hasattr(item, 'item_type') else item
             val = cls.ITEM_VALUES.get(itype, 10.0)
-            weight = cls.ITEM_WEIGHTS.get(itype, 1)
+            weight = max(1, int(round(ContainerUtility.get_item_weight(itype) * 2.0)))
             formatted_items.append((itype, weight, val, item))
 
         n = len(formatted_items)
-        w_max = int(max_capacity)
+        w_max = int(round(max_capacity * 2.0))
 
         dp = np.zeros((n + 1, w_max + 1), dtype=np.float32)
 
@@ -124,7 +100,7 @@ class PolynomialKnapsackSolver:
         selected_items = []
         w = w_max
         for i in range(n, 0, -1):
-            if dp[i, w] != dp[i - 1, w]:
+            if not math.isclose(float(dp[i, w]), float(dp[i - 1, w]), abs_tol=1e-4):
                 selected_items.append(formatted_items[i - 1][3])
                 w -= formatted_items[i - 1][1]
 
@@ -166,8 +142,10 @@ class PolynomialTSPSolver:
                     p1, p2 = route[i - 1], route[i]
                     p3, p4 = route[j], route[j + 1]
 
-                    d1 = math.hypot(p1[0] - p2[0], p1[1] - p2[1]) + math.hypot(p3[0] - p4[0], p3[1] - p4[1])
-                    d2 = math.hypot(p1[0] - p3[0], p1[1] - p3[1]) + math.hypot(p2[0] - p4[0], p2[1] - p4[1])
+                    d1 = (math.hypot(p1[0] - p2[0], p1[1] - p2[1]) + abs(p1[2] - p2[2]) * 3.0 +
+                          math.hypot(p3[0] - p4[0], p3[1] - p4[1]) + abs(p3[2] - p4[2]) * 3.0)
+                    d2 = (math.hypot(p1[0] - p3[0], p1[1] - p3[1]) + abs(p1[2] - p3[2]) * 3.0 +
+                          math.hypot(p2[0] - p4[0], p2[1] - p4[1]) + abs(p2[2] - p4[2]) * 3.0)
 
                     if d2 < d1:
                         route[i:j + 1] = reversed(route[i:j + 1])

@@ -1,5 +1,6 @@
+import math
 import random
-from src.world import TileType
+from src.world.tiles import TileType
 from src.entities.item import ResourceItem
 
 
@@ -58,8 +59,8 @@ class PlantUtility:
         """Allows survivor to harvest nearby mature plants into inventory."""
         for plant in plants:
             if not plant.harvested and plant.z == survivor.z:
-                dist = abs(plant.x - survivor.x) + abs(plant.y - survivor.y)
-                if dist < 1.2:
+                dist = math.hypot(plant.x - survivor.x, plant.y - survivor.y)
+                if dist <= 1.5:
                     ptype, amt = plant.harvest()
                     if ptype:
                         survivor.inventory[ptype] = survivor.inventory.get(ptype, 0) + amt

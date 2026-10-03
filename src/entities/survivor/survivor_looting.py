@@ -4,10 +4,11 @@ from src.entities.item import ResourceItem
 from src.world.tiles import TileType
 from src.entities.sensory import NoiseEvent
 from utils.p_np_math import PolynomialKnapsackSolver
+from utils.container_utility import ContainerUtility
 
 
 class SurvivorLooting:
-    """Handles item pickup optimization via Knapsack and searching specialized furniture containers."""
+    """Handles item pickup optimization via Knapsack and searching specialized furniture containers using ContainerUtility capacity rules."""
     @staticmethod
     def gather(survivor, world, items, noise_events):
         nearby_items = [
@@ -16,14 +17,15 @@ class SurvivorLooting:
         ]
 
         if nearby_items:
-            optimal_subset = PolynomialKnapsackSolver.optimize_inventory(nearby_items, max_capacity=15)
+            optimal_subset = PolynomialKnapsackSolver.optimize_inventory(nearby_items, max_capacity=20)
             for item in optimal_subset:
-                item.collected = True
-                survivor.inventory[item.item_type] = survivor.inventory.get(item.item_type, 0) + item.amount
-                if hasattr(item, 'contents') and item.contents:
-                    for ck, cv in item.contents.items():
-                        survivor.inventory[ck] = survivor.inventory.get(ck, 0) + cv
-                survivor.score += 5.0
+                if ContainerUtility.can_fit_item(survivor, item.item_type, item.amount):
+                    item.collected = True
+                    ContainerUtility.add_item_to_container(survivor, item.item_type, item.amount)
+                    if hasattr(item, 'contents') and item.contents:
+                        for ck, cv in item.contents.items():
+                            ContainerUtility.add_item_to_container(survivor, ck, cv)
+                    survivor.score += 5.0
         elif world:
             z_idx = world.z_to_idx(survivor.z)
             SEARCHABLE_TILES = (
@@ -52,8 +54,9 @@ class SurvivorLooting:
                         else:
                             found_item = random.choice([ResourceItem.CHEF_KNIFE, ResourceItem.KATANA, ResourceItem.FRYING_PAN, ResourceItem.POT, ResourceItem.CUTTING_BOARD])
 
-                        survivor.inventory[found_item] = survivor.inventory.get(found_item, 0) + 1
-                        survivor.score += 10.0
-                        if noise_events is not None:
-                            noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=11.0, source_type="dismantling"))
+                        if ContainerUtility.can_fit_item(survivor, found_item, 1):
+                            ContainerUtility.add_item_to_container(survivor, found_item, 1)
+                            survivor.score += 10.0
+                            if noise_events is not None:
+                                noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=11.0, source_type="dismantling"))
                         break

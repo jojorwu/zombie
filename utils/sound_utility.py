@@ -1,5 +1,6 @@
 import math
 
+
 class SoundUtility:
     """
     Realistic Acoustic Sound Physics Utility Engine:
@@ -10,8 +11,14 @@ class SoundUtility:
     """
     SOUND_PROFILES = {
         "rifle_shot": {"db_spl": 155.0, "frequency_hz": 1200},
+        "assault_rifle_shot": {"db_spl": 155.0, "frequency_hz": 1200},
+        "sniper_shot": {"db_spl": 165.0, "frequency_hz": 1000},
         "shotgun_shot": {"db_spl": 160.0, "frequency_hz": 800},
         "pistol_shot": {"db_spl": 140.0, "frequency_hz": 1500},
+        "magnum_shot": {"db_spl": 150.0, "frequency_hz": 1300},
+        "smg_shot": {"db_spl": 142.0, "frequency_hz": 1400},
+        "crossbow_shot": {"db_spl": 25.0, "frequency_hz": 2000},
+        "sledgehammer": {"db_spl": 85.0, "frequency_hz": 300},
         "vehicle_engine": {"db_spl": 85.0, "frequency_hz": 300},
         "furniture_push": {"db_spl": 70.0, "frequency_hz": 250},
         "dismantling": {"db_spl": 75.0, "frequency_hz": 500},
@@ -32,12 +39,13 @@ class SoundUtility:
         profile = cls.SOUND_PROFILES.get(sound_type, {"db_spl": 60.0})
         base_db = profile["db_spl"]
 
-        if distance_m <= 1.0:
+        dist = max(0.1, float(distance_m))
+        if dist <= 1.0:
             distance_loss = 0.0
         else:
-            distance_loss = 20.0 * math.log10(distance_m)
+            distance_loss = 20.0 * math.log10(dist)
 
-        obstacle_loss = (wall_count * 25.0) + (door_count * 12.0)
+        obstacle_loss = (max(0, wall_count) * 25.0) + (max(0, door_count) * 12.0)
         perceived_db = base_db - distance_loss - obstacle_loss
 
         is_audible = perceived_db >= cls.HEARING_THRESHOLD_DB

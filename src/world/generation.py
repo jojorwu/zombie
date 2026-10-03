@@ -69,6 +69,7 @@ class WorldGenerator:
                     else:
                         tile = TileType.BUILDING_WALL if (x == bx or x == bx + bw - 1 or y == by or y == by + bh - 1) else TileType.BUILDING_FLOOR
                     world.grid[z_idx, y, x] = tile
+                    world.building_grid[(x, y)] = btype
                     world.building_grid[(x, y, z)] = btype
 
             if z == 0:
@@ -139,15 +140,19 @@ class WorldGenerator:
                             if world.grid[z_idx, py, px] in (TileType.GRASS, TileType.ROAD):
                                 world.grid[z_idx, py, px] = TileType.PARKING
                     world.grid[z_idx, min(world.height - 1, by + bh - 1), min(world.width - 1, bx + bw)] = TileType.TRASH_CAN
-            elif z == top_floor and z > 0:
-                for ry in range(by + 1, min(world.height - 1, by + bh - 1)):
-                    for rx in range(bx + 1, min(world.width - 1, bx + bw - 1)):
-                        world.grid[z_idx, ry, rx] = TileType.ROOF
             elif z < top_floor:
                 self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.CABINET, b_id, btype)
                 self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.BED, b_id, btype)
 
             world.grid[z_idx, min(world.height - 1, by + 3), min(world.width - 1, bx + 3)] = TileType.STAIRS if (z % 2 == 0) else TileType.LADDER
+
+        # Place roof tiles on the ceiling layer above the top floor if within max z limits
+        roof_z = top_floor + 1
+        if roof_z <= world.z_max:
+            roof_z_idx = world.z_to_idx(roof_z)
+            for ry in range(by, min(world.height, by + bh)):
+                for rx in range(bx, min(world.width, bx + bw)):
+                    world.grid[roof_z_idx, ry, rx] = TileType.ROOF
 
     def generate(self) -> None:
         """High-performance vectorized world generator."""

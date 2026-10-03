@@ -7,6 +7,7 @@ from src.entities.health import AnatomicalHealth, BodyPart
 from src.entities.survivor.survivor_state import EmotionalState
 from src.entities.survivor.survivor_looting import SurvivorLooting
 from src.entities.survivor.survivor_actions import SurvivorActions
+from utils.container_utility import ContainerUtility
 
 
 class Survivor:
@@ -188,6 +189,12 @@ class Survivor:
         if not self.is_alive:
             return
         base_speed = 0.15 * self.body.movement_speed_multiplier * self.grab_slowdown_factor
+
+        # Project Zomboid Encumbrance Weight Slowdown
+        inv_weight = ContainerUtility.get_container_weight(self.inventory)
+        if inv_weight > 25.0:
+            encumbrance_penalty = max(0.20, 1.0 - ((inv_weight - 25.0) * 0.02))
+            base_speed *= encumbrance_penalty
 
         if self.emotional_state == EmotionalState.PANICKED:
             base_speed *= 1.15

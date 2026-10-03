@@ -1,5 +1,6 @@
 from enum import Enum, auto
 from typing import Dict, Tuple, Optional, Any, List
+from utils.container_utility import ContainerUtility
 
 
 class FurnitureCondition(Enum):
@@ -25,6 +26,28 @@ class FurnitureState:
         self.is_pushed: bool = False
         self.contents: Dict[str, int] = {}
 
+    @property
+    def capacity(self) -> float:
+        """Returns maximum container capacity in kg for this furniture item."""
+        return ContainerUtility.get_container_capacity(self)
+
+    @property
+    def contents_weight(self) -> float:
+        """Calculates total weight in kg of items stored inside this furniture container."""
+        return ContainerUtility.get_container_weight(self)
+
+    def can_fit_item(self, item_type: str, amount: int = 1) -> bool:
+        """Checks if adding amount units of item_type exceeds container capacity."""
+        return ContainerUtility.can_fit_item(self, item_type, amount)
+
+    def add_item(self, item_type: str, amount: int = 1) -> Tuple[bool, int]:
+        """Adds item to container using ContainerUtility capacity rules."""
+        return ContainerUtility.add_item_to_container(self, item_type, amount)
+
+    def remove_item(self, item_type: str, amount: int = 1) -> int:
+        """Removes item from container using ContainerUtility."""
+        return ContainerUtility.remove_item_from_container(self, item_type, amount)
+
     def take_damage(self, amount: float) -> bool:
         """Applies damage to furniture. Returns True if destroyed."""
         self.durability = max(0.0, self.durability - amount)
@@ -47,6 +70,8 @@ class FurnitureState:
             "durability": self.durability,
             "max_durability": self.max_durability,
             "condition": self.condition.name,
+            "capacity_kg": self.capacity,
+            "contents_weight_kg": self.contents_weight,
             "is_searched": self.is_searched,
             "is_locked": self.is_locked,
             "is_pushed": self.is_pushed,

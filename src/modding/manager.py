@@ -1,6 +1,8 @@
 import os
 import glob
 import sys
+from utils.container_utility import ContainerUtility
+from utils.ballistics_utility import BallisticsUtility
 
 try:
     import lupa
@@ -43,6 +45,20 @@ class LuaModManager:
 
         g = self.lua.globals()
         g.py_log = lambda msg: print(f"[Lua API]: {msg}")
+
+        # Expose Project Zomboid ContainerUtility API functions to Lua mods
+        g.get_item_weight = ContainerUtility.get_item_weight
+        g.get_item_category = ContainerUtility.get_item_category
+        g.get_container_capacity = ContainerUtility.get_container_capacity
+        g.get_container_weight = ContainerUtility.get_container_weight
+        g.can_fit_item = ContainerUtility.can_fit_item
+        g.add_item_to_container = ContainerUtility.add_item_to_container
+        g.remove_item_from_container = ContainerUtility.remove_item_from_container
+        g.transfer_item = ContainerUtility.transfer_item
+
+        # Expose Raycast Ballistics API functions to Lua mods
+        g.calculate_trajectory = BallisticsUtility.calculate_trajectory
+        g.simulate_bullet_flight = BallisticsUtility.simulate_bullet_flight
 
     def load_mods(self):
         if not os.path.exists(self.mods_dir):

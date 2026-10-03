@@ -3,7 +3,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from src.world import World
 from src.entities import Survivor, Vehicle, ResourceItem, EntityFactory
-from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager, batch_get_action_and_movement
+from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager, batch_get_action_and_movement, HierarchicalDecisionPlanner
 from src.modding.manager import LuaModManager
 from src.simulation.spawner import EntitySpawner
 from src.simulation.environment import EnvironmentManager
@@ -49,6 +49,7 @@ class SimulationEngine:
         )
 
         self.brains = self.evolution_manager.create_initial_brains()
+        self.planners = [HierarchicalDecisionPlanner() for _ in self.brains]
         self.hidden_states = [brain.init_hidden() for brain in self.brains]
         self.selected_survivor_idx = 0
         self.best_historical_score = 0.0
@@ -148,6 +149,7 @@ class SimulationEngine:
 
             for idx, orig_i in enumerate(alive_indices):
                 survivor = self.survivors[orig_i]
+                planner = self.planners[orig_i]
                 survivor.update_needs()
 
                 if not survivor.is_alive and survivor.is_infected:
@@ -155,8 +157,17 @@ class SimulationEngine:
                     self.zombies.append(new_z)
                     continue
 
-                dx, dy, action, new_hidden = step_outputs[idx]
+                raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx]
                 self.hidden_states[orig_i] = new_hidden
+
+                # Evaluate high-level goal periodically or on high threat
+                if self.world.current_tick - planner.last_eval_tick >= planner.goal_eval_interval:
+                    planner.evaluate_goal(survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, action_idx=raw_action)
+                    planner.last_eval_tick = self.world.current_tick
+
+                dx, dy, action = planner.execute_low_level_behaviour(
+                    survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, raw_dx, raw_dy, raw_action
+                )
 
                 survivor.move(dx, dy, self.world, noise_events=self.noise_events)
                 survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors, noise_events=self.noise_events)
@@ -234,6 +245,7 @@ class SimulationEngine:
             brains_and_fitnesses.append((self.brains[i], fitness))
 
         self.brains, max_fit = self.evolution_manager.evolve_population(brains_and_fitnesses)
+        self.planners = [HierarchicalDecisionPlanner() for _ in self.brains]
         if max_fit > self.best_historical_score:
             self.best_historical_score = max_fit
             self.evolution_manager.save_best_brain(self.brains[0], "best_brain.zbrain")

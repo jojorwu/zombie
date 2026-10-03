@@ -1,0 +1,158 @@
+import math
+import random
+from enum import Enum, auto
+
+
+class HighLevelGoal(Enum):
+    SURVIVE = auto()
+    FLEE_THREAT = auto()
+    ATTACK_THREAT = auto()
+    LOOT_SUPPLIES = auto()
+    SEEK_SHELTER = auto()
+    REST_AND_HEAL = auto()
+    EXPLORE = auto()
+
+
+class BehaviourNodeState(Enum):
+    SUCCESS = auto()
+    FAILURE = auto()
+    RUNNING = auto()
+
+
+class HierarchicalDecisionPlanner:
+    """
+    Hierarchical AI Planner combining high-level goal selection with low-level
+    Behaviour Tree execution to eliminate action jitter and ensure long-term goal coherence.
+    """
+    __slots__ = ("goal_eval_interval", "last_eval_tick", "current_goal", "target_entity", "target_pos")
+
+    def __init__(self, goal_eval_interval: int = 15):
+        self.goal_eval_interval = goal_eval_interval
+        self.last_eval_tick = -goal_eval_interval
+        self.current_goal = HighLevelGoal.SURVIVE
+        self.target_entity = None
+        self.target_pos = None
+
+    def evaluate_goal(self, survivor, world, items, vehicles, zombies, animals, action_idx: int = None) -> HighLevelGoal:
+        """Determines the survivor's current high-level goal based on needs, threats, and neural network hints."""
+        # Critical survival threats override current goal immediately
+        if survivor.health < 30.0 or survivor.hunger > 80.0 or survivor.thirst > 80.0:
+            if survivor.health < 30.0 and survivor.inventory.get("medkit", 0) > 0:
+                self.current_goal = HighLevelGoal.REST_AND_HEAL
+                return self.current_goal
+
+        # Detect close active threats
+        closest_zombie = None
+        min_z_dist = 999.0
+        for z in zombies:
+            if getattr(z, "is_alive", True):
+                d = math.hypot(z.x - survivor.x, z.y - survivor.y)
+                if d < min_z_dist:
+                    min_z_dist = d
+                    closest_zombie = z
+
+        if closest_zombie and min_z_dist < 6.0:
+            has_weapon = survivor.inventory.get("weapon", 0) > 0 or survivor.inventory.get("pistol", 0) > 0
+            if has_weapon and survivor.health > 40.0:
+                self.current_goal = HighLevelGoal.ATTACK_THREAT
+                self.target_entity = closest_zombie
+            else:
+                self.current_goal = HighLevelGoal.FLEE_THREAT
+                self.target_entity = closest_zombie
+            return self.current_goal
+
+        # Secondary needs: Looting or seeking shelter
+        if survivor.hunger > 50.0 or survivor.thirst > 50.0 or survivor.inventory.get("canned_food", 0) == 0:
+            self.current_goal = HighLevelGoal.LOOT_SUPPLIES
+            return self.current_goal
+
+        building = world.building_grid.get((int(survivor.x), int(survivor.y)))
+        if building is None and (world.get_light_level() < 0.3 or survivor.sleep > 60.0):
+            self.current_goal = HighLevelGoal.SEEK_SHELTER
+            return self.current_goal
+
+        # Action index neural net fallback selection
+        if action_idx is not None:
+            goal_map = {
+                0: HighLevelGoal.EXPLORE,
+                1: HighLevelGoal.LOOT_SUPPLIES,
+                2: HighLevelGoal.ATTACK_THREAT,
+                3: HighLevelGoal.FLEE_THREAT,
+                4: HighLevelGoal.SEEK_SHELTER,
+                5: HighLevelGoal.REST_AND_HEAL,
+            }
+            self.current_goal = goal_map.get(action_idx % 6, HighLevelGoal.EXPLORE)
+        else:
+            self.current_goal = HighLevelGoal.EXPLORE
+
+        return self.current_goal
+
+    def execute_low_level_behaviour(self, survivor, world, items, vehicles, zombies, animals, raw_dx: float, raw_dy: float, raw_action: int) -> tuple:
+        """
+        Translates high-level goal into stable, low-level (dx, dy, action) commands
+        preventing rapid directional oscillation.
+        """
+        goal = self.current_goal
+
+        if goal == HighLevelGoal.REST_AND_HEAL:
+            # Action index 5 corresponds to heal / rest
+            return 0.0, 0.0, 5
+
+        elif goal == HighLevelGoal.FLEE_THREAT and self.target_entity:
+            # Run directly away from target threat
+            dx = survivor.x - self.target_entity.x
+            dy = survivor.y - self.target_entity.y
+            dist = math.hypot(dx, dy)
+            if dist > 0.001:
+                return dx / dist, dy / dist, 0
+            return -raw_dx, -raw_dy, 0
+
+        elif goal == HighLevelGoal.ATTACK_THREAT and self.target_entity:
+            # Step towards target threat and execute attack action
+            dx = self.target_entity.x - survivor.x
+            dy = self.target_entity.y - survivor.y
+            dist = math.hypot(dx, dy)
+            if dist <= 1.5:
+                # Attack action
+                return 0.0, 0.0, 1
+            elif dist > 0.001:
+                return dx / dist, dy / dist, 0
+
+        elif goal == HighLevelGoal.LOOT_SUPPLIES:
+            # Move towards closest item
+            closest_item = None
+            min_i_dist = 999.0
+            for item in items:
+                if not getattr(item, 'collected', False):
+                    d = math.hypot(item.x - survivor.x, item.y - survivor.y)
+                    if d < min_i_dist:
+                        min_i_dist = d
+                        closest_item = item
+
+            if closest_item and min_i_dist < 12.0:
+                dx = closest_item.x - survivor.x
+                dy = closest_item.y - survivor.y
+                if min_i_dist <= 1.2:
+                    return 0.0, 0.0, 2  # Interact / Loot action
+                return dx / min_i_dist, dy / min_i_dist, 0
+
+        elif goal == HighLevelGoal.SEEK_SHELTER:
+            # Find closest building coordinate
+            if hasattr(world, 'building_grid') and world.building_grid:
+                bx, by = survivor.x, survivor.y
+                min_b_dist = 999.0
+                for (x, y) in world.building_grid.keys():
+                    d = math.hypot(x - survivor.x, y - survivor.y)
+                    if d < min_b_dist:
+                        min_b_dist = d
+                        bx, by = x + 0.5, y + 0.5
+                if min_b_dist < 50.0 and min_b_dist > 1.0:
+                    dx = bx - survivor.x
+                    dy = by - survivor.y
+                    return dx / min_b_dist, dy / min_b_dist, 0
+
+        # Fallback to smoothed neural movement
+        mag = math.hypot(raw_dx, raw_dy)
+        if mag > 0.1:
+            return raw_dx / mag, raw_dy / mag, raw_action
+        return raw_dx, raw_dy, raw_action

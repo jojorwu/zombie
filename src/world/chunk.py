@@ -64,6 +64,30 @@ class ChunkManager:
         cx, cy = self.get_chunk_coords(world_x, world_y)
         return self.get_chunk(cx, cy)
 
+    def add_entity_to_chunk(self, world_x: float, world_y: float, entity: any) -> None:
+        chunk = self.get_chunk_at(world_x, world_y)
+        if chunk and entity not in chunk.entities:
+            chunk.entities.append(entity)
+
+    def remove_entity_from_chunk(self, world_x: float, world_y: float, entity: any) -> None:
+        chunk = self.get_chunk_at(world_x, world_y)
+        if chunk and entity in chunk.entities:
+            chunk.entities.remove(entity)
+
+    def rebind_entity(self, entity: any, old_x: float, old_y: float, new_x: float, new_y: float) -> None:
+        """Transfers an entity's chunk membership when crossing 16x16 chunk boundaries."""
+        old_cx, old_cy = self.get_chunk_coords(old_x, old_y)
+        new_cx, new_cy = self.get_chunk_coords(new_x, new_y)
+
+        if (old_cx, old_cy) != (new_cx, new_cy):
+            old_chunk = self.get_chunk(old_cx, old_cy)
+            new_chunk = self.get_chunk(new_cx, new_cy)
+
+            if old_chunk and entity in old_chunk.entities:
+                old_chunk.entities.remove(entity)
+            if new_chunk and entity not in new_chunk.entities:
+                new_chunk.entities.append(entity)
+
     def get_chunks_covering_area(self, min_x: float, min_y: float, width: float, height: float) -> list[Chunk]:
         min_cx = max(0, int(min_x) // self.chunk_size)
         max_cx = min(self.num_chunks_x - 1, int(min_x + width - 0.001) // self.chunk_size)
@@ -132,5 +156,7 @@ class ChunkManager:
         self.active_chunks = new_active
         return self.active_chunks
 
-    def update_active_chunks_async(self, entity_positions, view_distance_chunks: int = 2) -> set:
-        return self.update_active_chunks(entity_positions, view_distance_chunks)
+    def update_active_chunks_async(self, entity_positions, view_distance_chunks: int = 2):
+        """Asynchronously updates active chunks using CHUNK_EXECUTOR background thread worker."""
+        future = CHUNK_EXECUTOR.submit(self.update_active_chunks, entity_positions, view_distance_chunks)
+        return future

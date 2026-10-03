@@ -1,15 +1,22 @@
 # Firearms, Ballistics, Item Metal Quality & Zombie Horde AI
 
-## Ballistics Engine & Calibers (`BallisticsUtility`)
-Firearms simulate ballistics calculations including air drag velocity loss, wind deflection drift, gravitational bullet drop, and kinetic impact energy:
-1. **9mm (Pistol)**: Muzzle velocity 360 m/s, base damage 35.0, max range 50m.
-2. **5.56mm (Rifle)**: Muzzle velocity 940 m/s, base damage 75.0, max range 150m.
-3. **12gauge (Shotgun)**: Muzzle velocity 475 m/s, base damage 110.0, max range 35m.
-4. **.357 Magnum**: Muzzle velocity 440 m/s, base damage 85.0, max range 65m.
-5. **.308 Sniper**: Muzzle velocity 850 m/s, base damage 160.0, max range 300m.
-6. **Arrow**: Muzzle velocity 90 m/s, base damage 75.0, max range 40m.
+## Enhanced Raycast Ballistics Engine (`BallisticsUtility`)
+Firearms execute step-by-step raycast projectile flight simulations including air drag velocity loss, wind deflection drift, gravitational bullet drop, material overpenetration, glass shattering, and shallow-angle ricochets:
+1. **9mm (Pistol & SMG)**: Muzzle velocity 360 m/s, base damage 35.0, initial kinetic energy 518.4 J. Penetrates glass windows and wooden doors; ricochets off brick/concrete walls at shallow angles.
+2. **5.56mm (Assault Rifle & Rifle)**: Muzzle velocity 940 m/s, base damage 75.0, initial kinetic energy 1767.2 J. High-velocity penetration through wood, glass, and brick walls; overpenetrates flesh to hit secondary targets in line of fire.
+3. **12gauge (Shotgun)**: Muzzle velocity 475 m/s, base damage 110.0, initial kinetic energy 3158.8 J. Extreme close-range impact energy breaching doors and shattering windows.
+4. **.357 Magnum**: Muzzle velocity 440 m/s, base damage 85.0, initial kinetic energy 968.0 J. Heavy stopping power penetrating wooden doors and brick walls.
+5. **.308 Sniper**: Muzzle velocity 850 m/s, base damage 160.0, initial kinetic energy 3973.8 J. Armor-piercing rifle round penetrating concrete, brick, and multiple lined-up targets.
+6. **Arrow**: Muzzle velocity 90 m/s, base damage 75.0, initial kinetic energy 101.3 J. Silent projectile with zero acoustic noise report.
 
 Firing firearms generates acoustic decibel impulses (`NoiseEvent`) that alert and pull nearby zombies towards shooter coordinates.
+
+## Material Penetration Thresholds & Ricochet Physics
+- **Glass / Windows (`TileType.WINDOW`)**: 30 J resistance. Bullet shatters window (`WINDOW_BROKEN`) and continues with minimal velocity drop.
+- **Wood / Doors (`TileType.WALL_WOOD`, `DOOR`)**: 160 J resistance. Bullet overpenetrates wood if kinetic energy exceeds threshold.
+- **Brick (`TileType.WALL_BRICK`)**: 420 J resistance. Stopped by 9mm, penetrated by 5.56mm and .308 rounds.
+- **Concrete & Metal (`WALL_CONCRETE`, `WALL_REINFORCED`)**: 850 - 1200 J resistance. High hardness surface causing shallow-angle (<35°) ricochet reflections with sound report (`ricochet`).
+- **Multi-Target Overpenetration**: High-energy bullets pass through flesh (100 J loss per target) to strike additional zombies or survivors behind.
 
 ## Metal Quality Purity Tiers (`MetalQuality`)
 Weapons and tools possess metal quality tiers that scale damage and durability:
@@ -20,11 +27,11 @@ Weapons and tools possess metal quality tiers that scale damage and durability:
 - **Titanium**: 2.0x maximum damage multiplier.
 
 ## Item Categories & Perishable Foods
-- **Melee Weapons**: Knife, Axe, Baseball Bat, Crowbar, Stone Axe, Frying Pan, Chef Knife.
+- **Melee Weapons**: Knife, Axe, Baseball Bat, Crowbar, Stone Axe, Frying Pan, Chef Knife, Katana, Sledgehammer, Machete, Spear, Pipe.
 - **Natural Resources & Crafting**: Stick, Stone, Rags, Clothes, Book, Skill Book, Wood, Metal.
 - **Vehicle & Maintenance**: Gas Canister, Car Battery, Spare Wheel, Engine Parts, Wrench.
 - **Valuables & Utility**: Money, Gold Ingot, Jewelry, Lockpick, Medkit.
-- **Food & Spoilage (`FoodSpoilageUtility`)**: Perishable foods (Meat, Bread, Apples) decay over time. Cold storage in powered refrigerators reduces spoilage by 80%. Non-perishable items (Canned Food, MREs) never spoil. Wild forage items include Berries and Mushrooms.
+- **Food & Spoilage (`FoodSpoilageUtility`)**: Perishable foods decay over time. Refrigerators (80% slower decay) and Freezers (95% slower decay / frozen) preserve food. Non-perishable items (Canned Food, MREs) never spoil. Wild forage items include Berries and Mushrooms.
 - **Protective Armor**: Helmets, Tactical Body Armor, Leather Jackets, Pads reducing anatomical limb damage.
 
 ## Zombie AI Behavior & Horde Dynamics

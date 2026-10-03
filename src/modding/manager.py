@@ -2,6 +2,7 @@ import os
 import glob
 import sys
 from utils.container_utility import ContainerUtility
+from utils.ballistics_utility import BallisticsUtility
 
 try:
     import lupa
@@ -54,6 +55,10 @@ class LuaModManager:
         g.add_item_to_container = ContainerUtility.add_item_to_container
         g.remove_item_from_container = ContainerUtility.remove_item_from_container
         g.transfer_item = ContainerUtility.transfer_item
+
+        # Expose Raycast Ballistics API functions to Lua mods
+        g.calculate_trajectory = BallisticsUtility.calculate_trajectory
+        g.simulate_bullet_flight = BallisticsUtility.simulate_bullet_flight
 
     def load_mods(self):
         if not os.path.exists(self.mods_dir):

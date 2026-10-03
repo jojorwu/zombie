@@ -71,27 +71,51 @@ class SurvivorActions:
             }
             stype = stype_map.get(best_weapon, "pistol_shot")
             caliber = caliber_map.get(best_weapon, "9mm")
-            ballistics = BallisticsUtility.calculate_trajectory(
-                caliber,
-                distance_m=attack_range * 10.0,
+
+            survivor.inventory[ammo_type] -= 1
+            world.dynamic_lights.append(DynamicLight(survivor.x, survivor.y, survivor.z, radius=12.0, color=(255, 200, 100), intensity=1.5, lifetime=2))
+
+            # Combine all targets in line of fire for multi-target penetration
+            all_targets = [z for z in zombies if z.is_alive] + [a for a in animals if a.is_alive] + [s for s in survivors if s is not survivor and s.is_alive]
+
+            # Raycast ballistics flight with penetration, glass shattering, and ricochets
+            sim_res = BallisticsUtility.simulate_bullet_flight(
+                world,
+                start_x=survivor.x,
+                start_y=survivor.y,
+                start_z=survivor.z,
+                angle_rad=survivor.facing_angle,
+                caliber=caliber,
                 wind_speed_kmh=world.weather.wind_speed,
-                wind_angle_rad=world.weather.wind_angle
+                wind_angle_rad=world.weather.wind_angle,
+                targets=all_targets,
+                noise_events=noise_events
             )
-            damage = ballistics["damage"] * survivor.body.attack_damage_multiplier
+
+            # Award kills and scores for all hit targets
+            for hit in sim_res["hits"]:
+                target = hit["target"]
+                if not getattr(target, 'is_alive', True):
+                    survivor.kills += 1
+                    survivor.score += 25.0
+                    survivor.fear = max(0.0, survivor.fear - 15.0)
+                    survivor.panic = max(0.0, survivor.panic - 20.0)
+                    survivor.morale = min(100.0, survivor.morale + 10.0)
+
+            if noise_events is not None:
+                noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=35.0, source_type=stype))
+            return
 
         if survivor.emotional_state == EmotionalState.PANICKED and random.random() < 0.25:
             damage *= 0.5
         elif survivor.emotional_state == EmotionalState.TERRIFIED and random.random() < 0.50:
             damage = 0.0
 
-        if is_firearm and ammo_type:
-            survivor.inventory[ammo_type] -= 1
-            world.dynamic_lights.append(DynamicLight(survivor.x, survivor.y, survivor.z, radius=12.0, color=(255, 200, 100), intensity=1.5, lifetime=2))
-
         if survivor.in_vehicle and survivor.in_vehicle.fuel > 0:
             attack_range = 1.5
             damage = 60.0
 
+        # Melee combat
         for z in zombies:
             if z.is_alive and z.z == survivor.z and math.hypot(z.x - survivor.x, z.y - survivor.y) <= attack_range:
                 z.take_targeted_damage(damage, attacker_pos=(survivor.x, survivor.y, survivor.z))
@@ -102,7 +126,7 @@ class SurvivorActions:
                     survivor.panic = max(0.0, survivor.panic - 20.0)
                     survivor.morale = min(100.0, survivor.morale + 10.0)
                 if noise_events is not None:
-                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=31.0, source_type=stype))
+                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=12.0, source_type="sledgehammer"))
                 return
 
         for a in animals:
@@ -113,7 +137,7 @@ class SurvivorActions:
                     survivor.inventory[ResourceItem.MEAT] = survivor.inventory.get(ResourceItem.MEAT, 0) + 2
                     survivor.score += 15.0
                 if noise_events is not None:
-                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=31.0, source_type=stype))
+                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=12.0, source_type="sledgehammer"))
                 return
 
         for other in survivors:
@@ -123,7 +147,7 @@ class SurvivorActions:
                     survivor.kills += 1
                     survivor.score += 30.0
                 if noise_events is not None:
-                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=31.0, source_type=stype))
+                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=12.0, source_type="sledgehammer"))
                 return
 
     @staticmethod

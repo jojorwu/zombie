@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import unittest
 import json
-from src.simulation import SimulationEngine
+from src.simulation import SimulationEngine, EventBus, GameEvent, NoiseEmittedEvent, DamageDealtEvent
 
 class TestSimulation(unittest.TestCase):
     def test_simulation_integration(self):
@@ -74,6 +74,22 @@ class TestSimulation(unittest.TestCase):
         sim.end_generation()
         self.assertEqual(sim.evolution_manager.generation, initial_gen + 1)
         self.assertEqual(len(sim.survivors), config["simulation"]["num_survivors"])
+
+    def test_event_bus_publishing_and_handling(self):
+        bus = EventBus()
+        received_events = []
+
+        def noise_handler(event):
+            received_events.append(event)
+
+        bus.subscribe(NoiseEmittedEvent, noise_handler)
+        event = NoiseEmittedEvent(x=10.0, y=10.0, z=0, volume=20.0, source_type="gunshot")
+        bus.publish(event)
+        self.assertEqual(len(received_events), 0)  # Before batch processing
+
+        bus.process_events()
+        self.assertEqual(len(received_events), 1)  # After batch processing
+        self.assertEqual(received_events[0].volume, 20.0)
 
 if __name__ == "__main__":
     unittest.main()

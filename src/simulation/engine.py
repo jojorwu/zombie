@@ -2,11 +2,12 @@ import random
 import time
 from concurrent.futures import ThreadPoolExecutor
 from src.world import World
-from src.entities import Survivor, Vehicle, ResourceItem, EntityFactory
+from src.entities import Survivor, Vehicle, ResourceItem, EntityFactory, NoiseEvent
 from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager, batch_get_action_and_movement, HierarchicalDecisionPlanner
 from src.modding.manager import LuaModManager
 from src.simulation.spawner import EntitySpawner
 from src.simulation.environment import EnvironmentManager
+from src.simulation.event_bus import EventBus, NoiseEmittedEvent, DamageDealtEvent
 from utils.memory_monitor_utility import MemoryMonitorUtility
 from utils.electricity_utility import ElectricityUtility
 
@@ -16,6 +17,7 @@ SIM_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 class SimulationEngine:
     """Main simulation controller coordinating world ticks, AI decisions, entity updates, and evolution."""
     def __init__(self, config):
+        self.event_bus = EventBus()
         self.mod_manager = LuaModManager()
         self.factory = EntityFactory(config=config)
         self.memory_monitor = MemoryMonitorUtility()
@@ -54,7 +56,23 @@ class SimulationEngine:
         self.selected_survivor_idx = 0
         self.best_historical_score = 0.0
 
+        self._setup_event_handlers()
         self.reset_generation()
+
+    def _setup_event_handlers(self):
+        """Register ECS event bus listeners."""
+        self.event_bus.subscribe(NoiseEmittedEvent, self._handle_noise_emitted)
+        self.event_bus.subscribe(DamageDealtEvent, self._handle_damage_dealt)
+
+    def _handle_noise_emitted(self, event: NoiseEmittedEvent):
+        """Processes published noise events and creates sensory noise entities."""
+        ne = NoiseEvent(event.x, event.y, event.z, volume=event.volume, source_type=event.source_type)
+        self.noise_events.append(ne)
+
+    def _handle_damage_dealt(self, event: DamageDealtEvent):
+        """Processes published damage events across entities."""
+        if event.target and hasattr(event.target, "take_damage"):
+            event.target.take_damage(event.damage, target_part=event.body_part)
 
     def _recycle_entities(self):
         import gc
@@ -123,6 +141,7 @@ class SimulationEngine:
         t0 = time.time()
         self.env_manager.tick_environment()
         self.mod_manager.trigger_event("on_tick", self.world.current_tick)
+        self.event_bus.process_events()
 
         active_noises = []
         for ne in self.noise_events:

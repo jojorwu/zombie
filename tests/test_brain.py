@@ -9,6 +9,8 @@ import numpy as np
 from src.ai.brain_net import BrainNet, GeneticEvolutionManager, save_zbrain, load_zbrain, DEVICE
 from src.ai.brain_actions import batch_get_action_and_movement, extract_survivor_inputs, check_line_of_sight
 from src.ai.hierarchical_ai import HierarchicalDecisionPlanner, HighLevelGoal
+from src.ai.gym_env import SurvivorGymEnv
+from src.ai.ppo_brain import PPOActorCritic, PPOAgent
 from src.entities import Survivor
 from src.entities.zombie import Zombie
 from src.world import World, TileType
@@ -88,18 +90,31 @@ class TestBrain(unittest.TestCase):
         survivor = Survivor(10.0, 10.0)
         zombie = Zombie(15.0, 10.0)
 
-        # Direct LOS clear path
         self.assertTrue(check_line_of_sight(world, survivor.x, survivor.y, zombie.x, zombie.y, 0))
 
-        # Place wall between survivor and zombie
         z_idx = world.z_to_idx(0)
         world.grid[z_idx, 10, 12] = TileType.WALL_BRICK.value
         self.assertFalse(check_line_of_sight(world, survivor.x, survivor.y, zombie.x, zombie.y, 0))
 
-        # Verify extract_survivor_inputs uses spatial memory when blocked
         survivor.spatial_memory["zombie"] = (15.0, 10.0, 0, world.current_tick)
         inputs = extract_survivor_inputs(survivor, world, items=[], vehicles=[], zombies=[zombie], animals=[])
-        self.assertNotEqual(inputs[8], 0.0)  # Should use remembered dx
+        self.assertNotEqual(inputs[8], 0.0)
+
+    def test_survivor_gym_env_and_ppo_agent(self):
+        env = SurvivorGymEnv()
+        obs, info = env.reset()
+        self.assertEqual(obs.shape, (57,))
+
+        agent = PPOAgent(input_dim=57, hidden_dim=64, action_dim=13)
+        action, log_prob, val = agent.model.get_action(obs)
+
+        self.assertIsInstance(action, int)
+        self.assertGreaterEqual(action, 0)
+        self.assertLess(action, 13)
+
+        next_obs, reward, terminated, truncated, info = env.step(action)
+        self.assertEqual(next_obs.shape, (57,))
+        self.assertIsInstance(reward, float)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import random
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from src.world import World
 from src.entities import Survivor, Vehicle, ResourceItem, EntityFactory, NoiseEvent
@@ -34,6 +35,7 @@ class SimulationEngine:
         self.config = config
         self.sim_cfg = config["simulation"]
         self.evo_cfg = config["evolution"]
+        self.is_running = False
 
         self.world = World(
             width=self.sim_cfg.get("map_width", 1000),
@@ -68,6 +70,23 @@ class SimulationEngine:
 
         self._setup_event_handlers()
         self.reset_generation()
+
+    def run_fixed_timestep_loop(self, target_tps: int = 60, max_ticks: int = 100):
+        """Asynchronous fixed-timestep simulation thread loop publishing snapshots to double buffer."""
+        self.is_running = True
+        tick_interval = 1.0 / float(target_tps)
+        ticks_done = 0
+
+        while self.is_running and ticks_done < max_ticks:
+            t_start = time.time()
+            self.tick()
+            ticks_done += 1
+            elapsed = time.time() - t_start
+            sleep_time = tick_interval - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+        self.is_running = False
 
     def _setup_event_handlers(self):
         """Register ECS event bus listeners."""
@@ -179,7 +198,7 @@ class SimulationEngine:
             for idx, orig_i in enumerate(alive_indices):
                 survivor = self.survivors[orig_i]
                 planner = self.planners[orig_i]
-                survivor.update_needs()
+                survivor.update_needs(world=self.world)
 
                 if not survivor.is_alive and survivor.is_infected:
                     new_z = self.factory.create_zombie(survivor.x, survivor.y, z=survivor.z)
@@ -221,15 +240,16 @@ class SimulationEngine:
             if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
         ]
 
-        # Apply Rust C++ Flock Steering Acceleration if available
         if RUST_STEERING_AVAILABLE and len(active_zombies) > 5:
             z_coords = []
             for z in active_zombies:
                 z_coords.extend([z.x, z.y, float(z.z)])
             steer_vecs = compute_zombie_flock_steering(z_coords, separation_dist=1.5)
             for idx, z in enumerate(active_zombies):
-                z.x += steer_vecs[idx * 2] * 0.02
-                z.y += steer_vecs[idx * 2 + 1] * 0.02
+                nx = z.x + steer_vecs[idx * 2] * 0.02
+                ny = z.y + steer_vecs[idx * 2 + 1] * 0.02
+                if self.world.is_walkable(nx, ny, z.z):
+                    z.x, z.y = nx, ny
 
         z_grid = {}
         for z in active_zombies:

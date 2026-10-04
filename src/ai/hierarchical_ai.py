@@ -36,18 +36,19 @@ class HierarchicalDecisionPlanner:
 
     def evaluate_goal(self, survivor, world, items, vehicles, zombies, animals, action_idx: int = None) -> HighLevelGoal:
         """Determines the survivor's current high-level goal based on needs, threats, Line-of-Sight, and spatial memory."""
+        self.target_entity = None
+        self.target_pos = None
+
         surv_health = getattr(survivor, 'health', 100.0)
         surv_hunger = getattr(survivor, 'hunger', 100.0)
         surv_thirst = getattr(survivor, 'thirst', 100.0)
         surv_sleep = getattr(survivor, 'sleep', 100.0)
 
-        # Critical survival threats override current goal immediately
         if surv_health < 30.0 or surv_hunger < 20.0 or surv_thirst < 20.0:
             if surv_health < 30.0 and survivor.inventory.get("medkit", 0) > 0:
                 self.current_goal = HighLevelGoal.REST_AND_HEAL
                 return self.current_goal
 
-        # Detect close active threats with Line-of-Sight
         closest_zombie = None
         min_z_dist = 999.0
         for z in zombies:
@@ -70,7 +71,6 @@ class HierarchicalDecisionPlanner:
                 self.target_pos = (closest_zombie.x, closest_zombie.y, closest_zombie.z)
             return self.current_goal
 
-        # Spatial Memory threat fallback
         current_tick = getattr(world, 'current_tick', 0)
         if hasattr(survivor, 'spatial_memory') and "zombie" in survivor.spatial_memory:
             zx, zy, zz, ztick = survivor.spatial_memory["zombie"]
@@ -81,7 +81,6 @@ class HierarchicalDecisionPlanner:
                     self.target_pos = (zx, zy, zz)
                     return self.current_goal
 
-        # Secondary needs: Looting or seeking shelter
         if surv_hunger < 40.0 or surv_thirst < 40.0:
             self.current_goal = HighLevelGoal.LOOT_SUPPLIES
             return self.current_goal
@@ -94,7 +93,6 @@ class HierarchicalDecisionPlanner:
             self.current_goal = HighLevelGoal.SEEK_SHELTER
             return self.current_goal
 
-        # Action index neural net fallback selection
         if action_idx is not None:
             goal_map = {
                 0: HighLevelGoal.EXPLORE,
@@ -118,7 +116,6 @@ class HierarchicalDecisionPlanner:
         goal = self.current_goal
 
         if goal == HighLevelGoal.REST_AND_HEAL:
-            # Action index 5 corresponds to heal / rest
             return 0.0, 0.0, 5
 
         elif goal == HighLevelGoal.FLEE_THREAT:

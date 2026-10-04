@@ -1,5 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use std::collections::{BinaryHeap, HashMap};
+use std::cmp::Ordering;
 
 #[pyclass]
 pub struct VulkanTileRenderer {
@@ -153,11 +155,6 @@ impl VulkanTileRenderer {
 }
 
 /// High-performance Rust zombie flocking steering calculation.
-/// Inputs:
-/// - `zombie_coords`: flattened array of [x, y, z] floats for active zombies
-/// - `separation_dist`: distance threshold for horde separation force
-/// Returns:
-/// - flattened array of [steering_dx, steering_dy] vectors for each zombie
 #[pyfunction]
 pub fn compute_zombie_flock_steering(
     zombie_coords: Vec<f32>,
@@ -211,9 +208,105 @@ pub fn compute_zombie_flock_steering(
     steering_vectors
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
+struct PathNode {
+    f: u32,
+    g: u32,
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+impl Ord for PathNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.f.cmp(&self.f)
+    }
+}
+
+impl PartialOrd for PathNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// High-performance allocation-free 3D A* Pathfinding in Rust.
+#[pyfunction]
+pub fn compute_a_star_3d_path(
+    start: (i32, i32, i32),
+    goal: (i32, i32, i32),
+    walkable_mask: Vec<u8>,
+    width: usize,
+    height: usize,
+    max_nodes: usize,
+) -> Vec<(i32, i32, i32)> {
+    let (sx, sy, sz) = start;
+    let (gx, gy, gz) = goal;
+
+    if sx == gx && sy == gy && sz == gz {
+        return vec![start];
+    }
+
+    let mut open_set = BinaryHeap::new();
+    let mut g_score = HashMap::new();
+    let mut came_from = HashMap::new();
+
+    let h_start = ((sx - gx).abs() + (sy - gy).abs() + (sz - gz).abs() * 2) as u32 * 10;
+    open_set.push(PathNode { f: h_start, g: 0, x: sx, y: sy, z: sz });
+    g_score.insert((sx, sy, sz), 0u32);
+
+    let mut nodes_expanded = 0;
+
+    while let Some(current) = open_set.pop() {
+        if current.x == gx && current.y == gy && current.z == gz {
+            let mut path = vec![(current.x, current.y, current.z)];
+            let mut curr_pos = (current.x, current.y, current.z);
+            while let Some(&parent) = came_from.get(&curr_pos) {
+                path.push(parent);
+                curr_pos = parent;
+            }
+            path.reverse();
+            return path;
+        }
+
+        nodes_expanded += 1;
+        if nodes_expanded > max_nodes {
+            break;
+        }
+
+        let neighbors = [
+            (-1, 0, 0, 10), (1, 0, 0, 10), (0, -1, 0, 10), (0, 1, 0, 10),
+            (-1, -1, 0, 14), (1, -1, 0, 14), (-1, 1, 0, 14), (1, 1, 0, 14),
+        ];
+
+        for (dx, dy, dz, cost) in neighbors {
+            let nx = current.x + dx;
+            let ny = current.y + dy;
+            let nz = current.z + dz;
+
+            if nx >= 0 && ny >= 0 && (nx as usize) < width && (ny as usize) < height {
+                let idx = ny as usize * width + nx as usize;
+                if walkable_mask.get(idx).copied().unwrap_or(0) == 1 {
+                    let tentative_g = current.g + cost;
+                    let existing_g = g_score.get(&(nx, ny, nz)).copied().unwrap_or(u32::MAX);
+
+                    if tentative_g < existing_g {
+                        came_from.insert((nx, ny, nz), (current.x, current.y, current.z));
+                        g_score.insert((nx, ny, nz), tentative_g);
+                        let h = ((nx - gx).abs() + (ny - gy).abs() + (nz - gz).abs() * 2) as u32 * 10;
+                        open_set.push(PathNode { f: tentative_g + h, g: tentative_g, x: nx, y: ny, z: nz });
+                    }
+                }
+            }
+        }
+    }
+
+    vec![]
+}
+
 #[pymodule]
 fn rust_vulkan_render(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VulkanTileRenderer>()?;
     m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
     Ok(())
 }

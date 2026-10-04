@@ -55,22 +55,73 @@ class World:
         class GridProxy:
             def __init__(self, world):
                 self.world = world
+                self.shape = (self.world.num_levels, self.world.height, self.world.width)
+                self.dtype = int
+
+            def fill(self, val):
+                tile_val = val.value if hasattr(val, 'value') else int(val)
+                self.world.ground_grid.fill(tile_val)
+                self.world.sparse_z_grid.clear()
 
             def __getitem__(self, key):
-                z_idx, y, x = key
-                if z_idx == self.world.z_to_idx(0):
-                    return self.world.ground_grid[y, x]
-                return self.world.sparse_z_grid.get((z_idx, y, x), TileType.EMPTY.value if hasattr(TileType, 'EMPTY') else 0)
+                if isinstance(key, int):
+                    # Handle 1D indexing: world.grid[z_idx]
+                    z_idx = key
+                    if z_idx == self.world.z_to_idx(0):
+                        return self.world.ground_grid
+                    else:
+                        layer = np.zeros((self.world.height, self.world.width), dtype=int)
+                        for (z, y, x), val in self.world.sparse_z_grid.items():
+                            if z == z_idx:
+                                layer[y, x] = val
+                        return layer
+
+                if isinstance(key, tuple):
+                    if len(key) == 3:
+                        z_idx, y, x = key
+                        if isinstance(z_idx, slice) or isinstance(y, slice) or isinstance(x, slice):
+                            layer = self.__getitem__(z_idx if not isinstance(z_idx, slice) else self.world.z_to_idx(0))
+                            return layer[y, x]
+                        if z_idx == self.world.z_to_idx(0):
+                            return self.world.ground_grid[y, x]
+                        return self.world.sparse_z_grid.get((z_idx, y, x), TileType.EMPTY.value if hasattr(TileType, 'EMPTY') else 0)
+                    elif len(key) == 2:
+                        z_idx, slice_spec = key
+                        layer = self.__getitem__(z_idx)
+                        return layer[slice_spec]
+
+                return self.world.ground_grid
 
             def __setitem__(self, key, value):
-                z_idx, y, x = key
-                if z_idx == self.world.z_to_idx(0):
-                    self.world.ground_grid[y, x] = value
-                else:
-                    if value == 0:
-                        self.world.sparse_z_grid.pop((z_idx, y, x), None)
+                tile_val = value.value if hasattr(value, 'value') else int(value)
+                if isinstance(key, int):
+                    z_idx = key
+                    if z_idx == self.world.z_to_idx(0):
+                        self.world.ground_grid.fill(tile_val)
                     else:
-                        self.world.sparse_z_grid[(z_idx, y, x)] = int(value)
+                        for y in range(self.world.height):
+                            for x in range(self.world.width):
+                                self.world.sparse_z_grid[(z_idx, y, x)] = tile_val
+                    return
+
+                if isinstance(key, tuple):
+                    if len(key) == 3:
+                        z_idx, y, x = key
+                        if isinstance(z_idx, slice) or isinstance(y, slice) or isinstance(x, slice):
+                            if z_idx == self.world.z_to_idx(0):
+                                self.world.ground_grid[y, x] = tile_val
+                            return
+                        if z_idx == self.world.z_to_idx(0):
+                            self.world.ground_grid[y, x] = tile_val
+                        else:
+                            if tile_val == 0:
+                                self.world.sparse_z_grid.pop((z_idx, y, x), None)
+                            else:
+                                self.world.sparse_z_grid[(z_idx, y, x)] = tile_val
+                    elif len(key) == 2:
+                        z_idx, slice_spec = key
+                        if z_idx == self.world.z_to_idx(0):
+                            self.world.ground_grid[slice_spec] = tile_val
 
         return GridProxy(self)
 

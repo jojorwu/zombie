@@ -6,6 +6,8 @@ import unittest
 import json
 from src.simulation import SimulationEngine, EventBus, GameEvent, NoiseEmittedEvent, DamageDealtEvent, DoubleBufferedStateExchanger
 from src.entities.state_manager import LazyChunkStatePersistence
+from src.ai.pathfinding import AStar3D
+from src.world import World
 
 
 class TestSimulation(unittest.TestCase):
@@ -27,6 +29,23 @@ class TestSimulation(unittest.TestCase):
             sim.tick()
 
         self.assertEqual(sim.world.current_tick, 50)
+
+    def test_async_fixed_timestep_loop(self):
+        with open("config.json", "r") as f:
+            config = json.load(f).copy()
+        config["simulation"]["map_width"] = 30
+        config["simulation"]["map_height"] = 30
+
+        sim = SimulationEngine(config)
+        sim.run_fixed_timestep_loop(target_tps=120, max_ticks=10)
+        self.assertEqual(sim.world.current_tick, 10)
+
+    def test_astar_3d_pathfinding(self):
+        world = World(width=30, height=30)
+        pathfinder = AStar3D(world)
+
+        path = pathfinder.find_path((5.0, 5.0, 0), (10.0, 5.0, 0))
+        self.assertIsInstance(path, list)
 
     def test_chunk_entity_freezing(self):
         with open("config.json", "r") as f:

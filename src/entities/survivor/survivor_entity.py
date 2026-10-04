@@ -7,6 +7,7 @@ from src.entities.health import AnatomicalHealth, BodyPart
 from src.entities.survivor.survivor_state import EmotionalState
 from src.entities.survivor.survivor_looting import SurvivorLooting
 from src.entities.survivor.survivor_actions import SurvivorActions
+from src.entities.survivor.metabolism import MetabolicBalanceSimulator
 from utils.container_utility import ContainerUtility
 
 
@@ -18,6 +19,7 @@ class Survivor:
         self.z = int(z)
 
         self.body = AnatomicalHealth()
+        self.metabolism = MetabolicBalanceSimulator()
         self.hunger = 100.0
         self.thirst = 100.0
         self.sleep = 100.0
@@ -38,7 +40,7 @@ class Survivor:
         self.facing_angle = 0.0
         self.visited_tiles = set()
         self.discovered_tiles = set()
-        self.spatial_memory = {}  # {entity_id/category: (x, y, z, tick_timestamp)}
+        self.spatial_memory = {}
         self.visited_tiles.add((int(x), int(y), int(z)))
         self.discovered_tiles.add((int(x), int(y), int(z)))
 
@@ -118,7 +120,7 @@ class Survivor:
         else:
             self.emotional_state = EmotionalState.CALM
 
-    def update_needs(self):
+    def update_needs(self, world=None):
         if not self.is_alive:
             return
         self.time_survived += 1
@@ -127,6 +129,9 @@ class Survivor:
         if self.body.is_dead:
             self.is_alive = False
             return
+
+        if world is not None:
+            self.metabolism.update(self, world)
 
         self.hunger -= 0.025
         self.thirst -= 0.035
@@ -191,7 +196,6 @@ class Survivor:
             return
         base_speed = 0.15 * self.body.movement_speed_multiplier * self.grab_slowdown_factor
 
-        # Project Zomboid Encumbrance Weight Slowdown
         inv_weight = ContainerUtility.get_container_weight(self.inventory)
         if inv_weight > 25.0:
             encumbrance_penalty = max(0.20, 1.0 - ((inv_weight - 25.0) * 0.02))

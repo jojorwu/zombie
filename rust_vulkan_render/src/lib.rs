@@ -26,11 +26,6 @@ impl VulkanTileRenderer {
     }
 
     /// Fast viewport tile grid renderer into RGBA pixel buffer PyBytes.
-    /// `grid_slice`: flattened 1D array of tile type integers (0..255)
-    /// `building_override`: flattened RGB byte array (size map_draw_height * map_draw_width * 3)
-    /// `tile_palette`: list of (r, g, b) tuples indexed by TileType
-    /// `light`: float brightness multiplier (0.0..1.0)
-    /// `fog_mask`: optional byte array (1 = visible, 0 = hidden by fog)
     fn render_viewport_bytes<'py>(
         &self,
         py: Python<'py>,
@@ -157,8 +152,68 @@ impl VulkanTileRenderer {
     }
 }
 
+/// High-performance Rust zombie flocking steering calculation.
+/// Inputs:
+/// - `zombie_coords`: flattened array of [x, y, z] floats for active zombies
+/// - `separation_dist`: distance threshold for horde separation force
+/// Returns:
+/// - flattened array of [steering_dx, steering_dy] vectors for each zombie
+#[pyfunction]
+pub fn compute_zombie_flock_steering(
+    zombie_coords: Vec<f32>,
+    separation_dist: f32,
+) -> Vec<f32> {
+    let num_zombies = zombie_coords.len() / 3;
+    let mut steering_vectors = vec![0.0f32; num_zombies * 2];
+
+    if num_zombies < 2 {
+        return steering_vectors;
+    }
+
+    let sq_sep = separation_dist * separation_dist;
+
+    for i in 0..num_zombies {
+        let z1_x = zombie_coords[i * 3];
+        let z1_y = zombie_coords[i * 3 + 1];
+        let z1_z = zombie_coords[i * 3 + 2];
+
+        let mut sep_x = 0.0f32;
+        let mut sep_y = 0.0f32;
+
+        for j in 0..num_zombies {
+            if i == j {
+                continue;
+            }
+
+            let z2_x = zombie_coords[j * 3];
+            let z2_y = zombie_coords[j * 3 + 1];
+            let z2_z = zombie_coords[j * 3 + 2];
+
+            if (z1_z - z2_z).abs() > 0.1 {
+                continue;
+            }
+
+            let dx = z1_x - z2_x;
+            let dy = z1_y - z2_y;
+            let dist_sq = dx * dx + dy * dy;
+
+            if dist_sq > 0.0001 && dist_sq < sq_sep {
+                let dist = dist_sq.sqrt();
+                sep_x += (dx / dist) * (separation_dist - dist);
+                sep_y += (dy / dist) * (separation_dist - dist);
+            }
+        }
+
+        steering_vectors[i * 2] = sep_x;
+        steering_vectors[i * 2 + 1] = sep_y;
+    }
+
+    steering_vectors
+}
+
 #[pymodule]
 fn rust_vulkan_render(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VulkanTileRenderer>()?;
+    m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
     Ok(())
 }

@@ -8,8 +8,16 @@ from src.modding.manager import LuaModManager
 from src.simulation.spawner import EntitySpawner
 from src.simulation.environment import EnvironmentManager
 from src.simulation.event_bus import EventBus, NoiseEmittedEvent, DamageDealtEvent
+from src.simulation.snapshot import DoubleBufferedStateExchanger
+from src.entities.state_manager import LazyChunkStatePersistence
 from utils.memory_monitor_utility import MemoryMonitorUtility
 from utils.electricity_utility import ElectricityUtility
+
+try:
+    from rust_vulkan_render import compute_zombie_flock_steering
+    RUST_STEERING_AVAILABLE = True
+except ImportError:
+    RUST_STEERING_AVAILABLE = False
 
 SIM_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
@@ -18,6 +26,8 @@ class SimulationEngine:
     """Main simulation controller coordinating world ticks, AI decisions, entity updates, and evolution."""
     def __init__(self, config):
         self.event_bus = EventBus()
+        self.state_exchanger = DoubleBufferedStateExchanger()
+        self.chunk_persistence = LazyChunkStatePersistence()
         self.mod_manager = LuaModManager()
         self.factory = EntityFactory(config=config)
         self.memory_monitor = MemoryMonitorUtility()
@@ -179,7 +189,6 @@ class SimulationEngine:
                 raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx]
                 self.hidden_states[orig_i] = new_hidden
 
-                # Evaluate high-level goal periodically or on high threat
                 if self.world.current_tick - planner.last_eval_tick >= planner.goal_eval_interval:
                     planner.evaluate_goal(survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, action_idx=raw_action)
                     planner.last_eval_tick = self.world.current_tick
@@ -211,6 +220,16 @@ class SimulationEngine:
             z for z in self.zombies
             if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
         ]
+
+        # Apply Rust C++ Flock Steering Acceleration if available
+        if RUST_STEERING_AVAILABLE and len(active_zombies) > 5:
+            z_coords = []
+            for z in active_zombies:
+                z_coords.extend([z.x, z.y, float(z.z)])
+            steer_vecs = compute_zombie_flock_steering(z_coords, separation_dist=1.5)
+            for idx, z in enumerate(active_zombies):
+                z.x += steer_vecs[idx * 2] * 0.02
+                z.y += steer_vecs[idx * 2 + 1] * 0.02
 
         z_grid = {}
         for z in active_zombies:
@@ -250,6 +269,7 @@ class SimulationEngine:
             animal.update(self.world)
 
         self.env_manager.check_dynamic_item_respawn(self.items, self.factory)
+        self.state_exchanger.capture_snapshot(self.world, self.survivors, self.zombies, self.vehicles, self.items)
         self.memory_monitor.record_tick_time(time.time() - t0)
 
         # Max simulation length = 1 month (108,000 ticks)

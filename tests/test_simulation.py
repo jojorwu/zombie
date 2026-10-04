@@ -4,7 +4,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import unittest
 import json
-from src.simulation import SimulationEngine, EventBus, GameEvent, NoiseEmittedEvent, DamageDealtEvent
+from src.simulation import SimulationEngine, EventBus, GameEvent, NoiseEmittedEvent, DamageDealtEvent, DoubleBufferedStateExchanger
+from src.entities.state_manager import LazyChunkStatePersistence
+
 
 class TestSimulation(unittest.TestCase):
     def test_simulation_integration(self):
@@ -33,21 +35,16 @@ class TestSimulation(unittest.TestCase):
         config["simulation"]["map_height"] = 100
 
         sim = SimulationEngine(config)
-        # Place all survivors at (10, 10) so only nearby chunks are active
         for s in sim.survivors:
             s.x, s.y = 10.0, 10.0
-        # Place zombie 1 in active chunk (near survivor) and zombie 2 far away in inactive chunk (90, 90)
         sim.zombies[0].x, sim.zombies[0].y = 12.0, 10.0
         sim.zombies[1].x, sim.zombies[1].y = 90.0, 90.0
 
-        z1_initial_pos = (sim.zombies[0].x, sim.zombies[0].y)
         z2_initial_pos = (sim.zombies[1].x, sim.zombies[1].y)
 
-        # Run 10 ticks
         for _ in range(10):
             sim.tick()
 
-        # Far zombie position remains unchanged (frozen in inactive chunk)
         self.assertEqual((sim.zombies[1].x, sim.zombies[1].y), z2_initial_pos)
 
     def test_street_corpse_spawning_and_ballistics(self):
@@ -55,11 +52,9 @@ class TestSimulation(unittest.TestCase):
             config = json.load(f).copy()
         sim = SimulationEngine(config)
 
-        # Verify street corpses are spawned in items
         corpses = [i for i in sim.items if i.contents]
         self.assertGreater(len(corpses), 0)
 
-        # Test Ballistics Utility Bullet Drop
         from utils.ballistics_utility import BallisticsUtility
         traj = BallisticsUtility.calculate_trajectory("5.56mm", distance_m=100.0)
         self.assertIn("bullet_drop_m", traj)
@@ -85,11 +80,36 @@ class TestSimulation(unittest.TestCase):
         bus.subscribe(NoiseEmittedEvent, noise_handler)
         event = NoiseEmittedEvent(x=10.0, y=10.0, z=0, volume=20.0, source_type="gunshot")
         bus.publish(event)
-        self.assertEqual(len(received_events), 0)  # Before batch processing
+        self.assertEqual(len(received_events), 0)
 
         bus.process_events()
-        self.assertEqual(len(received_events), 1)  # After batch processing
+        self.assertEqual(len(received_events), 1)
         self.assertEqual(received_events[0].volume, 20.0)
+
+    def test_double_buffered_snapshot(self):
+        with open("config.json", "r") as f:
+            config = json.load(f).copy()
+        config["simulation"]["map_width"] = 30
+        config["simulation"]["map_height"] = 30
+        sim = SimulationEngine(config)
+
+        exchanger = DoubleBufferedStateExchanger()
+        exchanger.capture_snapshot(sim.world, sim.survivors, sim.zombies, sim.vehicles, sim.items)
+
+        snapshot = exchanger.get_render_snapshot()
+        self.assertEqual(len(snapshot.survivors), len(sim.survivors))
+
+    def test_lazy_chunk_state_persistence(self):
+        persistence = LazyChunkStatePersistence()
+        self.assertFalse(persistence.is_inflated(0, 0))
+
+        persistence.log_delta_change(0, 0, "furniture_damage", {"x": 5, "y": 5, "durability": 50.0})
+        deltas = persistence.inflate_chunk_states(0, 0)
+
+        self.assertTrue(persistence.is_inflated(0, 0))
+        self.assertEqual(len(deltas), 1)
+        self.assertEqual(deltas[0]["data"]["durability"], 50.0)
+
 
 if __name__ == "__main__":
     unittest.main()

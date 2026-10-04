@@ -5,6 +5,7 @@ from src.simulation.event_bus import (
     EventBus, GameEvent, NoiseEmittedEvent, DamageDealtEvent,
     InfectionProgressEvent, ItemCollectedEvent
 )
+from src.simulation.snapshot import DoubleBufferedStateExchanger, WorldStateSnapshot, EntityStateSnapshot
 
 __all__ = [
     "EntitySpawner",
@@ -16,4 +17,7 @@ __all__ = [
     "DamageDealtEvent",
     "InfectionProgressEvent",
     "ItemCollectedEvent",
+    "DoubleBufferedStateExchanger",
+    "WorldStateSnapshot",
+    "EntityStateSnapshot",
 ]

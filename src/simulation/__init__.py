@@ -7,6 +7,7 @@ from src.simulation.event_bus import (
 )
 from src.simulation.snapshot import DoubleBufferedStateExchanger, WorldStateSnapshot, EntityStateSnapshot
 from src.simulation.systems import AcousticSystem, InfectionSystem, ParticleSystem
+from src.simulation.rust_engine import PythonRustEngineBridge
 
 __all__ = [
     "EntitySpawner",
@@ -24,4 +25,5 @@ __all__ = [
     "AcousticSystem",
     "InfectionSystem",
     "ParticleSystem",
+    "PythonRustEngineBridge",
 ]

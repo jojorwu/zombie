@@ -27,7 +27,6 @@ impl VulkanTileRenderer {
         }
     }
 
-    /// Fast viewport tile grid renderer into RGBA pixel buffer PyBytes.
     fn render_viewport_bytes<'py>(
         &self,
         py: Python<'py>,
@@ -303,9 +302,68 @@ pub fn compute_a_star_3d_path(
     vec![]
 }
 
+#[pyclass]
+pub struct RustEngineCore {
+    width: usize,
+    height: usize,
+    current_tick: u64,
+    survivor_x: f32,
+    survivor_y: f32,
+    survivor_z: i32,
+    survivor_health: f32,
+    survivor_hunger: f32,
+    survivor_thirst: f32,
+}
+
+#[pymethods]
+impl RustEngineCore {
+    #[new]
+    fn new(width: usize, height: usize) -> Self {
+        RustEngineCore {
+            width,
+            height,
+            current_tick: 0,
+            survivor_x: (width / 2) as f32,
+            survivor_y: (height / 2) as f32,
+            survivor_z: 0,
+            survivor_health: 100.0,
+            survivor_hunger: 100.0,
+            survivor_thirst: 100.0,
+        }
+    }
+
+    fn step(&mut self, dx: f32, dy: f32, _action: i32) {
+        self.current_tick += 1;
+        self.survivor_x = (self.survivor_x + dx * 0.15).max(0.0).min((self.width - 1) as f32);
+        self.survivor_y = (self.survivor_y + dy * 0.15).max(0.0).min((self.height - 1) as f32);
+        self.survivor_hunger = (self.survivor_hunger - 0.025).max(0.0);
+        self.survivor_thirst = (self.survivor_thirst - 0.035).max(0.0);
+    }
+
+    fn get_observation_flat(&self) -> Vec<f32> {
+        let mut obs = vec![0.0f32; 57];
+        obs[0] = self.survivor_health / 100.0;
+        obs[1] = self.survivor_hunger / 100.0;
+        obs[2] = self.survivor_thirst / 100.0;
+        obs[3] = 1.0;
+        obs[4] = 1.0;
+        obs[22] = self.survivor_z as f32 / 20.0;
+        obs
+    }
+
+    fn get_current_tick(&self) -> u64 {
+        self.current_tick
+    }
+
+    fn get_survivor_pos(&self) -> (f32, f32, i32) {
+        (self.survivor_x, self.survivor_y, self.survivor_z)
+    }
+}
+
 #[pymodule]
 fn rust_vulkan_render(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VulkanTileRenderer>()?;
+    m.add_class::<RustEngineCore>()?;
     m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
     m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
     Ok(())

@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import unittest
 import json
-from src.simulation import SimulationEngine, EventBus, GameEvent, NoiseEmittedEvent, DamageDealtEvent, DoubleBufferedStateExchanger
+from src.simulation import SimulationEngine, EventBus, GameEvent, NoiseEmittedEvent, DamageDealtEvent, DoubleBufferedStateExchanger, PythonRustEngineBridge
 from src.entities.state_manager import LazyChunkStatePersistence
 from src.ai.pathfinding import AStar3D
 from src.world import World
@@ -29,6 +29,12 @@ class TestSimulation(unittest.TestCase):
             sim.tick()
 
         self.assertEqual(sim.world.current_tick, 50)
+
+    def test_python_rust_engine_bridge(self):
+        bridge = PythonRustEngineBridge(width=100, height=100)
+        obs, done = bridge.step(dx=1.0, dy=0.0, action=0)
+        self.assertEqual(obs.shape, (57,))
+        self.assertFalse(done)
 
     def test_async_fixed_timestep_loop(self):
         with open("config.json", "r") as f:

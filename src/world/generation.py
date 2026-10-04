@@ -1,9 +1,45 @@
 import math
 import random
 import uuid
+from typing import Dict, List
 import numpy as np
 from src.world.tiles import TileType, BuildingType, SettlementType
 from utils.p_np_math import PolynomialVerifier
+
+
+class GraphGrammarBuildingGenerator:
+    """
+    Graph Grammar Building Generator.
+    Generates connected room graphs (Entrance -> Hallway -> Living Room -> Kitchen -> Bedroom -> Bathroom)
+    and applies Wave Function Collapse (WFC) layout constraints.
+    """
+    ROOM_CONNECTIONS = {
+        "Entrance": ["Hallway"],
+        "Hallway": ["Entrance", "LivingRoom", "Kitchen", "Bedroom"],
+        "LivingRoom": ["Hallway", "Kitchen"],
+        "Kitchen": ["Hallway", "LivingRoom"],
+        "Bedroom": ["Hallway", "Bathroom"],
+        "Bathroom": ["Bedroom"],
+    }
+
+    @classmethod
+    def generate_room_graph(cls) -> Dict[str, List[str]]:
+        return dict(cls.ROOM_CONNECTIONS)
+
+    @classmethod
+    def apply_wfc_furniture(cls, world_gen, bx: int, by: int, bw: int, bh: int, z: int, b_id: str, btype: str) -> None:
+        """Applies Wave Function Collapse tile fitting rules for interior furniture layouts."""
+        world = world_gen.world
+        z_idx = world.z_to_idx(z)
+        door_x, door_y = min(world.width - 1, bx + 2), min(world.height - 1, by + bh - 1)
+        world.grid[z_idx, door_y, door_x] = TileType.DOOR
+
+        world_gen._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.SOFA, b_id, btype)
+        world_gen._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.TV_STAND, b_id, btype)
+        world_gen._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.REFRIGERATOR, b_id, btype)
+        world_gen._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 2), z, TileType.KITCHEN_COUNTER, b_id, btype)
+        world_gen._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 1), z, TileType.BED, b_id, btype)
+        world_gen._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.TOILET, b_id, btype)
 
 
 class WorldGenerator:
@@ -31,7 +67,6 @@ class WorldGenerator:
         }
         world.buildings.append(building_info)
 
-        # Register building across all chunks that its area overlaps
         world.chunk_manager.register_building(building_info)
 
         has_basement = False
@@ -77,10 +112,11 @@ class WorldGenerator:
                 world.grid[z_idx, min(world.height - 1, by), min(world.width - 1, bx + 2)] = TileType.WINDOW
 
                 if has_basement:
-                    # Place trapdoor leading down to hidden basement
                     world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + bw - 2)] = TileType.TRAPDOOR
 
-                if btype in (BuildingType.SUPERMARKET, BuildingType.STORE):
+                if btype == BuildingType.RESIDENTIAL:
+                    GraphGrammarBuildingGenerator.apply_wfc_furniture(self, bx, by, bw, bh, z, b_id, btype)
+                elif btype in (BuildingType.SUPERMARKET, BuildingType.STORE):
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.STORE_SHELF, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.REFRIGERATOR, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.STORE_SHELF, b_id, btype)
@@ -104,7 +140,6 @@ class WorldGenerator:
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 1), z, TileType.STORE_SHELF, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 1), z, TileType.CASH_REGISTER, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.REFRIGERATOR, b_id, btype)
-                    # Outdoor Gas Pumps
                     if bx + bw < world.width and by + bh < world.height:
                         world.grid[z_idx, min(world.height - 1, by + bh), min(world.width - 1, bx + 1)] = TileType.GAS_PUMP
                         world.grid[z_idx, min(world.height - 1, by + bh), min(world.width - 1, bx + 3)] = TileType.GAS_PUMP
@@ -124,13 +159,11 @@ class WorldGenerator:
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 2), z, TileType.KITCHEN_COUNTER, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 2), z, TileType.SOFA, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 1), z, TileType.TV_STAND, b_id, btype)
-                    # Bathroom & Appliance Furniture
                     self._place_and_register_furniture(min(world.width - 1, bx + 1), min(world.height - 1, by + 3), z, TileType.TOILET, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 2), min(world.height - 1, by + 3), z, TileType.BATHTUB, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 3), min(world.height - 1, by + 3), z, TileType.SINK, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 4), min(world.height - 1, by + 1), z, TileType.WARDROBE, b_id, btype)
                     self._place_and_register_furniture(min(world.width - 1, bx + 4), min(world.height - 1, by + 2), z, TileType.OVEN, b_id, btype)
-                    # Light Switch & Fixture
                     world.grid[z_idx, min(world.height - 1, by + 1), min(world.width - 1, bx + 2)] = TileType.LIGHT_SWITCH
                     world.grid[z_idx, min(world.height - 1, by + 2), min(world.width - 1, bx + 2)] = TileType.LIGHT_FIXTURE
 
@@ -146,7 +179,6 @@ class WorldGenerator:
 
             world.grid[z_idx, min(world.height - 1, by + 3), min(world.width - 1, bx + 3)] = TileType.STAIRS if (z % 2 == 0) else TileType.LADDER
 
-        # Place roof tiles on the ceiling layer above the top floor if within max z limits
         roof_z = top_floor + 1
         if roof_z <= world.z_max:
             roof_z_idx = world.z_to_idx(roof_z)
@@ -182,7 +214,6 @@ class WorldGenerator:
                 else:
                     chunk_districts[(cx, cy)] = "residential"
 
-        # Simplex/Perlin-style organic river and terrain noise generation
         num_rivers = random.randint(1, 2)
         for _ in range(num_rivers):
             rx = float(random.randint(10, world.width - 11))
@@ -203,7 +234,6 @@ class WorldGenerator:
                     if 0 <= tx < world.width and 0 <= step_y < world.height and random.random() < 0.4:
                         world.grid[g_idx, step_y, tx] = TileType.SAND
 
-        # Spawn forest bushes and stones across forest biomes
         for y_f in range(world.height):
             for x_f in range(world.width):
                 if world.grid[g_idx, y_f, x_f] in (TileType.FOREST, TileType.FOREST_DENSE, TileType.FOREST_SPARSE):
@@ -256,7 +286,6 @@ class WorldGenerator:
         for bx, by, bw, bh, btype in buildings_to_construct:
             self.build_chunk_building(bx, by, bw, bh, btype)
 
-        # Spawn Post-Apocalyptic Ruin/Decay Barricades and Blockades
         for _ in range(int(world.width * world.height * 0.0003)):
             rx = random.randint(10, world.width - 10)
             ry = random.randint(10, world.height - 10)

@@ -7,9 +7,13 @@ import unittest
 import torch
 import numpy as np
 from src.ai.brain_net import BrainNet, GeneticEvolutionManager, save_zbrain, load_zbrain, DEVICE
-from src.ai.brain_actions import batch_get_action_and_movement, extract_survivor_inputs
+from src.ai.brain_actions import batch_get_action_and_movement, extract_survivor_inputs, check_line_of_sight
+from src.ai.hierarchical_ai import HierarchicalDecisionPlanner, HighLevelGoal
+from src.ai.gym_env import SurvivorGymEnv
+from src.ai.ppo_brain import PPOActorCritic, PPOAgent
 from src.entities import Survivor
-from src.world import World
+from src.entities.zombie import Zombie
+from src.world import World, TileType
 
 
 class TestBrain(unittest.TestCase):
@@ -65,6 +69,52 @@ class TestBrain(unittest.TestCase):
         survivor = Survivor(10.0, 10.0)
         inputs = extract_survivor_inputs(survivor, world, items=[], vehicles=[], zombies=[], animals=[])
         self.assertEqual(inputs.shape, (57,))
+
+    def test_hierarchical_decision_planner(self):
+        planner = HierarchicalDecisionPlanner(goal_eval_interval=10)
+        world = World(width=30, height=30)
+        survivor = Survivor(10.0, 10.0)
+
+        goal = planner.evaluate_goal(survivor, world, items=[], vehicles=[], zombies=[], animals=[])
+        self.assertIsInstance(goal, HighLevelGoal)
+
+        dx, dy, action = planner.execute_low_level_behaviour(
+            survivor, world, items=[], vehicles=[], zombies=[], animals=[], raw_dx=0.5, raw_dy=0.0, raw_action=0
+        )
+        self.assertIsInstance(dx, float)
+        self.assertIsInstance(dy, float)
+        self.assertIsInstance(action, int)
+
+    def test_check_line_of_sight_and_spatial_memory(self):
+        world = World(width=30, height=30)
+        survivor = Survivor(10.0, 10.0)
+        zombie = Zombie(15.0, 10.0)
+
+        self.assertTrue(check_line_of_sight(world, survivor.x, survivor.y, zombie.x, zombie.y, 0))
+
+        z_idx = world.z_to_idx(0)
+        world.grid[z_idx, 10, 12] = TileType.WALL_BRICK.value
+        self.assertFalse(check_line_of_sight(world, survivor.x, survivor.y, zombie.x, zombie.y, 0))
+
+        survivor.spatial_memory["zombie"] = (15.0, 10.0, 0, world.current_tick)
+        inputs = extract_survivor_inputs(survivor, world, items=[], vehicles=[], zombies=[zombie], animals=[])
+        self.assertNotEqual(inputs[8], 0.0)
+
+    def test_survivor_gym_env_and_ppo_agent(self):
+        env = SurvivorGymEnv()
+        obs, info = env.reset()
+        self.assertEqual(obs.shape, (57,))
+
+        agent = PPOAgent(input_dim=57, hidden_dim=64, action_dim=13)
+        action, log_prob, val = agent.model.get_action(obs)
+
+        self.assertIsInstance(action, int)
+        self.assertGreaterEqual(action, 0)
+        self.assertLess(action, 13)
+
+        next_obs, reward, terminated, truncated, info = env.step(action)
+        self.assertEqual(next_obs.shape, (57,))
+        self.assertIsInstance(reward, float)
 
 
 if __name__ == "__main__":

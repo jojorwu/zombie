@@ -1,14 +1,24 @@
 import random
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from src.world import World
-from src.entities import Survivor, Vehicle, ResourceItem, EntityFactory
-from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager, batch_get_action_and_movement
+from src.entities import Survivor, Vehicle, ResourceItem, EntityFactory, NoiseEvent
+from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager, batch_get_action_and_movement, HierarchicalDecisionPlanner
 from src.modding.manager import LuaModManager
 from src.simulation.spawner import EntitySpawner
 from src.simulation.environment import EnvironmentManager
+from src.simulation.event_bus import EventBus, NoiseEmittedEvent, DamageDealtEvent
+from src.simulation.snapshot import DoubleBufferedStateExchanger
+from src.entities.state_manager import LazyChunkStatePersistence
 from utils.memory_monitor_utility import MemoryMonitorUtility
 from utils.electricity_utility import ElectricityUtility
+
+try:
+    from rust_vulkan_render import compute_zombie_flock_steering
+    RUST_STEERING_AVAILABLE = True
+except ImportError:
+    RUST_STEERING_AVAILABLE = False
 
 SIM_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
@@ -16,12 +26,16 @@ SIM_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 class SimulationEngine:
     """Main simulation controller coordinating world ticks, AI decisions, entity updates, and evolution."""
     def __init__(self, config):
+        self.event_bus = EventBus()
+        self.state_exchanger = DoubleBufferedStateExchanger()
+        self.chunk_persistence = LazyChunkStatePersistence()
         self.mod_manager = LuaModManager()
         self.factory = EntityFactory(config=config)
         self.memory_monitor = MemoryMonitorUtility()
         self.config = config
         self.sim_cfg = config["simulation"]
         self.evo_cfg = config["evolution"]
+        self.is_running = False
 
         self.world = World(
             width=self.sim_cfg.get("map_width", 1000),
@@ -49,11 +63,45 @@ class SimulationEngine:
         )
 
         self.brains = self.evolution_manager.create_initial_brains()
+        self.planners = [HierarchicalDecisionPlanner() for _ in self.brains]
         self.hidden_states = [brain.init_hidden() for brain in self.brains]
         self.selected_survivor_idx = 0
         self.best_historical_score = 0.0
 
+        self._setup_event_handlers()
         self.reset_generation()
+
+    def run_fixed_timestep_loop(self, target_tps: int = 60, max_ticks: int = 100):
+        """Asynchronous fixed-timestep simulation thread loop publishing snapshots to double buffer."""
+        self.is_running = True
+        tick_interval = 1.0 / float(target_tps)
+        ticks_done = 0
+
+        while self.is_running and ticks_done < max_ticks:
+            t_start = time.time()
+            self.tick()
+            ticks_done += 1
+            elapsed = time.time() - t_start
+            sleep_time = tick_interval - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+        self.is_running = False
+
+    def _setup_event_handlers(self):
+        """Register ECS event bus listeners."""
+        self.event_bus.subscribe(NoiseEmittedEvent, self._handle_noise_emitted)
+        self.event_bus.subscribe(DamageDealtEvent, self._handle_damage_dealt)
+
+    def _handle_noise_emitted(self, event: NoiseEmittedEvent):
+        """Processes published noise events and creates sensory noise entities."""
+        ne = NoiseEvent(event.x, event.y, event.z, volume=event.volume, source_type=event.source_type)
+        self.noise_events.append(ne)
+
+    def _handle_damage_dealt(self, event: DamageDealtEvent):
+        """Processes published damage events across entities."""
+        if event.target and hasattr(event.target, "take_damage"):
+            event.target.take_damage(event.damage, target_part=event.body_part)
 
     def _recycle_entities(self):
         import gc
@@ -122,6 +170,7 @@ class SimulationEngine:
         t0 = time.time()
         self.env_manager.tick_environment()
         self.mod_manager.trigger_event("on_tick", self.world.current_tick)
+        self.event_bus.process_events()
 
         active_noises = []
         for ne in self.noise_events:
@@ -148,15 +197,24 @@ class SimulationEngine:
 
             for idx, orig_i in enumerate(alive_indices):
                 survivor = self.survivors[orig_i]
-                survivor.update_needs()
+                planner = self.planners[orig_i]
+                survivor.update_needs(world=self.world)
 
                 if not survivor.is_alive and survivor.is_infected:
                     new_z = self.factory.create_zombie(survivor.x, survivor.y, z=survivor.z)
                     self.zombies.append(new_z)
                     continue
 
-                dx, dy, action, new_hidden = step_outputs[idx]
+                raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx]
                 self.hidden_states[orig_i] = new_hidden
+
+                if self.world.current_tick - planner.last_eval_tick >= planner.goal_eval_interval:
+                    planner.evaluate_goal(survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, action_idx=raw_action)
+                    planner.last_eval_tick = self.world.current_tick
+
+                dx, dy, action = planner.execute_low_level_behaviour(
+                    survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, raw_dx, raw_dy, raw_action
+                )
 
                 survivor.move(dx, dy, self.world, noise_events=self.noise_events)
                 survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors, noise_events=self.noise_events)
@@ -181,6 +239,17 @@ class SimulationEngine:
             z for z in self.zombies
             if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
         ]
+
+        if RUST_STEERING_AVAILABLE and len(active_zombies) > 5:
+            z_coords = []
+            for z in active_zombies:
+                z_coords.extend([z.x, z.y, float(z.z)])
+            steer_vecs = compute_zombie_flock_steering(z_coords, separation_dist=1.5)
+            for idx, z in enumerate(active_zombies):
+                nx = z.x + steer_vecs[idx * 2] * 0.02
+                ny = z.y + steer_vecs[idx * 2 + 1] * 0.02
+                if self.world.is_walkable(nx, ny, z.z):
+                    z.x, z.y = nx, ny
 
         z_grid = {}
         for z in active_zombies:
@@ -220,6 +289,7 @@ class SimulationEngine:
             animal.update(self.world)
 
         self.env_manager.check_dynamic_item_respawn(self.items, self.factory)
+        self.state_exchanger.capture_snapshot(self.world, self.survivors, self.zombies, self.vehicles, self.items)
         self.memory_monitor.record_tick_time(time.time() - t0)
 
         # Max simulation length = 1 month (108,000 ticks)
@@ -234,6 +304,7 @@ class SimulationEngine:
             brains_and_fitnesses.append((self.brains[i], fitness))
 
         self.brains, max_fit = self.evolution_manager.evolve_population(brains_and_fitnesses)
+        self.planners = [HierarchicalDecisionPlanner() for _ in self.brains]
         if max_fit > self.best_historical_score:
             self.best_historical_score = max_fit
             self.evolution_manager.save_best_brain(self.brains[0], "best_brain.zbrain")

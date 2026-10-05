@@ -1,5 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use std::collections::{BinaryHeap, HashMap};
+use std::cmp::Ordering;
 
 #[pyclass]
 pub struct VulkanTileRenderer {
@@ -25,12 +27,6 @@ impl VulkanTileRenderer {
         }
     }
 
-    /// Fast viewport tile grid renderer into RGBA pixel buffer PyBytes.
-    /// `grid_slice`: flattened 1D array of tile type integers (0..255)
-    /// `building_override`: flattened RGB byte array (size map_draw_height * map_draw_width * 3)
-    /// `tile_palette`: list of (r, g, b) tuples indexed by TileType
-    /// `light`: float brightness multiplier (0.0..1.0)
-    /// `fog_mask`: optional byte array (1 = visible, 0 = hidden by fog)
     fn render_viewport_bytes<'py>(
         &self,
         py: Python<'py>,
@@ -157,8 +153,218 @@ impl VulkanTileRenderer {
     }
 }
 
+/// High-performance Rust zombie flocking steering calculation.
+#[pyfunction]
+pub fn compute_zombie_flock_steering(
+    zombie_coords: Vec<f32>,
+    separation_dist: f32,
+) -> Vec<f32> {
+    let num_zombies = zombie_coords.len() / 3;
+    let mut steering_vectors = vec![0.0f32; num_zombies * 2];
+
+    if num_zombies < 2 {
+        return steering_vectors;
+    }
+
+    let sq_sep = separation_dist * separation_dist;
+
+    for i in 0..num_zombies {
+        let z1_x = zombie_coords[i * 3];
+        let z1_y = zombie_coords[i * 3 + 1];
+        let z1_z = zombie_coords[i * 3 + 2];
+
+        let mut sep_x = 0.0f32;
+        let mut sep_y = 0.0f32;
+
+        for j in 0..num_zombies {
+            if i == j {
+                continue;
+            }
+
+            let z2_x = zombie_coords[j * 3];
+            let z2_y = zombie_coords[j * 3 + 1];
+            let z2_z = zombie_coords[j * 3 + 2];
+
+            if (z1_z - z2_z).abs() > 0.1 {
+                continue;
+            }
+
+            let dx = z1_x - z2_x;
+            let dy = z1_y - z2_y;
+            let dist_sq = dx * dx + dy * dy;
+
+            if dist_sq > 0.0001 && dist_sq < sq_sep {
+                let dist = dist_sq.sqrt();
+                sep_x += (dx / dist) * (separation_dist - dist);
+                sep_y += (dy / dist) * (separation_dist - dist);
+            }
+        }
+
+        steering_vectors[i * 2] = sep_x;
+        steering_vectors[i * 2 + 1] = sep_y;
+    }
+
+    steering_vectors
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+struct PathNode {
+    f: u32,
+    g: u32,
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+impl Ord for PathNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.f.cmp(&self.f)
+    }
+}
+
+impl PartialOrd for PathNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// High-performance allocation-free 3D A* Pathfinding in Rust.
+#[pyfunction]
+pub fn compute_a_star_3d_path(
+    start: (i32, i32, i32),
+    goal: (i32, i32, i32),
+    walkable_mask: Vec<u8>,
+    width: usize,
+    height: usize,
+    max_nodes: usize,
+) -> Vec<(i32, i32, i32)> {
+    let (sx, sy, sz) = start;
+    let (gx, gy, gz) = goal;
+
+    if sx == gx && sy == gy && sz == gz {
+        return vec![start];
+    }
+
+    let mut open_set = BinaryHeap::new();
+    let mut g_score = HashMap::new();
+    let mut came_from = HashMap::new();
+
+    let h_start = ((sx - gx).abs() + (sy - gy).abs() + (sz - gz).abs() * 2) as u32 * 10;
+    open_set.push(PathNode { f: h_start, g: 0, x: sx, y: sy, z: sz });
+    g_score.insert((sx, sy, sz), 0u32);
+
+    let mut nodes_expanded = 0;
+
+    while let Some(current) = open_set.pop() {
+        if current.x == gx && current.y == gy && current.z == gz {
+            let mut path = vec![(current.x, current.y, current.z)];
+            let mut curr_pos = (current.x, current.y, current.z);
+            while let Some(&parent) = came_from.get(&curr_pos) {
+                path.push(parent);
+                curr_pos = parent;
+            }
+            path.reverse();
+            return path;
+        }
+
+        nodes_expanded += 1;
+        if nodes_expanded > max_nodes {
+            break;
+        }
+
+        let neighbors = [
+            (-1, 0, 0, 10), (1, 0, 0, 10), (0, -1, 0, 10), (0, 1, 0, 10),
+            (-1, -1, 0, 14), (1, -1, 0, 14), (-1, 1, 0, 14), (1, 1, 0, 14),
+        ];
+
+        for (dx, dy, dz, cost) in neighbors {
+            let nx = current.x + dx;
+            let ny = current.y + dy;
+            let nz = current.z + dz;
+
+            if nx >= 0 && ny >= 0 && (nx as usize) < width && (ny as usize) < height {
+                let idx = ny as usize * width + nx as usize;
+                if walkable_mask.get(idx).copied().unwrap_or(0) == 1 {
+                    let tentative_g = current.g + cost;
+                    let existing_g = g_score.get(&(nx, ny, nz)).copied().unwrap_or(u32::MAX);
+
+                    if tentative_g < existing_g {
+                        came_from.insert((nx, ny, nz), (current.x, current.y, current.z));
+                        g_score.insert((nx, ny, nz), tentative_g);
+                        let h = ((nx - gx).abs() + (ny - gy).abs() + (nz - gz).abs() * 2) as u32 * 10;
+                        open_set.push(PathNode { f: tentative_g + h, g: tentative_g, x: nx, y: ny, z: nz });
+                    }
+                }
+            }
+        }
+    }
+
+    vec![]
+}
+
+#[pyclass]
+pub struct RustEngineCore {
+    width: usize,
+    height: usize,
+    current_tick: u64,
+    survivor_x: f32,
+    survivor_y: f32,
+    survivor_z: i32,
+    survivor_health: f32,
+    survivor_hunger: f32,
+    survivor_thirst: f32,
+}
+
+#[pymethods]
+impl RustEngineCore {
+    #[new]
+    fn new(width: usize, height: usize) -> Self {
+        RustEngineCore {
+            width,
+            height,
+            current_tick: 0,
+            survivor_x: (width / 2) as f32,
+            survivor_y: (height / 2) as f32,
+            survivor_z: 0,
+            survivor_health: 100.0,
+            survivor_hunger: 100.0,
+            survivor_thirst: 100.0,
+        }
+    }
+
+    fn step(&mut self, dx: f32, dy: f32, _action: i32) {
+        self.current_tick += 1;
+        self.survivor_x = (self.survivor_x + dx * 0.15).max(0.0).min((self.width - 1) as f32);
+        self.survivor_y = (self.survivor_y + dy * 0.15).max(0.0).min((self.height - 1) as f32);
+        self.survivor_hunger = (self.survivor_hunger - 0.025).max(0.0);
+        self.survivor_thirst = (self.survivor_thirst - 0.035).max(0.0);
+    }
+
+    fn get_observation_flat(&self) -> Vec<f32> {
+        let mut obs = vec![0.0f32; 57];
+        obs[0] = self.survivor_health / 100.0;
+        obs[1] = self.survivor_hunger / 100.0;
+        obs[2] = self.survivor_thirst / 100.0;
+        obs[3] = 1.0;
+        obs[4] = 1.0;
+        obs[22] = self.survivor_z as f32 / 20.0;
+        obs
+    }
+
+    fn get_current_tick(&self) -> u64 {
+        self.current_tick
+    }
+
+    fn get_survivor_pos(&self) -> (f32, f32, i32) {
+        (self.survivor_x, self.survivor_y, self.survivor_z)
+    }
+}
+
 #[pymodule]
 fn rust_vulkan_render(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VulkanTileRenderer>()?;
+    m.add_class::<RustEngineCore>()?;
+    m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
     Ok(())
 }

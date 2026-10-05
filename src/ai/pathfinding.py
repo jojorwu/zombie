@@ -2,6 +2,12 @@ import heapq
 import math
 from src.world import TileType
 
+try:
+    from rust_vulkan_render import compute_a_star_3d_path
+    RUST_PATHFINDING_AVAILABLE = True
+except ImportError:
+    RUST_PATHFINDING_AVAILABLE = False
+
 _DIRECTIONS_8 = (
     (0, 1, 1.0), (0, -1, 1.0), (1, 0, 1.0), (-1, 0, 1.0),
     (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414), (-1, -1, 1.414)
@@ -40,6 +46,18 @@ class AStar3D:
         sx, sy, sz = int(start_pos[0]), int(start_pos[1]), int(start_pos[2])
         gx, gy, gz = int(goal_pos[0]), int(goal_pos[1]), int(goal_pos[2])
 
+        if RUST_PATHFINDING_AVAILABLE and sz == gz and max(abs(sx - gx), abs(sy - gy)) < 30:
+            w, h = self.world.width, self.world.height
+            min_x, max_x = max(0, min(sx, gx) - 15), min(w, max(sx, gx) + 16)
+            min_y, max_y = max(0, min(sy, gy) - 15), min(h, max(sy, gy) + 16)
+            sub_w = max_x - min_x
+            sub_h = max_y - min_y
+
+            mask = [1 if self.world.is_walkable(min_x + x, min_y + y, sz) else 0 for y in range(sub_h) for x in range(sub_w)]
+            rust_path = compute_a_star_3d_path((sx - min_x, sy - min_y, sz), (gx - min_x, gy - min_y, gz), mask, sub_w, sub_h, max_nodes)
+            if rust_path:
+                return [(px + min_x + 0.5, py + min_y + 0.5, pz) for px, py, pz in rust_path]
+
         if not self.world.is_walkable(sx, sy, sz) or not self.world.is_walkable(gx, gy, gz):
             return []
 
@@ -76,7 +94,6 @@ class AStar3D:
             z_idx = self.world.z_to_idx(z)
 
             for dx, dy, cost in _DIRECTIONS_8:
-                # Prevent diagonal corner cutting through solid wall corners
                 if abs(dx) == 1 and abs(dy) == 1:
                     if not self.world.is_walkable(x + dx, y, z) and not self.world.is_walkable(x, y + dy, z):
                         continue
@@ -85,7 +102,6 @@ class AStar3D:
                 n_pos = (nx, ny, z)
                 if n_pos not in closed_set:
                     is_walk = self.world.is_walkable(nx, ny, z)
-                    # Check breakable doors/windows
                     is_breakable = False
                     if not is_walk and 0 <= z_idx < num_levels and 0 <= nx < self.world.width and 0 <= ny < self.world.height:
                         t = w_grid[z_idx, ny, nx]

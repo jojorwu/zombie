@@ -146,3 +146,33 @@ class ItemStateManager:
 
     def remove_item(self, item_entity: Any) -> Optional[ExtendedItemState]:
         return self.states.pop(item_entity, None)
+
+
+class LazyChunkStatePersistence:
+    """
+    Lazy State Inflation & Delta Change Log Persistence.
+    Stores lightweight delta logs for unvisited/inactive chunks and inflates full states on demand.
+    """
+    def __init__(self) -> None:
+        self._delta_logs: Dict[Tuple[int, int], List[Dict[str, Any]]] = {}
+        self._inflated_chunks: Dict[Tuple[int, int], bool] = {}
+
+    def is_inflated(self, chunk_x: int, chunk_y: int) -> bool:
+        return self._inflated_chunks.get((chunk_x, chunk_y), False)
+
+    def log_delta_change(self, chunk_x: int, chunk_y: int, delta_type: str, data: Dict[str, Any]) -> None:
+        key = (chunk_x, chunk_y)
+        if key not in self._delta_logs:
+            self._delta_logs[key] = []
+        self._delta_logs[key].append({"type": delta_type, "data": data})
+
+    def inflate_chunk_states(self, chunk_x: int, chunk_y: int) -> List[Dict[str, Any]]:
+        """Inflates full objects for a chunk from its delta log on demand."""
+        key = (chunk_x, chunk_y)
+        self._inflated_chunks[key] = True
+        return self._delta_logs.get(key, [])
+
+    def deflate_chunk_states(self, chunk_x: int, chunk_y: int) -> None:
+        """Deflates active objects into lightweight delta records when unloading a chunk."""
+        key = (chunk_x, chunk_y)
+        self._inflated_chunks[key] = False

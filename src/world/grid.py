@@ -13,6 +13,11 @@ WORLD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
 class World:
+    """
+    World representation featuring Sparse Spatial Hashing:
+    - Ground level (Z=0) is stored in a dense 2D Flat-NumPy array.
+    - Vertical levels (Z > 0 and Z < 0) are stored in a sparse spatial hash map dictionary.
+    """
     def __init__(self, width=1000, height=1000, day_length_ticks=3600, z_min=0, z_max=2,
                  electricity_cutoff_day=7, water_cutoff_day=14, electricity_enabled=True, water_enabled=True):
         self.width = max(30, width)
@@ -34,10 +39,146 @@ class World:
         self.item_state_manager = ItemStateManager()
         self.generator = WorldGenerator(self)
         self.dynamic_lights = []
-        self.grid = np.zeros((self.num_levels, self.height, self.width), dtype=int)
+
+        # Dense 2D Flat-NumPy array for Z=0 (Ground)
+        self.ground_grid = np.zeros((self.height, self.width), dtype=int)
+        # Sparse Spatial Hash Map for non-zero Z levels: {(z_idx, y, x): tile_type_int}
+        self.sparse_z_grid = {}
+
         self.building_grid = {}
         self.buildings = []
         self.generate_world()
+
+    @property
+    def grid(self):
+        """Proxy array interface providing backwards-compatible [z_idx, y, x] array access."""
+        class LayerProxy:
+            def __init__(self, world, z_idx):
+                self.world = world
+                self.z_idx = z_idx
+                self.shape = (world.height, world.width)
+
+            def __getitem__(self, key):
+                if self.z_idx == self.world.z_to_idx(0):
+                    return self.world.ground_grid[key]
+                if isinstance(key, tuple) and len(key) == 2:
+                    y, x = key
+                    return self.world.sparse_z_grid.get((self.z_idx, y, x), 0)
+                return 0
+
+            def __setitem__(self, key, value):
+                tile_val = value.value if hasattr(value, 'value') else int(value)
+                if self.z_idx == self.world.z_to_idx(0):
+                    self.world.ground_grid[key] = tile_val
+                    return
+
+                if isinstance(key, tuple) and len(key) == 2:
+                    y, x = key
+                    ys = range(self.world.height) if isinstance(y, slice) else [y]
+                    xs = range(self.world.width) if isinstance(x, slice) else [x]
+                    for y_curr in ys:
+                        for x_curr in xs:
+                            if tile_val == 0:
+                                self.world.sparse_z_grid.pop((self.z_idx, y_curr, x_curr), None)
+                            else:
+                                self.world.sparse_z_grid[(self.z_idx, y_curr, x_curr)] = tile_val
+
+            def fill(self, val):
+                tile_val = val.value if hasattr(val, 'value') else int(val)
+                if self.z_idx == self.world.z_to_idx(0):
+                    self.world.ground_grid.fill(tile_val)
+                else:
+                    keys_to_del = [k for k in self.world.sparse_z_grid if k[0] == self.z_idx]
+                    for k in keys_to_del:
+                        del self.world.sparse_z_grid[k]
+                    if tile_val != 0:
+                        for y in range(self.world.height):
+                            for x in range(self.world.width):
+                                self.world.sparse_z_grid[(self.z_idx, y, x)] = tile_val
+
+        class GridProxy:
+            def __init__(self, world):
+                self.world = world
+                self.shape = (self.world.num_levels, self.world.height, self.world.width)
+                self.dtype = int
+
+            def fill(self, val):
+                tile_val = val.value if hasattr(val, 'value') else int(val)
+                self.world.ground_grid.fill(tile_val)
+                self.world.sparse_z_grid.clear()
+
+            def astype(self, dtype):
+                arr = np.zeros(self.shape, dtype=dtype)
+                arr[self.world.z_to_idx(0)] = self.world.ground_grid.astype(dtype)
+                for (z, y, x), val in self.world.sparse_z_grid.items():
+                    arr[z, y, x] = val
+                return arr
+
+            def __getitem__(self, key):
+                if isinstance(key, int):
+                    return LayerProxy(self.world, key)
+
+                if isinstance(key, tuple):
+                    if len(key) == 3:
+                        z_idx, y, x = key
+                        if isinstance(z_idx, slice) or isinstance(y, slice) or isinstance(x, slice):
+                            ys = range(self.world.height) if isinstance(y, slice) else [y]
+                            xs = range(self.world.width) if isinstance(x, slice) else [x]
+                            zs = [z_idx] if not isinstance(z_idx, slice) else range(self.world.num_levels)
+                            res = np.zeros((len(zs), len(ys) if isinstance(y, slice) else 1, len(xs) if isinstance(x, slice) else 1), dtype=int)
+                            for i, z_curr in enumerate(zs):
+                                if z_curr == self.world.z_to_idx(0):
+                                    res[i] = self.world.ground_grid[y, x]
+                                else:
+                                    for j, y_curr in enumerate(ys):
+                                        for k, x_curr in enumerate(xs):
+                                            res[i, j, k] = self.world.sparse_z_grid.get((z_curr, y_curr, x_curr), 0)
+                            return res.squeeze()
+                        if z_idx == self.world.z_to_idx(0):
+                            return self.world.ground_grid[y, x]
+                        return self.world.sparse_z_grid.get((z_idx, y, x), TileType.EMPTY.value if hasattr(TileType, 'EMPTY') else 0)
+                    elif len(key) == 2:
+                        z_idx, slice_spec = key
+                        return LayerProxy(self.world, z_idx)[slice_spec]
+
+                return LayerProxy(self.world, self.world.z_to_idx(0))
+
+            def __setitem__(self, key, value):
+                tile_val = value.value if hasattr(value, 'value') else int(value)
+                if isinstance(key, int):
+                    LayerProxy(self.world, key).fill(tile_val)
+                    return
+
+                if isinstance(key, tuple):
+                    if len(key) == 3:
+                        z_idx, y, x = key
+                        if isinstance(z_idx, slice) or isinstance(y, slice) or isinstance(x, slice):
+                            ys = range(self.world.height) if isinstance(y, slice) else [y]
+                            xs = range(self.world.width) if isinstance(x, slice) else [x]
+                            zs = [z_idx] if not isinstance(z_idx, slice) else range(self.world.num_levels)
+                            for z_curr in zs:
+                                if z_curr == self.world.z_to_idx(0):
+                                    self.world.ground_grid[y, x] = tile_val
+                                else:
+                                    for y_curr in ys:
+                                        for x_curr in xs:
+                                            if tile_val == 0:
+                                                self.world.sparse_z_grid.pop((z_curr, y_curr, x_curr), None)
+                                            else:
+                                                self.world.sparse_z_grid[(z_curr, y_curr, x_curr)] = tile_val
+                            return
+                        if z_idx == self.world.z_to_idx(0):
+                            self.world.ground_grid[y, x] = tile_val
+                        else:
+                            if tile_val == 0:
+                                self.world.sparse_z_grid.pop((z_idx, y, x), None)
+                            else:
+                                self.world.sparse_z_grid[(z_idx, y, x)] = tile_val
+                    elif len(key) == 2:
+                        z_idx, slice_spec = key
+                        LayerProxy(self.world, z_idx)[slice_spec] = tile_val
+
+        return GridProxy(self)
 
     def z_to_idx(self, z):
         return max(0, min(self.num_levels - 1, int(z) - self.z_min))

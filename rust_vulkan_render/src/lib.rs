@@ -284,14 +284,15 @@ pub struct RustAnatomicalHealth {
 #[pymethods]
 impl RustAnatomicalHealth {
     #[new]
-    fn new() -> Self {
+    #[pyo3(signature = (head=35.0, torso=100.0, left_arm=40.0, right_arm=40.0, left_leg=45.0, right_leg=45.0))]
+    fn new(head: f32, torso: f32, left_arm: f32, right_arm: f32, left_leg: f32, right_leg: f32) -> Self {
         RustAnatomicalHealth {
-            head: 100.0,
-            torso: 100.0,
-            left_arm: 100.0,
-            right_arm: 100.0,
-            left_leg: 100.0,
-            right_leg: 100.0,
+            head,
+            torso,
+            left_arm,
+            right_arm,
+            left_leg,
+            right_leg,
             bleeding_rate: 0.0,
         }
     }
@@ -337,7 +338,9 @@ impl RustAnatomicalHealth {
     }
 
     fn get_total_health(&self) -> f32 {
-        (self.head * 0.3 + self.torso * 0.4 + (self.left_arm + self.right_arm + self.left_leg + self.right_leg) * 0.075).max(0.0)
+        let max_total = 35.0 * 0.3 + 100.0 * 0.4 + (40.0 + 40.0 + 45.0 + 45.0) * 0.075;
+        let cur_total = self.head * 0.3 + self.torso * 0.4 + (self.left_arm + self.right_arm + self.left_leg + self.right_leg) * 0.075;
+        ((cur_total / max_total) * 100.0).max(0.0).min(100.0)
     }
 
     fn get_speed_multiplier(&self) -> f32 {
@@ -400,11 +403,17 @@ impl RustEnvironmentManager {
 /// 5. Native Zombie Entity Life Cycle Engine in Rust.
 #[pyclass]
 pub struct RustZombieEngine {
+    #[pyo3(get, set)]
     pub x: f32,
+    #[pyo3(get, set)]
     pub y: f32,
+    #[pyo3(get, set)]
     pub z: i32,
+    #[pyo3(get, set)]
     pub hp: f32,
+    #[pyo3(get, set)]
     pub speed: f32,
+    #[pyo3(get, set)]
     pub is_alive: bool,
 }
 
@@ -515,6 +524,96 @@ impl RustContainerUtility {
     #[staticmethod]
     fn can_fit_item(current_weight: f32, capacity: f32, item_weight: f32, amount: u32) -> bool {
         current_weight + (item_weight * (amount as f32)) <= capacity
+    }
+}
+
+/// 8. Native Ballistics Projectile Flight Utility in Rust.
+#[pyclass]
+pub struct RustBallisticsUtility;
+
+#[pymethods]
+impl RustBallisticsUtility {
+    #[new]
+    fn new() -> Self {
+        RustBallisticsUtility
+    }
+
+    #[staticmethod]
+    fn calculate_trajectory(v0_ms: f32, distance_m: f32, wind_ms: f32) -> (f32, f32, f32) {
+        let time_s = distance_m / v0_ms.max(1.0);
+        let bullet_drop = 0.5 * 9.81 * time_s * time_s;
+        let wind_drift = 0.5 * wind_ms * time_s * time_s;
+        let final_v = (v0_ms - 0.5 * time_s * 100.0).max(10.0);
+        (bullet_drop, wind_drift, final_v)
+    }
+}
+
+/// 9. Native Food Spoilage Decay Utility in Rust.
+#[pyclass]
+pub struct RustFoodSpoilageUtility;
+
+#[pymethods]
+impl RustFoodSpoilageUtility {
+    #[new]
+    fn new() -> Self {
+        RustFoodSpoilageUtility
+    }
+
+    #[staticmethod]
+    fn calculate_freshness_decay(
+        base_freshness: f32,
+        ambient_temp_c: f32,
+        is_refrigerated: bool,
+        is_freezer: bool,
+        power_online: bool,
+    ) -> f32 {
+        let mut decay_mult = 1.0f32;
+
+        if power_online {
+            if is_freezer {
+                decay_mult = 0.01;
+            } else if is_refrigerated {
+                decay_mult = 0.10;
+            }
+        }
+
+        let temp_factor = ((ambient_temp_c - 10.0) / 10.0).max(0.1);
+        let total_decay = 0.001 * decay_mult * temp_factor;
+        (base_freshness - total_decay).max(0.0)
+    }
+}
+
+/// 10. Native Particle System in Rust.
+#[pyclass]
+pub struct RustParticleSystem {
+    particles: Vec<(f32, f32, i32, u32)>,
+}
+
+#[pymethods]
+impl RustParticleSystem {
+    #[new]
+    fn new() -> Self {
+        RustParticleSystem {
+            particles: Vec::new(),
+        }
+    }
+
+    fn spawn_particles(&mut self, x: f32, y: f32, z: i32, count: u32, lifetime: u32) {
+        for _ in 0..count {
+            self.particles.push((x, y, z, lifetime));
+        }
+    }
+
+    fn tick(&mut self) -> usize {
+        self.particles.retain_mut(|p| {
+            if p.3 > 0 {
+                p.3 -= 1;
+                true
+            } else {
+                false
+            }
+        });
+        self.particles.len()
     }
 }
 
@@ -1002,6 +1101,9 @@ fn rust_vulkan_render(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RustZombieEngine>()?;
     m.add_class::<RustSpatialGrid>()?;
     m.add_class::<RustContainerUtility>()?;
+    m.add_class::<RustBallisticsUtility>()?;
+    m.add_class::<RustFoodSpoilageUtility>()?;
+    m.add_class::<RustParticleSystem>()?;
     m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
     m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
     m.add_function(wrap_pyfunction!(check_line_of_sight_rust, m)?)?;

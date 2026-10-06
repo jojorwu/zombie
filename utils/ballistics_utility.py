@@ -2,6 +2,12 @@ import math
 import random
 from src.world.tiles import TileType
 
+try:
+    from rust_vulkan_render import RustBallisticsUtility
+    RUST_BALLISTICS_AVAILABLE = True
+except ImportError:
+    RUST_BALLISTICS_AVAILABLE = False
+
 
 class MaterialResistance:
     """Material penetration energy thresholds (Joules) and ricochet hardness factors."""
@@ -114,8 +120,21 @@ class BallisticsUtility:
         data = cls.CALIBERS.get(caliber, cls.CALIBERS["9mm"])
         v0 = data["muzzle_velocity"]
         m = data["mass_kg"]
-        cd = data["drag_coeff"]
 
+        if RUST_BALLISTICS_AVAILABLE:
+            b_drop, w_drift, final_v = RustBallisticsUtility.calculate_trajectory(v0, float(distance_m), float(wind_speed_kmh))
+            damage_scale = max(0.2, final_v / v0)
+            final_damage = data["base_damage"] * damage_scale
+            return {
+                "terminal_velocity_ms": round(final_v, 1),
+                "flight_time_s": round(distance_m / max(50.0, (v0 + final_v) / 2.0), 3),
+                "kinetic_energy_j": round(0.5 * m * (final_v ** 2), 1),
+                "wind_drift_m": round(w_drift, 2),
+                "bullet_drop_m": round(b_drop, 2),
+                "damage": round(final_damage, 1),
+            }
+
+        cd = data["drag_coeff"]
         dist = max(0.1, float(distance_m))
         decay_factor = math.exp(-cd * (dist / 100.0))
         terminal_velocity = v0 * decay_factor

@@ -2,10 +2,12 @@ from typing import List
 from src.simulation.event_bus import EventBus, NoiseEmittedEvent, InfectionProgressEvent, DamageDealtEvent
 
 try:
-    from rust_vulkan_render import RustAcousticSystem
+    from rust_vulkan_render import RustAcousticSystem, RustParticleSystem
     RUST_ACOUSTIC_AVAILABLE = True
+    RUST_PARTICLES_AVAILABLE = True
 except ImportError:
     RUST_ACOUSTIC_AVAILABLE = False
+    RUST_PARTICLES_AVAILABLE = False
 
 
 class AcousticSystem:
@@ -49,6 +51,10 @@ class ParticleSystem:
     def __init__(self, event_bus: EventBus):
         self.event_bus = event_bus
         self.particles: List[dict] = []
+        self.rust_particles = RustParticleSystem() if RUST_PARTICLES_AVAILABLE else None
 
     def spawn_shatter_particles(self, x: float, y: float, z: int):
+        if self.rust_particles:
+            self.rust_particles.spawn_particles(float(x), float(y), int(z), 8, 10)
+            self.rust_particles.tick()
         self.particles.append({"x": x, "y": y, "z": z, "type": "glass_shatter", "lifetime": 10})

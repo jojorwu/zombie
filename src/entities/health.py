@@ -42,7 +42,7 @@ class AnatomicalHealth:
             "limbs": None,
         }
         self.total_bleeding: float = 0.0
-        self.rust_health = RustAnatomicalHealth() if RUST_HEALTH_AVAILABLE else None
+        self.rust_health = RustAnatomicalHealth(max_head, max_torso, max_arm, max_arm, max_leg, max_leg) if RUST_HEALTH_AVAILABLE else None
 
     @property
     def head_health(self) -> float:

@@ -1,6 +1,12 @@
 import random
 from src.entities.item import ResourceItem
 
+try:
+    from rust_vulkan_render import RustFoodSpoilageUtility
+    RUST_SPOILAGE_AVAILABLE = True
+except ImportError:
+    RUST_SPOILAGE_AVAILABLE = False
+
 
 class FoodSpoilageUtility:
     """
@@ -12,7 +18,7 @@ class FoodSpoilageUtility:
     - High ambient temperatures accelerate spoilage.
     """
     PERISHABLE_SPOIL_RATES = {
-        ResourceItem.MEAT: 0.10,        # Per tick decay
+        ResourceItem.MEAT: 0.10,
         ResourceItem.STEAK: 0.10,
         ResourceItem.STEW: 0.06,
         ResourceItem.SOUP: 0.06,
@@ -22,7 +28,7 @@ class FoodSpoilageUtility:
         ResourceItem.MUSHROOM: 0.03,
         ResourceItem.APPLE: 0.02,
         ResourceItem.POTATO: 0.01,
-        ResourceItem.CANNED_FOOD: 0.0,  # Non-perishable
+        ResourceItem.CANNED_FOOD: 0.0,
         ResourceItem.CANNED_BEANS: 0.0,
         ResourceItem.CANNED_TUNA: 0.0,
         ResourceItem.MRE: 0.0,
@@ -39,17 +45,18 @@ class FoodSpoilageUtility:
         """
         base_rate = cls.PERISHABLE_SPOIL_RATES.get(item_type, 0.0)
         if base_rate <= 0.0:
-            return current_freshness  # Non-perishable
+            return current_freshness
 
-        # Refrigeration & Freezer effect
+        if RUST_SPOILAGE_AVAILABLE:
+            return RustFoodSpoilageUtility.calculate_freshness_decay(current_freshness, ambient_temp_c, is_refrigerated, is_freezer, power_online)
+
         decay_modifier = 1.0
         if power_online:
             if is_freezer:
-                decay_modifier *= 0.05  # 95% slower decay (frozen)
+                decay_modifier *= 0.05
             elif is_refrigerated:
-                decay_modifier *= 0.20  # 80% slower decay in cold storage
+                decay_modifier *= 0.20
 
-        # Temperature effect (heat accelerates rot)
         if ambient_temp_c > 20.0:
             decay_modifier *= (1.0 + (ambient_temp_c - 20.0) * 0.05)
 

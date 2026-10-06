@@ -93,7 +93,7 @@ class TestBrain(unittest.TestCase):
         self.assertTrue(check_line_of_sight(world, survivor.x, survivor.y, zombie.x, zombie.y, 0))
 
         z_idx = world.z_to_idx(0)
-        world.grid[z_idx, 10, 12] = TileType.WALL_BRICK.value
+        world.grid[z_idx, 10, 12] = TileType.WALL_BRICK
         self.assertFalse(check_line_of_sight(world, survivor.x, survivor.y, zombie.x, zombie.y, 0))
 
         survivor.spatial_memory["zombie"] = (15.0, 10.0, 0, world.current_tick)

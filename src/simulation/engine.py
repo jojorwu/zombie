@@ -1,9 +1,14 @@
 import random
 import time
 import threading
+import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from src.world import World
-from src.entities import Survivor, Vehicle, ResourceItem, EntityFactory, NoiseEvent
+from src.entities.survivor import Survivor
+from src.entities.vehicle import Vehicle
+from src.entities.item import ResourceItem
+from src.entities.factory import EntityFactory
+from src.entities.sensory import NoiseEvent
 from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager, batch_get_action_and_movement, HierarchicalDecisionPlanner
 from src.modding.manager import LuaModManager
 from src.simulation.spawner import EntitySpawner
@@ -159,7 +164,7 @@ class SimulationEngine:
 
         # 5. Spawn Building Contextual Loot & Street Corpses
         self.spawner.spawn_building_loot(self.items)
-        self.spawner.spawn_street_corpses_and_loot(self.items, num_corpses=20)
+        self.spawner.spawn_street_corpses_and_loot(self.items, walkable_coords=walkable_coords, num_corpses=20)
 
         # 6. Spawn Survivors
         for _ in range(min(self.sim_cfg["num_survivors"], len(walkable_coords))):
@@ -241,9 +246,11 @@ class SimulationEngine:
         ]
 
         if RUST_STEERING_AVAILABLE and len(active_zombies) > 5:
-            z_coords = []
-            for z in active_zombies:
-                z_coords.extend([z.x, z.y, float(z.z)])
+            z_coords = np.empty(len(active_zombies) * 3, dtype=np.float32)
+            for i, z in enumerate(active_zombies):
+                z_coords[i * 3] = z.x
+                z_coords[i * 3 + 1] = z.y
+                z_coords[i * 3 + 2] = float(z.z)
             steer_vecs = compute_zombie_flock_steering(z_coords, separation_dist=1.5)
             for idx, z in enumerate(active_zombies):
                 nx = z.x + steer_vecs[idx * 2] * 0.02

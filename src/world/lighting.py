@@ -1,5 +1,12 @@
 import math
+import numpy as np
 from src.world.tiles import TileType
+
+try:
+    from rust_vulkan_render import compute_fog_of_war_rust
+    RUST_FOW_AVAILABLE = True
+except ImportError:
+    RUST_FOW_AVAILABLE = False
 
 _FOW_NUM_RAYS = 36
 _FOW_RAYS = tuple(
@@ -100,15 +107,23 @@ class LightingEngine:
         """
         ix, iy = int(x), int(y)
         z_idx = self.world.z_to_idx(z)
-        visible_tiles = {(ix, iy)}
         w, h = self.world.width, self.world.height
-        grid_z = self.world.grid[z_idx]
 
         # Constrain sight radius dynamically based on ambient lighting and heavy rain/snowstorms
         ambient_light = self.get_light_level(z)
         weather_penalty = 2 if self.world.weather.is_in_rain(x, y) else 0
         effective_radius = max(3, int(radius * ambient_light) - weather_penalty)
 
+        if RUST_FOW_AVAILABLE:
+            if hasattr(self.world, 'get_3d_grid_array'):
+                grid_3d = self.world.get_3d_grid_array()
+            else:
+                grid_3d = self.world.grid.astype(np.int64)
+            rust_res = compute_fog_of_war_rust(float(x), float(y), effective_radius, int(z), grid_3d, self.world.z_min, facing_angle=facing_angle, fov_degrees=fov_degrees)
+            return set(rust_res)
+
+        visible_tiles = {(ix, iy)}
+        grid_z = self.world.grid[z_idx]
         r_int = effective_radius
 
         half_fov = math.radians(fov_degrees / 2.0) if facing_angle is not None else None

@@ -3,6 +3,12 @@ import torch
 import numpy as np
 from src.ai.brain_net import DEVICE
 
+try:
+    from rust_vulkan_render import check_line_of_sight_rust
+    RUST_LOS_AVAILABLE = True
+except ImportError:
+    RUST_LOS_AVAILABLE = False
+
 
 def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens: list) -> list:
     """
@@ -77,7 +83,14 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
 
 
 def check_line_of_sight(world, x0: float, y0: float, x1: float, y1: float, z: int) -> bool:
-    """Raycast check between two points on the same Z level to verify Line-of-Sight."""
+    """Raycast check between two points on the same Z level to verify Line-of-Sight using fast Rust C-API."""
+    if RUST_LOS_AVAILABLE:
+        if hasattr(world, 'get_3d_grid_array'):
+            grid_3d = world.get_3d_grid_array()
+        else:
+            grid_3d = world.grid.astype(np.int64)
+        return check_line_of_sight_rust(float(x0), float(y0), int(z), float(x1), float(y1), int(z), grid_3d, world.z_min)
+
     ix0, iy0 = int(x0), int(y0)
     ix1, iy1 = int(x1), int(y1)
 

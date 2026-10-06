@@ -75,6 +75,8 @@ class TestSimulation(unittest.TestCase):
     def test_street_corpse_spawning_and_ballistics(self):
         with open("config.json", "r") as f:
             config = json.load(f).copy()
+        config["simulation"]["map_width"] = 30
+        config["simulation"]["map_height"] = 30
         sim = SimulationEngine(config)
 
         corpses = [i for i in sim.items if i.contents]
@@ -87,7 +89,9 @@ class TestSimulation(unittest.TestCase):
 
     def test_generation_reset_and_evolution(self):
         with open("config.json", "r") as f:
-            config = json.load(f)
+            config = json.load(f).copy()
+        config["simulation"]["map_width"] = 30
+        config["simulation"]["map_height"] = 30
 
         sim = SimulationEngine(config)
         initial_gen = sim.evolution_manager.generation

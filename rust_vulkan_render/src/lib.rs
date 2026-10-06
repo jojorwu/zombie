@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use std::collections::{BinaryHeap, HashMap};
+use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray3, IntoPyArray};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::cmp::Ordering;
 
 #[pyclass]
@@ -153,58 +154,200 @@ impl VulkanTileRenderer {
     }
 }
 
-/// High-performance Rust zombie flocking steering calculation.
+/// High-performance Rust zombie flocking steering calculation using zero-copy NumPy inputs.
 #[pyfunction]
-pub fn compute_zombie_flock_steering(
-    zombie_coords: Vec<f32>,
+pub fn compute_zombie_flock_steering<'py>(
+    py: Python<'py>,
+    zombie_coords: PyReadonlyArray1<'py, f32>,
     separation_dist: f32,
-) -> Vec<f32> {
-    let num_zombies = zombie_coords.len() / 3;
+) -> &'py PyArray1<f32> {
+    let coords_slice = zombie_coords.as_slice().unwrap_or(&[]);
+    let num_zombies = coords_slice.len() / 3;
     let mut steering_vectors = vec![0.0f32; num_zombies * 2];
 
-    if num_zombies < 2 {
-        return steering_vectors;
+    if num_zombies >= 2 {
+        let sq_sep = separation_dist * separation_dist;
+
+        for i in 0..num_zombies {
+            let z1_x = coords_slice[i * 3];
+            let z1_y = coords_slice[i * 3 + 1];
+            let z1_z = coords_slice[i * 3 + 2];
+
+            let mut sep_x = 0.0f32;
+            let mut sep_y = 0.0f32;
+
+            for j in 0..num_zombies {
+                if i == j {
+                    continue;
+                }
+
+                let z2_x = coords_slice[j * 3];
+                let z2_y = coords_slice[j * 3 + 1];
+                let z2_z = coords_slice[j * 3 + 2];
+
+                if (z1_z - z2_z).abs() > 0.1 {
+                    continue;
+                }
+
+                let dx = z1_x - z2_x;
+                let dy = z1_y - z2_y;
+                let dist_sq = dx * dx + dy * dy;
+
+                if dist_sq > 0.0001 && dist_sq < sq_sep {
+                    let dist = dist_sq.sqrt();
+                    sep_x += (dx / dist) * (separation_dist - dist);
+                    sep_y += (dy / dist) * (separation_dist - dist);
+                }
+            }
+
+            steering_vectors[i * 2] = sep_x;
+            steering_vectors[i * 2 + 1] = sep_y;
+        }
     }
 
-    let sq_sep = separation_dist * separation_dist;
+    steering_vectors.into_pyarray(py)
+}
 
-    for i in 0..num_zombies {
-        let z1_x = zombie_coords[i * 3];
-        let z1_y = zombie_coords[i * 3 + 1];
-        let z1_z = zombie_coords[i * 3 + 2];
+fn is_opaque_tile(t: i64) -> bool {
+    matches!(
+        t,
+        2 | 6 | 11 | 29 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 58 | 59 | 60 | 61
+    )
+}
 
-        let mut sep_x = 0.0f32;
-        let mut sep_y = 0.0f32;
+/// Fast Rust raycasting line-of-sight check.
+#[pyfunction]
+pub fn check_line_of_sight_rust<'py>(
+    x1: f32,
+    y1: f32,
+    z1: i32,
+    x2: f32,
+    y2: f32,
+    z2: i32,
+    grid_3d: PyReadonlyArray3<'py, i64>,
+    z_min: i32,
+) -> bool {
+    if (z1 - z2).abs() > 1 {
+        return false;
+    }
 
-        for j in 0..num_zombies {
-            if i == j {
-                continue;
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    let dist = (dx * dx + dy * dy).sqrt();
+    if dist < 0.1 {
+        return true;
+    }
+
+    let steps = (dist * 2.0).ceil() as usize;
+    if steps == 0 {
+        return true;
+    }
+
+    let step_x = dx / (steps as f32);
+    let step_y = dy / (steps as f32);
+
+    let shape = grid_3d.shape();
+    let num_levels = shape[0] as i32;
+    let height = shape[1] as i32;
+    let width = shape[2] as i32;
+
+    let z_idx = z1 - z_min;
+    if z_idx < 0 || z_idx >= num_levels {
+        return false;
+    }
+
+    let view = grid_3d.as_array();
+    let mut cx = x1;
+    let mut cy = y1;
+
+    for _ in 0..steps {
+        cx += step_x;
+        cy += step_y;
+        let ix = cx as i32;
+        let iy = cy as i32;
+
+        if ix >= 0 && ix < width && iy >= 0 && iy < height {
+            let tile = view[[z_idx as usize, iy as usize, ix as usize]];
+            if is_opaque_tile(tile) {
+                return false;
             }
+        }
+    }
 
-            let z2_x = zombie_coords[j * 3];
-            let z2_y = zombie_coords[j * 3 + 1];
-            let z2_z = zombie_coords[j * 3 + 2];
+    true
+}
 
-            if (z1_z - z2_z).abs() > 0.1 {
-                continue;
+/// Fast Rust raycasted Fog-of-War tile visibilities.
+#[pyfunction]
+#[pyo3(signature = (x, y, radius, z, grid_3d, z_min, facing_angle=None, fov_degrees=180.0))]
+pub fn compute_fog_of_war_rust<'py>(
+    x: f32,
+    y: f32,
+    radius: usize,
+    z: i32,
+    grid_3d: PyReadonlyArray3<'py, i64>,
+    z_min: i32,
+    facing_angle: Option<f32>,
+    fov_degrees: f32,
+) -> Vec<(i32, i32)> {
+    let ix = x as i32;
+    let iy = y as i32;
+
+    let shape = grid_3d.shape();
+    let num_levels = shape[0] as i32;
+    let height = shape[1] as i32;
+    let width = shape[2] as i32;
+
+    let z_idx = z - z_min;
+    if z_idx < 0 || z_idx >= num_levels {
+        return vec![(ix, iy)];
+    }
+
+    let view = grid_3d.as_array();
+    let mut visible = HashSet::new();
+    visible.insert((ix, iy));
+
+    let num_rays = 36usize;
+    let half_fov = facing_angle.map(|_| (fov_degrees / 2.0).to_radians());
+
+    for i in 0..num_rays {
+        let angle = (i as f32) * (2.0 * std::f32::consts::PI / (num_rays as f32));
+        let r_dx = angle.cos();
+        let r_dy = angle.sin();
+
+        if let (Some(f_angle), Some(h_fov)) = (facing_angle, half_fov) {
+            let ray_angle = r_dy.atan2(r_dx);
+            let mut diff = (ray_angle - f_angle + std::f32::consts::PI) % (2.0 * std::f32::consts::PI) - std::f32::consts::PI;
+            if diff < -std::f32::consts::PI {
+                diff += 2.0 * std::f32::consts::PI;
             }
-
-            let dx = z1_x - z2_x;
-            let dy = z1_y - z2_y;
-            let dist_sq = dx * dx + dy * dy;
-
-            if dist_sq > 0.0001 && dist_sq < sq_sep {
-                let dist = dist_sq.sqrt();
-                sep_x += (dx / dist) * (separation_dist - dist);
-                sep_y += (dy / dist) * (separation_dist - dist);
+            if diff.abs() > h_fov {
+                continue;
             }
         }
 
-        steering_vectors[i * 2] = sep_x;
-        steering_vectors[i * 2 + 1] = sep_y;
+        let mut cx = x;
+        let mut cy = y;
+
+        for _step in 0..radius {
+            cx += r_dx;
+            cy += r_dy;
+            let tx = cx as i32;
+            let ty = cy as i32;
+
+            if tx >= 0 && tx < width && ty >= 0 && ty < height {
+                visible.insert((tx, ty));
+                let tile = view[[z_idx as usize, ty as usize, tx as usize]];
+                if is_opaque_tile(tile) {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
     }
 
-    steering_vectors
+    visible.into_iter().collect()
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -228,14 +371,28 @@ impl PartialOrd for PathNode {
     }
 }
 
-/// High-performance allocation-free 3D A* Pathfinding in Rust.
+fn is_walkable_tile(t: i64) -> bool {
+    matches!(
+        t,
+        0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 16 | 18 | 19
+    )
+}
+
+fn is_breakable_tile(t: i64) -> bool {
+    matches!(t, 14 | 15 | 17 | 20)
+}
+
+fn is_stairs_or_ladder(t: i64) -> bool {
+    matches!(t, 10 | 11 | 13)
+}
+
+/// High-performance full 3D A* Pathfinding in Rust over 3D NumPy grid `grid_3d` [num_levels, height, width] with z_min support.
 #[pyfunction]
-pub fn compute_a_star_3d_path(
+pub fn compute_a_star_3d_path<'py>(
     start: (i32, i32, i32),
     goal: (i32, i32, i32),
-    walkable_mask: Vec<u8>,
-    width: usize,
-    height: usize,
+    grid_3d: PyReadonlyArray3<'py, i64>,
+    z_min: i32,
     max_nodes: usize,
 ) -> Vec<(i32, i32, i32)> {
     let (sx, sy, sz) = start;
@@ -245,15 +402,53 @@ pub fn compute_a_star_3d_path(
         return vec![start];
     }
 
+    let shape = grid_3d.shape();
+    let num_levels = shape[0] as i32;
+    let height = shape[1] as i32;
+    let width = shape[2] as i32;
+
+    let sz_idx = sz - z_min;
+    let gz_idx = gz - z_min;
+
+    if sz_idx < 0 || sz_idx >= num_levels || gz_idx < 0 || gz_idx >= num_levels {
+        return vec![];
+    }
+
+    let view = grid_3d.as_array();
+
+    let get_tile = |x: i32, y: i32, z: i32| -> i64 {
+        let zi = z - z_min;
+        if zi >= 0 && zi < num_levels && y >= 0 && y < height && x >= 0 && x < width {
+            view[[zi as usize, y as usize, x as usize]]
+        } else {
+            -1
+        }
+    };
+
+    let start_tile = get_tile(sx, sy, sz);
+    let goal_tile = get_tile(gx, gy, gz);
+
+    if start_tile < 0 || (!is_walkable_tile(start_tile) && !is_breakable_tile(start_tile)) {
+        return vec![];
+    }
+    if goal_tile < 0 || (!is_walkable_tile(goal_tile) && !is_breakable_tile(goal_tile)) {
+        return vec![];
+    }
+
     let mut open_set = BinaryHeap::new();
     let mut g_score = HashMap::new();
     let mut came_from = HashMap::new();
 
-    let h_start = ((sx - gx).abs() + (sy - gy).abs() + (sz - gz).abs() * 2) as u32 * 10;
+    let h_start = (((sx - gx).abs() + (sy - gy).abs()) * 10 + (sz - gz).abs() * 30) as u32;
     open_set.push(PathNode { f: h_start, g: 0, x: sx, y: sy, z: sz });
     g_score.insert((sx, sy, sz), 0u32);
 
     let mut nodes_expanded = 0;
+
+    let neighbors_2d = [
+        (-1, 0, 10), (1, 0, 10), (0, -1, 10), (0, 1, 10),
+        (-1, -1, 14), (1, -1, 14), (-1, 1, 14), (1, 1, 14),
+    ];
 
     while let Some(current) = open_set.pop() {
         if current.x == gx && current.y == gy && current.z == gz {
@@ -272,27 +467,58 @@ pub fn compute_a_star_3d_path(
             break;
         }
 
-        let neighbors = [
-            (-1, 0, 0, 10), (1, 0, 0, 10), (0, -1, 0, 10), (0, 1, 0, 10),
-            (-1, -1, 0, 14), (1, -1, 0, 14), (-1, 1, 0, 14), (1, 1, 0, 14),
-        ];
+        let curr_tile = get_tile(current.x, current.y, current.z);
 
-        for (dx, dy, dz, cost) in neighbors {
+        // 1. Horizontal 2D neighbors
+        for &(dx, dy, base_cost) in &neighbors_2d {
             let nx = current.x + dx;
             let ny = current.y + dy;
-            let nz = current.z + dz;
+            let nz = current.z;
 
-            if nx >= 0 && ny >= 0 && (nx as usize) < width && (ny as usize) < height {
-                let idx = ny as usize * width + nx as usize;
-                if walkable_mask.get(idx).copied().unwrap_or(0) == 1 {
-                    let tentative_g = current.g + cost;
-                    let existing_g = g_score.get(&(nx, ny, nz)).copied().unwrap_or(u32::MAX);
+            if dx.abs() == 1 && dy.abs() == 1 {
+                let t1 = get_tile(current.x + dx, current.y, nz);
+                let t2 = get_tile(current.x, current.y + dy, nz);
+                if !is_walkable_tile(t1) && !is_walkable_tile(t2) {
+                    continue;
+                }
+            }
+
+            let tile = get_tile(nx, ny, nz);
+            if tile < 0 {
+                continue;
+            }
+
+            let is_walk = is_walkable_tile(tile);
+            let is_break = is_breakable_tile(tile);
+
+            if is_walk || is_break {
+                let cost_penalty = if is_break { 30u32 } else { 0u32 };
+                let tentative_g = current.g + base_cost + cost_penalty;
+                let existing_g = g_score.get(&(nx, ny, nz)).copied().unwrap_or(u32::MAX);
+
+                if tentative_g < existing_g {
+                    came_from.insert((nx, ny, nz), (current.x, current.y, current.z));
+                    g_score.insert((nx, ny, nz), tentative_g);
+                    let h = (((nx - gx).abs() + (ny - gy).abs()) * 10 + (nz - gz).abs() * 30) as u32;
+                    open_set.push(PathNode { f: tentative_g + h, g: tentative_g, x: nx, y: ny, z: nz });
+                }
+            }
+        }
+
+        // 2. Vertical Z neighbors (stairs / ladders / trapdoors)
+        if is_stairs_or_ladder(curr_tile) {
+            for dz in &[-1, 1] {
+                let nz = current.z + dz;
+                let tile = get_tile(current.x, current.y, nz);
+                if tile >= 0 && (is_walkable_tile(tile) || is_breakable_tile(tile)) {
+                    let tentative_g = current.g + 20;
+                    let existing_g = g_score.get(&(current.x, current.y, nz)).copied().unwrap_or(u32::MAX);
 
                     if tentative_g < existing_g {
-                        came_from.insert((nx, ny, nz), (current.x, current.y, current.z));
-                        g_score.insert((nx, ny, nz), tentative_g);
-                        let h = ((nx - gx).abs() + (ny - gy).abs() + (nz - gz).abs() * 2) as u32 * 10;
-                        open_set.push(PathNode { f: tentative_g + h, g: tentative_g, x: nx, y: ny, z: nz });
+                        came_from.insert((current.x, current.y, nz), (current.x, current.y, current.z));
+                        g_score.insert((current.x, current.y, nz), tentative_g);
+                        let h = (((current.x - gx).abs() + (current.y - gy).abs()) * 10 + (nz - gz).abs() * 30) as u32;
+                        open_set.push(PathNode { f: tentative_g + h, g: tentative_g, x: current.x, y: current.y, z: nz });
                     }
                 }
             }
@@ -332,6 +558,16 @@ impl RustEngineCore {
         }
     }
 
+    fn sync_survivor_state(&mut self, x: f32, y: f32, z: i32, health: f32, hunger: f32, thirst: f32, current_tick: u64) {
+        self.survivor_x = x;
+        self.survivor_y = y;
+        self.survivor_z = z;
+        self.survivor_health = health;
+        self.survivor_hunger = hunger;
+        self.survivor_thirst = thirst;
+        self.current_tick = current_tick;
+    }
+
     fn step(&mut self, dx: f32, dy: f32, _action: i32) {
         self.current_tick += 1;
         self.survivor_x = (self.survivor_x + dx * 0.15).max(0.0).min((self.width - 1) as f32);
@@ -340,7 +576,7 @@ impl RustEngineCore {
         self.survivor_thirst = (self.survivor_thirst - 0.035).max(0.0);
     }
 
-    fn get_observation_flat(&self) -> Vec<f32> {
+    fn get_observation_flat<'py>(&self, py: Python<'py>) -> &'py PyArray1<f32> {
         let mut obs = vec![0.0f32; 57];
         obs[0] = self.survivor_health / 100.0;
         obs[1] = self.survivor_hunger / 100.0;
@@ -348,7 +584,7 @@ impl RustEngineCore {
         obs[3] = 1.0;
         obs[4] = 1.0;
         obs[22] = self.survivor_z as f32 / 20.0;
-        obs
+        obs.into_pyarray(py)
     }
 
     fn get_current_tick(&self) -> u64 {
@@ -366,5 +602,7 @@ fn rust_vulkan_render(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RustEngineCore>()?;
     m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
     m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
+    m.add_function(wrap_pyfunction!(check_line_of_sight_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_fog_of_war_rust, m)?)?;
     Ok(())
 }

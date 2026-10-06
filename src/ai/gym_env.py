@@ -1,6 +1,5 @@
 import numpy as np
 from typing import Tuple, Dict, Any, Optional
-from src.simulation.engine import SimulationEngine
 from src.ai.brain_actions import extract_survivor_inputs
 
 
@@ -10,6 +9,7 @@ class SurvivorGymEnv:
     supporting vector observations, multi-channel spatial sensors, and PPO rewards.
     """
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        from src.simulation.engine import SimulationEngine
         if config is None:
             config = {
                 "simulation": {

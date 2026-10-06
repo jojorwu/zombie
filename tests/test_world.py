@@ -14,11 +14,11 @@ class TestWorld(unittest.TestCase):
         g_idx0 = world.z_to_idx(0)
         g_idx1 = world.z_to_idx(2)
 
-        world.grid[g_idx0, 10, 10] = TileType.ROAD.value
-        world.grid[g_idx1, 10, 10] = TileType.BUILDING_WALL.value
+        world.grid[g_idx0, 10, 10] = TileType.ROAD
+        world.grid[g_idx1, 10, 10] = TileType.BUILDING_WALL
 
-        self.assertEqual(world.grid[g_idx0, 10, 10], TileType.ROAD.value)
-        self.assertEqual(world.grid[g_idx1, 10, 10], TileType.BUILDING_WALL.value)
+        self.assertEqual(world.grid[g_idx0, 10, 10], TileType.ROAD)
+        self.assertEqual(world.grid[g_idx1, 10, 10], TileType.BUILDING_WALL)
         self.assertIn((g_idx1, 10, 10), world.sparse_z_grid)
 
     def test_graph_grammar_building_generator(self):

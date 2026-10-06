@@ -1,5 +1,6 @@
 import heapq
 import math
+import numpy as np
 from src.world import TileType
 
 try:
@@ -46,17 +47,15 @@ class AStar3D:
         sx, sy, sz = int(start_pos[0]), int(start_pos[1]), int(start_pos[2])
         gx, gy, gz = int(goal_pos[0]), int(goal_pos[1]), int(goal_pos[2])
 
-        if RUST_PATHFINDING_AVAILABLE and sz == gz and max(abs(sx - gx), abs(sy - gy)) < 30:
-            w, h = self.world.width, self.world.height
-            min_x, max_x = max(0, min(sx, gx) - 15), min(w, max(sx, gx) + 16)
-            min_y, max_y = max(0, min(sy, gy) - 15), min(h, max(sy, gy) + 16)
-            sub_w = max_x - min_x
-            sub_h = max_y - min_y
+        if RUST_PATHFINDING_AVAILABLE:
+            if hasattr(self.world, 'get_3d_grid_array'):
+                grid_3d = self.world.get_3d_grid_array()
+            else:
+                grid_3d = self.world.grid.astype(np.int64)
 
-            mask = [1 if self.world.is_walkable(min_x + x, min_y + y, sz) else 0 for y in range(sub_h) for x in range(sub_w)]
-            rust_path = compute_a_star_3d_path((sx - min_x, sy - min_y, sz), (gx - min_x, gy - min_y, gz), mask, sub_w, sub_h, max_nodes)
+            rust_path = compute_a_star_3d_path((sx, sy, sz), (gx, gy, gz), grid_3d, self.world.z_min, max_nodes)
             if rust_path:
-                return [(px + min_x + 0.5, py + min_y + 0.5, pz) for px, py, pz in rust_path]
+                return [(px + 0.5, py + 0.5, pz) for px, py, pz in rust_path]
 
         if not self.world.is_walkable(sx, sy, sz) or not self.world.is_walkable(gx, gy, gz):
             return []
@@ -119,7 +118,7 @@ class AStar3D:
 
             if 0 <= z_idx < num_levels:
                 current_tile = w_grid[z_idx, y, x]
-                if current_tile in (TileType.STAIRS, TileType.LADDER):
+                if current_tile in (TileType.STAIRS, TileType.LADDER, TileType.TRAPDOOR):
                     if z < self.world.z_max:
                         n_pos = (x, y, z + 1)
                         if n_pos not in closed_set and self.world.is_walkable(x, y, z + 1):

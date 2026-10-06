@@ -22,11 +22,24 @@ class PythonRustEngineBridge:
         else:
             self.native_core = None
 
+    def sync_survivor_state(self, survivor, current_tick: int = 0):
+        """Synchronize Python survivor entity state into RustEngineCore."""
+        if self.native_core and survivor:
+            self.native_core.sync_survivor_state(
+                float(survivor.x),
+                float(survivor.y),
+                int(survivor.z),
+                float(getattr(survivor, 'health', 100.0)),
+                float(getattr(survivor, 'hunger', 100.0)),
+                float(getattr(survivor, 'thirst', 100.0)),
+                int(current_tick)
+            )
+
     def step(self, dx: float = 0.0, dy: float = 0.0, action: int = 0) -> Tuple[np.ndarray, bool]:
         """Executes one simulation tick step in Rust and extracts zero-copy observations."""
         if self.native_core:
             self.native_core.step(dx, dy, action)
-            obs = np.array(self.native_core.get_observation_flat(), dtype=np.float32)
+            obs = self.native_core.get_observation_flat()
             done = False
             return obs, done
         else:

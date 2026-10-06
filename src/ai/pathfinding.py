@@ -54,8 +54,7 @@ class AStar3D:
                 grid_3d = self.world.grid.astype(np.int64)
 
             rust_path = compute_a_star_3d_path((sx, sy, sz), (gx, gy, gz), grid_3d, self.world.z_min, max_nodes)
-            if rust_path:
-                return [(px + 0.5, py + 0.5, pz) for px, py, pz in rust_path]
+            return [(px + 0.5, py + 0.5, pz) for px, py, pz in rust_path]
 
         if not self.world.is_walkable(sx, sy, sz) or not self.world.is_walkable(gx, gy, gz):
             return []

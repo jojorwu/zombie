@@ -16,6 +16,7 @@ from src.simulation.environment import EnvironmentManager
 from src.simulation.event_bus import EventBus, NoiseEmittedEvent, DamageDealtEvent
 from src.simulation.snapshot import DoubleBufferedStateExchanger
 from src.entities.state_manager import LazyChunkStatePersistence
+from src.simulation.rust_engine import PythonRustEngineBridge
 from utils.memory_monitor_utility import MemoryMonitorUtility
 from utils.electricity_utility import ElectricityUtility
 
@@ -57,6 +58,7 @@ class SimulationEngine:
             grid_enabled=self.sim_cfg.get("electricity_enabled", True)
         )
 
+        self.rust_bridge = PythonRustEngineBridge(width=self.world.width, height=self.world.height)
         self.spawner = EntitySpawner(self.world, self.factory)
         self.env_manager = EnvironmentManager(self.world, self.electricity_utility)
 
@@ -204,6 +206,8 @@ class SimulationEngine:
                 survivor = self.survivors[orig_i]
                 planner = self.planners[orig_i]
                 survivor.update_needs(world=self.world)
+                if self.rust_bridge:
+                    self.rust_bridge.sync_survivor_state(survivor, self.world.current_tick)
 
                 if not survivor.is_alive and survivor.is_infected:
                     new_z = self.factory.create_zombie(survivor.x, survivor.y, z=survivor.z)

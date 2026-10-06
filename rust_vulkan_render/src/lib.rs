@@ -1,8 +1,10 @@
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray3, IntoPyArray};
+use mlua::{Lua, Result as LuaResult};
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::cmp::Ordering;
+use rand::Rng;
 
 #[pyclass]
 pub struct VulkanTileRenderer {
@@ -374,16 +376,16 @@ impl PartialOrd for PathNode {
 fn is_walkable_tile(t: i64) -> bool {
     matches!(
         t,
-        0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 16 | 18 | 19
+        0 | 1 | 3 | 5 | 7 | 8 | 10 | 12 | 13 | 14 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 26 | 27 | 28 | 30 | 50 | 51 | 52 | 54 | 57 | 62 | 63 | 64 | 65 | 75 | 76 | 78 | 79
     )
 }
 
 fn is_breakable_tile(t: i64) -> bool {
-    matches!(t, 14 | 15 | 17 | 20)
+    matches!(t, 7 | 49 | 53 | 55)
 }
 
 fn is_stairs_or_ladder(t: i64) -> bool {
-    matches!(t, 10 | 11 | 13)
+    matches!(t, 8 | 13 | 79)
 }
 
 /// High-performance full 3D A* Pathfinding in Rust over 3D NumPy grid `grid_3d` [num_levels, height, width] with z_min support.
@@ -528,6 +530,36 @@ pub fn compute_a_star_3d_path<'py>(
     vec![]
 }
 
+/// Native Lua Mod Manager in Rust powered by `mlua`.
+#[pyclass(unsendable)]
+pub struct RustLuaModManager {
+    lua: Lua,
+}
+
+#[pymethods]
+impl RustLuaModManager {
+    #[new]
+    fn new() -> Self {
+        let lua = Lua::new();
+        RustLuaModManager { lua }
+    }
+
+    fn load_mod_script(&self, script: &str) -> PyResult<bool> {
+        let res: LuaResult<()> = self.lua.load(script).exec();
+        Ok(res.is_ok())
+    }
+
+    fn trigger_event(&self, event_name: &str, arg: u64) -> PyResult<bool> {
+        let globals = self.lua.globals();
+        if let Ok(func) = globals.get::<_, mlua::Function>(event_name) {
+            let _: LuaResult<()> = func.call(arg);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+}
+
 #[pyclass]
 pub struct RustEngineCore {
     width: usize,
@@ -600,6 +632,7 @@ impl RustEngineCore {
 fn rust_vulkan_render(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VulkanTileRenderer>()?;
     m.add_class::<RustEngineCore>()?;
+    m.add_class::<RustLuaModManager>()?;
     m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
     m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
     m.add_function(wrap_pyfunction!(check_line_of_sight_rust, m)?)?;

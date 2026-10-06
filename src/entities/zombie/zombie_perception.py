@@ -1,6 +1,13 @@
 import math
 import random
+import numpy as np
 from src.world.tiles import TileType
+
+try:
+    from rust_vulkan_render import check_line_of_sight_rust
+    RUST_LOS_AVAILABLE = True
+except ImportError:
+    RUST_LOS_AVAILABLE = False
 
 _OPAQUE_VIS_TILES = {
     TileType.BUILDING_WALL,
@@ -28,6 +35,14 @@ class ZombiePerception:
     def has_line_of_sight(zombie, tx, ty, tz, world):
         if abs(tz - zombie.z) > 1:
             return False
+
+        if RUST_LOS_AVAILABLE:
+            if hasattr(world, 'get_3d_grid_array'):
+                grid_3d = world.get_3d_grid_array()
+            else:
+                grid_3d = world.grid.astype(np.int64)
+            return check_line_of_sight_rust(float(zombie.x), float(zombie.y), int(zombie.z), float(tx), float(ty), int(tz), grid_3d, world.z_min)
+
         dist = math.hypot(tx - zombie.x, ty - zombie.y)
         if dist < 0.1:
             return True

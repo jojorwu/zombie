@@ -45,9 +45,15 @@ class World:
         # Sparse Spatial Hash Map for non-zero Z levels: {(z_idx, y, x): tile_type_int}
         self.sparse_z_grid = {}
 
+        self._cached_3d_grid = None
+        self._grid_dirty = True
+
         self.building_grid = {}
         self.buildings = []
         self.generate_world()
+
+    def invalidate_grid_cache(self):
+        self._grid_dirty = True
 
     @property
     def grid(self):
@@ -77,6 +83,7 @@ class World:
                 return 0
 
             def __setitem__(self, key, value):
+                self.world.invalidate_grid_cache()
                 tile_val = value.value if hasattr(value, 'value') else int(value)
                 if self.z_idx == self.world.z_to_idx(0):
                     self.world.ground_grid[key] = tile_val
@@ -94,6 +101,7 @@ class World:
                                 self.world.sparse_z_grid[(self.z_idx, y_curr, x_curr)] = tile_val
 
             def fill(self, val):
+                self.world.invalidate_grid_cache()
                 tile_val = val.value if hasattr(val, 'value') else int(val)
                 if self.z_idx == self.world.z_to_idx(0):
                     self.world.ground_grid.fill(tile_val)
@@ -113,6 +121,7 @@ class World:
                 self.dtype = int
 
             def fill(self, val):
+                self.world.invalidate_grid_cache()
                 tile_val = val.value if hasattr(val, 'value') else int(val)
                 self.world.ground_grid.fill(tile_val)
                 self.world.sparse_z_grid.clear()
@@ -154,6 +163,7 @@ class World:
                 return LayerProxy(self.world, self.world.z_to_idx(0))
 
             def __setitem__(self, key, value):
+                self.world.invalidate_grid_cache()
                 tile_val = value.value if hasattr(value, 'value') else int(value)
                 if isinstance(key, int):
                     LayerProxy(self.world, key).fill(tile_val)
@@ -191,12 +201,15 @@ class World:
         return GridProxy(self)
 
     def get_3d_grid_array(self) -> np.ndarray:
-        """Returns a dense 3D NumPy array [num_levels, height, width] of tile integers for Rust C-API."""
-        arr = np.zeros((self.num_levels, self.height, self.width), dtype=np.int64)
-        arr[self.z_to_idx(0)] = self.ground_grid.astype(np.int64)
-        for (z, y, x), val in self.sparse_z_grid.items():
-            arr[z, y, x] = val
-        return arr
+        """Returns cached dense 3D NumPy array [num_levels, height, width] of tile integers for Rust C-API."""
+        if getattr(self, '_cached_3d_grid', None) is None or getattr(self, '_grid_dirty', True):
+            arr = np.zeros((self.num_levels, self.height, self.width), dtype=np.int64)
+            arr[self.z_to_idx(0)] = self.ground_grid.astype(np.int64)
+            for (z, y, x), val in self.sparse_z_grid.items():
+                arr[z, y, x] = val
+            self._cached_3d_grid = arr
+            self._grid_dirty = False
+        return self._cached_3d_grid
 
     def z_to_idx(self, z):
         return max(0, min(self.num_levels - 1, int(z) - self.z_min))

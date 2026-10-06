@@ -1,12 +1,18 @@
 import math
 from utils.container_utility import ContainerUtility
 
+try:
+    from rust_vulkan_render import RustVehiclePhysics
+    RUST_VEHICLE_AVAILABLE = True
+except ImportError:
+    RUST_VEHICLE_AVAILABLE = False
+
 
 class VehiclePart:
     """CDDA-style modular vehicle part (engine, battery, wheels, bumper, fuel tank, cargo trunk, armor)."""
     def __init__(self, name: str, part_type: str, hp: float = 100.0, max_hp: float = 100.0):
         self.name = name
-        self.part_type = part_type  # "engine", "battery", "fuel_tank", "wheel", "bumper", "cargo", "seat", "armor"
+        self.part_type = part_type
         self.hp = float(hp)
         self.max_hp = float(max_hp)
 
@@ -35,7 +41,12 @@ class VehiclePhysics:
 
         self.velocity_x = 0.0
         self.velocity_y = 0.0
-        self.heading_angle = 0.0  # radians
+        self.heading_angle = 0.0
+
+        if RUST_VEHICLE_AVAILABLE:
+            self.rust_physics = RustVehiclePhysics(0.0, 0.0, mass, acceleration * 1000.0, 100.0)
+        else:
+            self.rust_physics = None
 
     @property
     def speed(self) -> float:
@@ -51,15 +62,13 @@ class Vehicle:
         self.fuel = fuel
         self.max_fuel = max_fuel
         self.model_type = model_type
-        self.driver = None  # Reference to Survivor if inside
+        self.driver = None
         self.trunk_inventory = {}
-        self.trunk_capacity = 80.0  # Capacity in kg (PZ Style)
+        self.trunk_capacity = 80.0
         self.noise_level = 18.0
 
-        # Vehicle Physics Engine
         self.physics = VehiclePhysics()
 
-        # CDDA Modular Vehicle Parts
         self.parts = {
             "engine": VehiclePart("V6 Engine", "engine", hp=100.0),
             "battery": VehiclePart("12V Battery", "battery", hp=100.0),
@@ -112,6 +121,13 @@ class Vehicle:
         p = self.physics
         cur_sp = p.speed
 
+        if p.rust_physics:
+            p.rust_physics.x = self.x
+            p.rust_physics.y = self.y
+            p.rust_physics.fuel = self.fuel
+            nx, ny, sp = p.rust_physics.update_physics(throttle, p.heading_angle + steer * p.steer_rate, 1.0 - p.friction)
+            self.fuel = p.rust_physics.fuel
+
         if self.can_start_engine() and throttle != 0.0:
             engine_mult = (self.parts["engine"].condition_percent / 100.0) if "engine" in self.parts else 1.0
             wheel_cond = sum(self.parts[w].condition_percent for w in ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"] if w in self.parts) / 400.0
@@ -124,7 +140,6 @@ class Vehicle:
 
             self.fuel = max(0.0, self.fuel - 0.03 * abs(throttle))
 
-            # Emit acoustic engine noise to alert nearby zombie hordes
             if noise_events is not None:
                 from src.entities.sensory import NoiseEvent
                 noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=self.noise_level, source_type="vehicle_engine"))
@@ -152,7 +167,6 @@ class Vehicle:
             if self.driver:
                 self.driver.x, self.driver.y, self.driver.z = self.x, self.y, self.z
         elif world:
-            # Collision impact with wall or obstacle
             impact_damage = cur_sp * 150.0 * p.collision_factor
             if "bumper" in self.parts:
                 self.parts["bumper"].damage(impact_damage)

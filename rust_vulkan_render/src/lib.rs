@@ -4,7 +4,6 @@ use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray3, IntoPyArray};
 use mlua::{Lua, Result as LuaResult};
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::cmp::Ordering;
-use rand::Rng;
 
 #[pyclass]
 pub struct VulkanTileRenderer {
@@ -153,6 +152,248 @@ impl VulkanTileRenderer {
         }
 
         buffer
+    }
+}
+
+/// 1. Native Vehicle Physics in Rust.
+#[pyclass]
+pub struct RustVehiclePhysics {
+    #[pyo3(get, set)]
+    pub x: f32,
+    #[pyo3(get, set)]
+    pub y: f32,
+    #[pyo3(get, set)]
+    pub vx: f32,
+    #[pyo3(get, set)]
+    pub vy: f32,
+    #[pyo3(get, set)]
+    pub mass: f32,
+    #[pyo3(get, set)]
+    pub fuel: f32,
+    #[pyo3(get, set)]
+    pub engine_power: f32,
+}
+
+#[pymethods]
+impl RustVehiclePhysics {
+    #[new]
+    fn new(x: f32, y: f32, mass: f32, engine_power: f32, fuel: f32) -> Self {
+        RustVehiclePhysics {
+            x,
+            y,
+            vx: 0.0,
+            vy: 0.0,
+            mass,
+            fuel,
+            engine_power,
+        }
+    }
+
+    fn update_physics(&mut self, throttle: f32, steering_angle: f32, friction: f32) -> (f32, f32, f32) {
+        if self.fuel > 0.0 && throttle.abs() > 0.01 {
+            let force = throttle * self.engine_power / self.mass.max(100.0);
+            self.vx += steering_angle.cos() * force;
+            self.vy += steering_angle.sin() * force;
+            self.fuel = (self.fuel - throttle.abs() * 0.005).max(0.0);
+        }
+
+        self.vx *= friction;
+        self.vy *= friction;
+
+        self.x += self.vx;
+        self.y += self.vy;
+
+        let speed = (self.vx * self.vx + self.vy * self.vy).sqrt();
+        (self.x, self.y, speed)
+    }
+
+    fn check_zombie_collision(&mut self, zombie_x: f32, zombie_y: f32) -> (bool, f32) {
+        let dx = self.x - zombie_x;
+        let dy = self.y - zombie_y;
+        let dist_sq = dx * dx + dy * dy;
+        let speed = (self.vx * self.vx + self.vy * self.vy).sqrt();
+
+        if dist_sq < 1.44 && speed > 0.05 {
+            let damage = speed * 250.0 * (self.mass / 1000.0);
+            self.vx *= 0.85;
+            self.vy *= 0.85;
+            (true, damage)
+        } else {
+            (false, 0.0)
+        }
+    }
+}
+
+/// 2. Native Acoustic Decibel Noise Propagation Engine in Rust.
+#[pyclass]
+pub struct RustAcousticSystem;
+
+#[pymethods]
+impl RustAcousticSystem {
+    #[new]
+    fn new() -> Self {
+        RustAcousticSystem
+    }
+
+    #[staticmethod]
+    fn propagate_noise_decibels(
+        source_x: f32,
+        source_y: f32,
+        source_z: i32,
+        volume_db: f32,
+        target_x: f32,
+        target_y: f32,
+        target_z: i32,
+    ) -> f32 {
+        if (source_z - target_z).abs() > 1 {
+            return 0.0;
+        }
+
+        let dx = target_x - source_x;
+        let dy = target_y - source_y;
+        let dist = (dx * dx + dy * dy).sqrt() + (source_z - target_z).abs() as f32 * 2.0;
+
+        if dist <= 0.001 {
+            return volume_db;
+        }
+
+        let attenuated = volume_db - 20.0 * dist.log10().max(0.0);
+        attenuated.max(0.0)
+    }
+}
+
+/// 3. Native Anatomical Health & Damage System in Rust.
+#[pyclass]
+pub struct RustAnatomicalHealth {
+    #[pyo3(get, set)]
+    pub head: f32,
+    #[pyo3(get, set)]
+    pub torso: f32,
+    #[pyo3(get, set)]
+    pub left_arm: f32,
+    #[pyo3(get, set)]
+    pub right_arm: f32,
+    #[pyo3(get, set)]
+    pub left_leg: f32,
+    #[pyo3(get, set)]
+    pub right_leg: f32,
+    #[pyo3(get, set)]
+    pub bleeding_rate: f32,
+}
+
+#[pymethods]
+impl RustAnatomicalHealth {
+    #[new]
+    fn new() -> Self {
+        RustAnatomicalHealth {
+            head: 100.0,
+            torso: 100.0,
+            left_arm: 100.0,
+            right_arm: 100.0,
+            left_leg: 100.0,
+            right_leg: 100.0,
+            bleeding_rate: 0.0,
+        }
+    }
+
+    fn apply_targeted_damage(&mut self, part: &str, raw_damage: f32, armor_reduction: f32) -> f32 {
+        let actual_damage = (raw_damage * (1.0 - armor_reduction)).max(0.0);
+
+        match part {
+            "head" => {
+                self.head = (self.head - actual_damage).max(0.0);
+                self.bleeding_rate += actual_damage * 0.05;
+            }
+            "torso" => {
+                self.torso = (self.torso - actual_damage).max(0.0);
+                self.bleeding_rate += actual_damage * 0.03;
+            }
+            "left_arm" => self.left_arm = (self.left_arm - actual_damage).max(0.0),
+            "right_arm" => self.right_arm = (self.right_arm - actual_damage).max(0.0),
+            "left_leg" => {
+                self.left_leg = (self.left_leg - actual_damage).max(0.0);
+                self.bleeding_rate += actual_damage * 0.02;
+            }
+            "right_leg" => {
+                self.right_leg = (self.right_leg - actual_damage).max(0.0);
+                self.bleeding_rate += actual_damage * 0.02;
+            }
+            _ => {
+                self.torso = (self.torso - actual_damage).max(0.0);
+            }
+        }
+
+        actual_damage
+    }
+
+    fn tick_bleeding(&mut self) -> f32 {
+        if self.bleeding_rate > 0.0 {
+            let bleed_damage = self.bleeding_rate * 0.1;
+            self.torso = (self.torso - bleed_damage).max(0.0);
+            bleed_damage
+        } else {
+            0.0
+        }
+    }
+
+    fn get_total_health(&self) -> f32 {
+        (self.head * 0.3 + self.torso * 0.4 + (self.left_arm + self.right_arm + self.left_leg + self.right_leg) * 0.075).max(0.0)
+    }
+
+    fn get_speed_multiplier(&self) -> f32 {
+        let min_leg = self.left_leg.min(self.right_leg);
+        if min_leg < 30.0 {
+            0.4
+        } else if min_leg < 60.0 {
+            0.7
+        } else {
+            1.0
+        }
+    }
+}
+
+/// 4. Native Dynamic Weather & Lighting Environment Manager in Rust.
+#[pyclass]
+pub struct RustEnvironmentManager {
+    #[pyo3(get, set)]
+    pub wind_speed: f32,
+    #[pyo3(get, set)]
+    pub wind_direction: f32,
+    #[pyo3(get, set)]
+    pub temperature: f32,
+    #[pyo3(get, set)]
+    pub rain_intensity: f32,
+}
+
+#[pymethods]
+impl RustEnvironmentManager {
+    #[new]
+    fn new() -> Self {
+        RustEnvironmentManager {
+            wind_speed: 5.0,
+            wind_direction: 0.0,
+            temperature: 20.0,
+            rain_intensity: 0.0,
+        }
+    }
+
+    fn update_weather(&mut self, current_tick: u64, is_power_out: bool) -> (f32, f32, f32) {
+        let hour = ((current_tick / 150) % 24) as f32;
+
+        let solar_elevation = ((hour - 6.0) / 24.0 * 2.0 * std::f32::consts::PI).sin();
+        let mut light_level = if solar_elevation > 0.0 {
+            (solar_elevation * (std::f32::consts::PI / 2.0)).sin() * 0.85 + 0.15
+        } else {
+            (0.15 + solar_elevation * 0.3).max(0.08)
+        };
+
+        if is_power_out {
+            light_level *= 0.75;
+        }
+
+        self.temperature = 15.0 + solar_elevation * 10.0 - self.rain_intensity * 3.0;
+
+        (light_level, self.temperature, self.wind_speed)
     }
 }
 
@@ -633,6 +874,10 @@ fn rust_vulkan_render(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VulkanTileRenderer>()?;
     m.add_class::<RustEngineCore>()?;
     m.add_class::<RustLuaModManager>()?;
+    m.add_class::<RustVehiclePhysics>()?;
+    m.add_class::<RustAcousticSystem>()?;
+    m.add_class::<RustAnatomicalHealth>()?;
+    m.add_class::<RustEnvironmentManager>()?;
     m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
     m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
     m.add_function(wrap_pyfunction!(check_line_of_sight_rust, m)?)?;

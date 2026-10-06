@@ -397,6 +397,127 @@ impl RustEnvironmentManager {
     }
 }
 
+/// 5. Native Zombie Entity Life Cycle Engine in Rust.
+#[pyclass]
+pub struct RustZombieEngine {
+    pub x: f32,
+    pub y: f32,
+    pub z: i32,
+    pub hp: f32,
+    pub speed: f32,
+    pub is_alive: bool,
+}
+
+#[pymethods]
+impl RustZombieEngine {
+    #[new]
+    fn new(x: f32, y: f32, z: i32, hp: f32, speed: f32) -> Self {
+        RustZombieEngine {
+            x,
+            y,
+            z,
+            hp,
+            speed,
+            is_alive: true,
+        }
+    }
+
+    fn update_zombie_movement(&mut self, target_x: f32, target_y: f32, is_walkable: bool) -> (f32, f32) {
+        if !self.is_alive {
+            return (self.x, self.y);
+        }
+
+        let dx = target_x - self.x;
+        let dy = target_y - self.y;
+        let dist = (dx * dx + dy * dy).sqrt();
+
+        if dist > 0.1 && is_walkable {
+            self.x += (dx / dist) * self.speed;
+            self.y += (dy / dist) * self.speed;
+        }
+
+        (self.x, self.y)
+    }
+
+    fn check_bite_attack(&self, survivor_x: f32, survivor_y: f32) -> (bool, f32, f32) {
+        let dx = self.x - survivor_x;
+        let dy = self.y - survivor_y;
+        let dist_sq = dx * dx + dy * dy;
+
+        if self.is_alive && dist_sq < 1.0 {
+            (true, 25.0, 0.25)
+        } else {
+            (false, 0.0, 0.0)
+        }
+    }
+}
+
+/// 6. Native Spatial Hash Cell Grid in Rust.
+#[pyclass]
+pub struct RustSpatialGrid {
+    cell_size: f32,
+    grid: HashMap<(i32, i32, i32), Vec<usize>>,
+}
+
+#[pymethods]
+impl RustSpatialGrid {
+    #[new]
+    fn new(cell_size: f32) -> Self {
+        RustSpatialGrid {
+            cell_size,
+            grid: HashMap::new(),
+        }
+    }
+
+    fn clear(&mut self) {
+        self.grid.clear();
+    }
+
+    fn insert_entity(&mut self, entity_id: usize, x: f32, y: f32, z: i32) {
+        let cx = (x / self.cell_size).floor() as i32;
+        let cy = (y / self.cell_size).floor() as i32;
+        self.grid.entry((cx, cy, z)).or_insert_with(Vec::new).push(entity_id);
+    }
+
+    fn get_nearby_entities(&self, x: f32, y: f32, z: i32) -> Vec<usize> {
+        let cx = (x / self.cell_size).floor() as i32;
+        let cy = (y / self.cell_size).floor() as i32;
+        let mut nearby = Vec::new();
+
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                if let Some(list) = self.grid.get(&(cx + dx, cy + dy, z)) {
+                    nearby.extend_from_slice(list);
+                }
+            }
+        }
+        nearby
+    }
+}
+
+/// 7. Native Container Utility in Rust.
+#[pyclass]
+pub struct RustContainerUtility;
+
+#[pymethods]
+impl RustContainerUtility {
+    #[new]
+    fn new() -> Self {
+        RustContainerUtility
+    }
+
+    #[staticmethod]
+    fn calculate_container_weight(items: Vec<(f32, u32)>, bag_reduction: f32) -> f32 {
+        let total_raw: f32 = items.iter().map(|(w, qty)| w * (*qty as f32)).sum();
+        total_raw * (1.0 - bag_reduction.max(0.0).min(0.9))
+    }
+
+    #[staticmethod]
+    fn can_fit_item(current_weight: f32, capacity: f32, item_weight: f32, amount: u32) -> bool {
+        current_weight + (item_weight * (amount as f32)) <= capacity
+    }
+}
+
 /// High-performance Rust zombie flocking steering calculation using zero-copy NumPy inputs.
 #[pyfunction]
 pub fn compute_zombie_flock_steering<'py>(
@@ -878,6 +999,9 @@ fn rust_vulkan_render(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RustAcousticSystem>()?;
     m.add_class::<RustAnatomicalHealth>()?;
     m.add_class::<RustEnvironmentManager>()?;
+    m.add_class::<RustZombieEngine>()?;
+    m.add_class::<RustSpatialGrid>()?;
+    m.add_class::<RustContainerUtility>()?;
     m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
     m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
     m.add_function(wrap_pyfunction!(check_line_of_sight_rust, m)?)?;

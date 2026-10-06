@@ -3,6 +3,12 @@ import math
 from src.entities.item import ResourceItem
 from src.world.tiles import TileType
 
+try:
+    from rust_vulkan_render import RustContainerUtility
+    RUST_CONTAINER_AVAILABLE = True
+except ImportError:
+    RUST_CONTAINER_AVAILABLE = False
+
 
 class ItemCategory:
     WEAPON = "Weapon"
@@ -297,14 +303,13 @@ class ContainerUtility:
         """
         contents = cls._extract_contents_dict(container)
         has_bag = any(k in cls.BAG_WEIGHT_REDUCTION for k in contents.keys())
-        reduction_mult = 0.30 if (has_bag or inside_bag) else 1.0
 
         total_weight = 0.0
+        reduction_mult = 0.30 if (has_bag or inside_bag) else 1.0
         for item_type, val in contents.items():
             amount = val if isinstance(val, (int, float)) else 1
             unit_weight = cls.get_item_weight(str(item_type))
             if item_type in cls.BAG_WEIGHT_REDUCTION:
-                # Bag itself weighs base weight, items inside bag get reduction
                 total_weight += unit_weight * amount
             else:
                 total_weight += unit_weight * amount * reduction_mult
@@ -315,9 +320,13 @@ class ContainerUtility:
     def can_fit_item(cls, container: Any, item_type: str, amount: int = 1) -> bool:
         """Checks if adding amount units of item_type exceeds the container capacity."""
         current_weight = cls.get_container_weight(container)
-        added_weight = cls.get_item_weight(item_type) * amount
+        added_weight = cls.get_item_weight(item_type)
         capacity = cls.get_container_capacity(container)
-        return (current_weight + added_weight) <= (capacity + 0.001)
+
+        if RUST_CONTAINER_AVAILABLE:
+            return RustContainerUtility.can_fit_item(current_weight, capacity, added_weight, amount)
+
+        return (current_weight + added_weight * amount) <= (capacity + 0.001)
 
     @classmethod
     def add_item_to_container(cls, container: Any, item_type: str, amount: int = 1) -> Tuple[bool, int]:
@@ -377,15 +386,12 @@ class ContainerUtility:
         if amount <= 0:
             return 0
 
-        # Check how many can be added to target
         success, addable = cls.add_item_to_container(target_container, item_type, amount)
         if not success or addable <= 0:
             return 0
 
-        # Remove the addable quantity from source
         actual_removed = cls.remove_item_from_container(source_container, item_type, addable)
 
-        # If removed is less than addable, refund target excess
         if actual_removed < addable:
             cls.remove_item_from_container(target_container, item_type, addable - actual_removed)
 

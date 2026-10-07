@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray3, IntoPyArray};
+use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray3, IntoPyArray};
 use mlua::{Lua, Result as LuaResult};
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::cmp::Ordering;
@@ -617,6 +617,94 @@ impl RustParticleSystem {
     }
 }
 
+/// 11. Native Full Simulation Core in Rust.
+#[pyclass]
+pub struct RustFullSimulationCore {
+    pub width: usize,
+    pub height: usize,
+    pub current_tick: u64,
+    pub survivors: Vec<(f32, f32, i32, f32, f32, f32)>, // (x, y, z, hp, hunger, thirst)
+    pub zombies: Vec<(f32, f32, i32, f32, f32)>,        // (x, y, z, hp, speed)
+}
+
+#[pymethods]
+impl RustFullSimulationCore {
+    #[new]
+    fn new(width: usize, height: usize, num_survivors: usize, num_zombies: usize) -> Self {
+        let mut survivors = Vec::with_capacity(num_survivors);
+        for _ in 0..num_survivors {
+            survivors.push(((width / 2) as f32, (height / 2) as f32, 0, 100.0, 100.0, 100.0));
+        }
+
+        let mut zombies = Vec::with_capacity(num_zombies);
+        for _ in 0..num_zombies {
+            zombies.push(((width / 4) as f32, (height / 4) as f32, 0, 50.0, 0.07));
+        }
+
+        RustFullSimulationCore {
+            width,
+            height,
+            current_tick: 0,
+            survivors,
+            zombies,
+        }
+    }
+
+    fn sync_survivor_at(&mut self, index: usize, x: f32, y: f32, z: i32, hp: f32, hunger: f32, thirst: f32) {
+        if index < self.survivors.len() {
+            self.survivors[index] = (x, y, z, hp, hunger, thirst);
+        }
+    }
+
+    fn step_simulation(&mut self, actions: Vec<i32>, movements: Vec<(f32, f32)>) {
+        self.current_tick += 1;
+
+        for (i, surv) in self.survivors.iter_mut().enumerate() {
+            if i < movements.len() {
+                let (dx, dy) = movements[i];
+                surv.0 = (surv.0 + dx * 0.15).max(0.0).min((self.width - 1) as f32);
+                surv.1 = (surv.1 + dy * 0.15).max(0.0).min((self.height - 1) as f32);
+            }
+            surv.4 = (surv.4 - 0.025).max(0.0);
+            surv.5 = (surv.5 - 0.035).max(0.0);
+        }
+
+        for zombie in self.zombies.iter_mut() {
+            if let Some(closest) = self.survivors.first() {
+                let dx = closest.0 - zombie.0;
+                let dy = closest.1 - zombie.1;
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist > 0.5 {
+                    zombie.0 += (dx / dist) * zombie.4;
+                    zombie.1 += (dy / dist) * zombie.4;
+                }
+            }
+        }
+    }
+
+    fn get_observations_matrix<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
+        let num_survivors = self.survivors.len();
+        let mut obs_matrix = vec![0.0f32; num_survivors * 57];
+
+        for (i, surv) in self.survivors.iter().enumerate() {
+            let row_offset = i * 57;
+            obs_matrix[row_offset] = surv.3 / 100.0;
+            obs_matrix[row_offset + 1] = surv.4 / 100.0;
+            obs_matrix[row_offset + 2] = surv.5 / 100.0;
+            obs_matrix[row_offset + 3] = 1.0;
+            obs_matrix[row_offset + 4] = 1.0;
+            obs_matrix[row_offset + 22] = surv.2 as f32 / 20.0;
+        }
+
+        let array2d = numpy::ndarray::Array2::from_shape_vec((num_survivors, 57), obs_matrix).unwrap();
+        array2d.into_pyarray(py)
+    }
+
+    fn get_current_tick(&self) -> u64 {
+        self.current_tick
+    }
+}
+
 /// High-performance Rust zombie flocking steering calculation using zero-copy NumPy inputs.
 #[pyfunction]
 pub fn compute_zombie_flock_steering<'py>(
@@ -1104,6 +1192,7 @@ fn rust_vulkan_render(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RustBallisticsUtility>()?;
     m.add_class::<RustFoodSpoilageUtility>()?;
     m.add_class::<RustParticleSystem>()?;
+    m.add_class::<RustFullSimulationCore>()?;
     m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
     m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
     m.add_function(wrap_pyfunction!(check_line_of_sight_rust, m)?)?;

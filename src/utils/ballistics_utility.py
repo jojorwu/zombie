@@ -234,7 +234,7 @@ class BallisticsUtility:
                 is_shallow = (incident_angle_deg < 35.0 or incident_angle_deg > 145.0)
                 ricochet_prob = mat["ricochet_chance"] if is_shallow else (mat["ricochet_chance"] * 0.2)
 
-                if is_shallow and ricochet_count < 2 and random.random() < ricochet_prob and cur_energy > 50.0:
+                if is_shallow and ricochet_count < 2 and random.random() < ricochet_prob and cur_energy > 50.0 and not mat["breaks"]:
                     # Execute Ricochet Reflection
                     ricochet_count += 1
                     reflection_angle = (2.0 * normal_angle - cur_angle) + random.uniform(-0.1, 0.1)

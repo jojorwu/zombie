@@ -125,8 +125,26 @@ class Vehicle:
             p.rust_physics.x = self.x
             p.rust_physics.y = self.y
             p.rust_physics.fuel = self.fuel
-            nx, ny, sp = p.rust_physics.update_physics(throttle, p.heading_angle + steer * p.steer_rate, 1.0 - p.friction)
+            p.heading_angle += steer * p.steer_rate
+            nx, ny, sp = p.rust_physics.update_physics(throttle, p.heading_angle, 1.0 - p.friction if not brake else 0.5)
             self.fuel = p.rust_physics.fuel
+            p.velocity_x = p.rust_physics.vx
+            p.velocity_y = p.rust_physics.vy
+            if world and world.is_walkable(nx, ny, self.z):
+                self.x, self.y = nx, ny
+                if self.driver:
+                    self.driver.x, self.driver.y, self.driver.z = self.x, self.y, self.z
+            elif world:
+                impact_damage = sp * 150.0 * p.collision_factor
+                if "bumper" in self.parts:
+                    self.parts["bumper"].damage(impact_damage)
+                if "engine" in self.parts:
+                    self.parts["engine"].damage(impact_damage * 0.5)
+                p.rust_physics.vx *= -0.3
+                p.rust_physics.vy *= -0.3
+                p.velocity_x = p.rust_physics.vx
+                p.velocity_y = p.rust_physics.vy
+            return
 
         if self.can_start_engine() and throttle != 0.0:
             engine_mult = (self.parts["engine"].condition_percent / 100.0) if "engine" in self.parts else 1.0

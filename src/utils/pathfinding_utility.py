@@ -2,7 +2,7 @@
 """
 Utility 4: Pathfinding & Navigation Utility for 3D A* Shortest Paths.
 Benchmarking, route validation, and navigation testing tool.
-Usage: python -m utils.pathfinding_utility
+Usage: python -m src.utils.pathfinding_utility
 """
 
 import sys

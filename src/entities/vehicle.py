@@ -1,8 +1,8 @@
 import math
-from utils.container_utility import ContainerUtility
+from src.utils.container_utility import ContainerUtility
 
 try:
-    from rust_vulkan_render import RustVehiclePhysics
+    from rust_engine import RustVehiclePhysics
     RUST_VEHICLE_AVAILABLE = True
 except ImportError:
     RUST_VEHICLE_AVAILABLE = False

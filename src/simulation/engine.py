@@ -17,11 +17,11 @@ from src.simulation.event_bus import EventBus, NoiseEmittedEvent, DamageDealtEve
 from src.simulation.snapshot import DoubleBufferedStateExchanger
 from src.entities.state_manager import LazyChunkStatePersistence
 from src.simulation.rust_engine import PythonRustEngineBridge
-from utils.memory_monitor_utility import MemoryMonitorUtility
-from utils.electricity_utility import ElectricityUtility
+from src.utils.memory_monitor_utility import MemoryMonitorUtility
+from src.utils.electricity_utility import ElectricityUtility
 
 try:
-    from rust_vulkan_render import compute_zombie_flock_steering
+    from rust_engine import compute_zombie_flock_steering
     RUST_STEERING_AVAILABLE = True
 except ImportError:
     RUST_STEERING_AVAILABLE = False

@@ -4,7 +4,7 @@ from src.entities.item import ResourceItem
 from src.world.tiles import TileType
 
 try:
-    from rust_vulkan_render import RustContainerUtility
+    from rust_engine import RustContainerUtility
     RUST_CONTAINER_AVAILABLE = True
 except ImportError:
     RUST_CONTAINER_AVAILABLE = False

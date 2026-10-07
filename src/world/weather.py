@@ -2,7 +2,7 @@ import math
 import random
 
 try:
-    from rust_vulkan_render import RustEnvironmentManager
+    from rust_engine import RustEnvironmentManager
     RUST_ENV_AVAILABLE = True
 except ImportError:
     RUST_ENV_AVAILABLE = False

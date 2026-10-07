@@ -2,7 +2,7 @@ import random
 from src.entities.item import ResourceItem
 
 try:
-    from rust_vulkan_render import RustFoodSpoilageUtility
+    from rust_engine import RustFoodSpoilageUtility
     RUST_SPOILAGE_AVAILABLE = True
 except ImportError:
     RUST_SPOILAGE_AVAILABLE = False

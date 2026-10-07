@@ -3,7 +3,7 @@ import random
 from src.entities.item import ARMOR_STATS
 
 try:
-    from rust_vulkan_render import RustAnatomicalHealth
+    from rust_engine import RustAnatomicalHealth
     RUST_HEALTH_AVAILABLE = True
 except ImportError:
     RUST_HEALTH_AVAILABLE = False

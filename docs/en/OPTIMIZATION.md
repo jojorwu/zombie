@@ -14,7 +14,7 @@
 - **Memory Slot Optimization**: `__slots__` declared across core data structures (`WorldGenerator`, `AnatomicalHealth`) to reduce memory footprints and accelerate attribute access.
 - **Vectorized Generation**: NumPy array operations accelerate terrain placement, road grid layout, and sidewalk drawing.
 - **O(1) Spatial Lookups**: `frozenset` collections optimize tile opacity checks for Fog of War (`compute_fog_of_war`).
-- **Native Vulkan Crate Acceleration**: C-speed viewport tile rendering via PyO3 Rust extension crate (`rust_vulkan_render`) connected through `VulkanBridge`.
+- **Native Vulkan Crate Acceleration**: C-speed viewport tile rendering via PyO3 Rust extension crate (`rust_engine`) connected through `VulkanBridge`.
 
 ## Combinatorial Optimization Algorithms (`utils/p_np_math.py`)
 - **Polynomial Knapsack Solver (`PolynomialKnapsackSolver`)**: $O(N \cdot W)$ Dynamic Programming solver optimizing survivor item looting by evaluating weight vs survival utility values.

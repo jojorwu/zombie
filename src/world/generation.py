@@ -4,7 +4,7 @@ import uuid
 from typing import Dict, List
 import numpy as np
 from src.world.tiles import TileType, BuildingType, SettlementType
-from utils.p_np_math import PolynomialVerifier
+from src.utils.p_np_math import PolynomialVerifier
 
 
 class GraphGrammarBuildingGenerator:

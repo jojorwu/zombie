@@ -2,7 +2,7 @@ import numpy as np
 from typing import Dict, Any, Tuple, Optional
 
 try:
-    from rust_vulkan_render import RustEngineCore, RustFullSimulationCore
+    from rust_engine import RustEngineCore, RustFullSimulationCore
     RUST_ENGINE_AVAILABLE = True
 except ImportError:
     RUST_ENGINE_AVAILABLE = False

@@ -4,7 +4,7 @@ import numpy as np
 from src.world import TileType
 
 try:
-    from rust_vulkan_render import compute_a_star_3d_path
+    from rust_engine import compute_a_star_3d_path
     RUST_PATHFINDING_AVAILABLE = True
 except ImportError:
     RUST_PATHFINDING_AVAILABLE = False

@@ -3,7 +3,7 @@ import random
 from src.world.tiles import TileType
 
 try:
-    from rust_vulkan_render import RustBallisticsUtility
+    from rust_engine import RustBallisticsUtility
     RUST_BALLISTICS_AVAILABLE = True
 except ImportError:
     RUST_BALLISTICS_AVAILABLE = False

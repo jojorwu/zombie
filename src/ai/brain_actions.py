@@ -4,7 +4,7 @@ import numpy as np
 from src.ai.brain_net import DEVICE
 
 try:
-    from rust_vulkan_render import check_line_of_sight_rust
+    from rust_engine import check_line_of_sight_rust
     RUST_LOS_AVAILABLE = True
 except ImportError:
     RUST_LOS_AVAILABLE = False
@@ -180,7 +180,7 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     inputs[21] = 1.0 if world.is_walkable(survivor.x, survivor.y + 0.5, survivor.z) else 0.0
     inputs[22] = float(survivor.z) / 20.0
 
-    from utils.tile_interaction_utility import TileInteractionUtility
+    from src.utils.tile_interaction_utility import TileInteractionUtility
     z_idx = world.z_to_idx(survivor.z)
     has_furniture_adj = 0.0
     sx_i, sy_i = int(survivor.x), int(survivor.y)

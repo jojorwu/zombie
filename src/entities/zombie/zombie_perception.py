@@ -4,7 +4,7 @@ import numpy as np
 from src.world.tiles import TileType
 
 try:
-    from rust_vulkan_render import check_line_of_sight_rust
+    from rust_engine import check_line_of_sight_rust
     RUST_LOS_AVAILABLE = True
 except ImportError:
     RUST_LOS_AVAILABLE = False

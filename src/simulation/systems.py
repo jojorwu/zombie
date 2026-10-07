@@ -2,7 +2,7 @@ from typing import List
 from src.simulation.event_bus import EventBus, NoiseEmittedEvent, InfectionProgressEvent, DamageDealtEvent
 
 try:
-    from rust_vulkan_render import RustAcousticSystem, RustParticleSystem
+    from rust_engine import RustAcousticSystem, RustParticleSystem
     RUST_ACOUSTIC_AVAILABLE = True
     RUST_PARTICLES_AVAILABLE = True
 except ImportError:

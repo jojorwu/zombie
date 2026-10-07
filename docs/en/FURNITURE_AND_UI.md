@@ -32,4 +32,4 @@ Press **`[T]`** in the renderer to cycle between 4 distinct HUD visual themes:
 3. **Tactical Military**: Camouflage olive-drab tactical HUD.
 4. **Retro Terminal**: High-contrast phosphor green CRT terminal interface.
 
-High-performance viewport tile rendering is accelerated using `VulkanBridge` connected to the native Rust Vulkan engine crate (`rust_vulkan_render`).
+High-performance viewport tile rendering is accelerated using `VulkanBridge` connected to the native Rust Vulkan engine crate (`rust_engine`).

@@ -3,7 +3,7 @@ import numpy as np
 from src.world.tiles import TileType
 
 try:
-    from rust_vulkan_render import compute_fog_of_war_rust
+    from rust_engine import compute_fog_of_war_rust
     RUST_FOW_AVAILABLE = True
 except ImportError:
     RUST_FOW_AVAILABLE = False

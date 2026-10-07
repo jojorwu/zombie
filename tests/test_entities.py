@@ -6,8 +6,8 @@ import unittest
 from src.world import World, TileType
 from src.entities import Survivor, Zombie, Vehicle, Animal, ItemEntity, ResourceItem, CraftingSystem, NoiseEvent, ZombieState
 from src.simulation import EventBus, NoiseEmittedEvent, InfectionProgressEvent, AcousticSystem, InfectionSystem
-from utils.item_state_utility import ItemStateUtility, ItemConditionState
-from utils.tile_interaction_utility import TileInteractionUtility
+from src.utils.item_state_utility import ItemStateUtility, ItemConditionState
+from src.utils.tile_interaction_utility import TileInteractionUtility
 
 
 class TestEntities(unittest.TestCase):

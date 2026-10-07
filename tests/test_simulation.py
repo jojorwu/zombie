@@ -82,7 +82,7 @@ class TestSimulation(unittest.TestCase):
         corpses = [i for i in sim.items if i.contents]
         self.assertGreater(len(corpses), 0)
 
-        from utils.ballistics_utility import BallisticsUtility
+        from src.utils.ballistics_utility import BallisticsUtility
         traj = BallisticsUtility.calculate_trajectory("5.56mm", distance_m=100.0)
         self.assertIn("bullet_drop_m", traj)
         self.assertGreater(traj["bullet_drop_m"], 0.0)

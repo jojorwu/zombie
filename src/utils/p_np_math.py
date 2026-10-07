@@ -1,7 +1,7 @@
 import math
 import numpy as np
 from src.entities.item import ResourceItem
-from utils.container_utility import ContainerUtility
+from src.utils.container_utility import ContainerUtility
 
 
 class PolynomialVerifier:

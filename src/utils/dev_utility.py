@@ -2,7 +2,7 @@
 """
 Utility 2: Development & Optimization Utility Tool for Python/Rust/Lua Codebase.
 Runs math benchmarks, P=NP complexity scaling analysis, and codebase health checks.
-Usage: python -m utils.dev_utility [command]
+Usage: python -m src.utils.dev_utility [command]
 """
 
 import sys
@@ -10,7 +10,7 @@ import os
 import time
 import numpy as np
 import torch
-from utils.p_np_math import PNPComplexityEngine, PolynomialVerifier
+from src.utils.p_np_math import PNPComplexityEngine, PolynomialVerifier
 
 class DevUtility:
     def __init__(self):
@@ -71,7 +71,7 @@ class DevUtility:
         print("\n==================================================")
         print("  Codebase Structure & Architecture Inspector")
         print("==================================================")
-        dirs_to_check = ["src", "utils", "mods", "tests"]
+        dirs_to_check = ["src", "mods", "tests"]
         for d in dirs_to_check:
             if os.path.exists(d):
                 files = os.listdir(d)

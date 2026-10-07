@@ -1,6 +1,6 @@
 from enum import Enum, auto
 from typing import Dict, Tuple, Optional, Any, List
-from utils.container_utility import ContainerUtility
+from src.utils.container_utility import ContainerUtility
 
 
 class FurnitureCondition(Enum):

@@ -3,8 +3,8 @@ import math
 from src.entities.item import ResourceItem
 from src.world.tiles import TileType
 from src.entities.sensory import NoiseEvent
-from utils.p_np_math import PolynomialKnapsackSolver
-from utils.container_utility import ContainerUtility
+from src.utils.p_np_math import PolynomialKnapsackSolver
+from src.utils.container_utility import ContainerUtility
 
 
 class SurvivorLooting:

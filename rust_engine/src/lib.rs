@@ -1,30 +1,24 @@
 use pyo3::prelude::*;
 
-pub mod acoustics;
-pub mod ballistics;
-pub mod container;
-pub mod core;
-pub mod environment;
-pub mod flock;
-pub mod health;
+pub mod entities;
 pub mod modding;
-pub mod pathfinding;
-pub mod perception;
-pub mod physics;
 pub mod renderer;
+pub mod simulation;
+pub mod systems;
+pub mod world;
 
-use acoustics::RustAcousticSystem;
-use ballistics::{RustBallisticsUtility, RustParticleSystem};
-use container::{RustContainerUtility, RustFoodSpoilageUtility};
-use core::{RustEngineCore, RustFullSimulationCore, RustSpatialGrid, RustZombieEngine};
-use environment::RustEnvironmentManager;
-use flock::compute_zombie_flock_steering;
-use health::RustAnatomicalHealth;
+use entities::{
+    RustAnatomicalHealth, RustContainerUtility, RustFoodSpoilageUtility, RustSurvivorEntity,
+    RustVehiclePhysics, RustZombieEngine,
+};
 use modding::RustLuaModManager;
-use pathfinding::compute_a_star_3d_path;
-use perception::{check_line_of_sight_rust, compute_fog_of_war_rust};
-use physics::RustVehiclePhysics;
 use renderer::VulkanTileRenderer;
+use simulation::{RustEngineCore, RustFullSimulationCore, RustSpatialGrid};
+use systems::{
+    compute_a_star_3d_path, compute_zombie_flock_steering, RustAcousticSystem,
+    RustBallisticsUtility, RustEnvironmentManager, RustParticleSystem,
+};
+use world::{check_line_of_sight_rust, compute_fog_of_war_rust};
 
 #[pymodule]
 fn rust_engine(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -42,6 +36,7 @@ fn rust_engine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RustFoodSpoilageUtility>()?;
     m.add_class::<RustParticleSystem>()?;
     m.add_class::<RustFullSimulationCore>()?;
+    m.add_class::<RustSurvivorEntity>()?;
     m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
     m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
     m.add_function(wrap_pyfunction!(check_line_of_sight_rust, m)?)?;

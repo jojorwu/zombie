@@ -1,13 +1,7 @@
 use pyo3::prelude::*;
 use numpy::PyReadonlyArray3;
 use std::collections::HashSet;
-
-pub fn is_opaque_tile(t: i64) -> bool {
-    matches!(
-        t,
-        2 | 6 | 11 | 29 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 58 | 59 | 60 | 61
-    )
-}
+use crate::systems::perception::is_opaque_tile;
 
 /// Fast Rust raycasting line-of-sight check.
 #[pyfunction]

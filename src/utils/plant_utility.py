@@ -37,6 +37,13 @@ class PlantEntity:
         return None, 0
 
 
+try:
+    from rust_engine import RustPlantUtility
+    RUST_PLANT_AVAILABLE = True
+except ImportError:
+    RUST_PLANT_AVAILABLE = False
+
+
 class PlantUtility:
     """Utility module for configuring, spawning, and managing wild forest plants and herbs."""
     @staticmethod

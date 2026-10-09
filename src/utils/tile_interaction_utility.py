@@ -11,6 +11,13 @@ def _get_restored_ground_tile(world, ix: int, iy: int, z: int) -> int:
     return TileType.GRASS
 
 
+try:
+    from rust_engine import RustTileInteractionUtility
+    RUST_TILE_AVAILABLE = True
+except ImportError:
+    RUST_TILE_AVAILABLE = False
+
+
 class TileInteractionUtility:
     """
     Utility module for managing tile and furniture interactions:

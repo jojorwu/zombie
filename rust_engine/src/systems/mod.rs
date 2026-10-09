@@ -1,13 +1,23 @@
 pub mod acoustics;
 pub mod ballistics;
+pub mod electricity;
 pub mod environment;
 pub mod flock;
+pub mod item_state;
 pub mod pathfinding;
 pub mod perception;
+pub mod plants_animals;
+pub mod pnp_math;
+pub mod tile_interaction;
 
 pub use acoustics::RustAcousticSystem;
 pub use ballistics::{RustBallisticsUtility, RustParticleSystem};
+pub use electricity::RustElectricityUtility;
 pub use environment::RustEnvironmentManager;
 pub use flock::compute_zombie_flock_steering;
+pub use item_state::RustItemStateUtility;
 pub use pathfinding::compute_a_star_3d_path;
 pub use perception::is_opaque_tile;
+pub use plants_animals::{RustAnimalUtility, RustPlantUtility};
+pub use pnp_math::RustPNPComplexityEngine;
+pub use tile_interaction::RustTileInteractionUtility;

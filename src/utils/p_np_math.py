@@ -4,6 +4,13 @@ from src.entities.item import ResourceItem
 from src.utils.container_utility import ContainerUtility
 
 
+try:
+    from rust_engine import RustPNPComplexityEngine
+    RUST_PNP_AVAILABLE = True
+except ImportError:
+    RUST_PNP_AVAILABLE = False
+
+
 class PolynomialVerifier:
     """
     Polynomial-time verifier for NP problem certificates.
@@ -11,6 +18,11 @@ class PolynomialVerifier:
     """
     @staticmethod
     def verify_3sat(clauses, assignment):
+        if RUST_PNP_AVAILABLE:
+            assign_vec = [(k, v) for k, v in assignment.items()]
+            clauses_vec = [tuple(c) for c in clauses]
+            return RustPNPComplexityEngine.verify_3sat(clauses_vec, assign_vec)
+
         for c in clauses:
             clause_satisfied = False
             for lit in c:

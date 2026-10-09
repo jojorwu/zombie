@@ -15,8 +15,9 @@ use modding::RustLuaModManager;
 use renderer::VulkanTileRenderer;
 use simulation::{RustEngineCore, RustFullSimulationCore, RustSpatialGrid};
 use systems::{
-    compute_a_star_3d_path, compute_zombie_flock_steering, RustAcousticSystem,
-    RustBallisticsUtility, RustEnvironmentManager, RustParticleSystem,
+    compute_a_star_3d_path, compute_zombie_flock_steering, RustAcousticSystem, RustAnimalUtility,
+    RustBallisticsUtility, RustElectricityUtility, RustEnvironmentManager, RustItemStateUtility,
+    RustPNPComplexityEngine, RustParticleSystem, RustPlantUtility, RustTileInteractionUtility,
 };
 use world::{check_line_of_sight_rust, compute_fog_of_war_rust};
 
@@ -37,6 +38,12 @@ fn rust_engine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RustParticleSystem>()?;
     m.add_class::<RustFullSimulationCore>()?;
     m.add_class::<RustSurvivorEntity>()?;
+    m.add_class::<RustPNPComplexityEngine>()?;
+    m.add_class::<RustElectricityUtility>()?;
+    m.add_class::<RustTileInteractionUtility>()?;
+    m.add_class::<RustItemStateUtility>()?;
+    m.add_class::<RustPlantUtility>()?;
+    m.add_class::<RustAnimalUtility>()?;
     m.add_function(wrap_pyfunction!(compute_zombie_flock_steering, m)?)?;
     m.add_function(wrap_pyfunction!(compute_a_star_3d_path, m)?)?;
     m.add_function(wrap_pyfunction!(check_line_of_sight_rust, m)?)?;

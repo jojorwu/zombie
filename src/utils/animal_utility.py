@@ -3,6 +3,13 @@ from src.entities.animal import Animal, Rat
 from src.world.tiles import TileType
 
 
+try:
+    from rust_engine import RustAnimalUtility
+    RUST_ANIMAL_AVAILABLE = True
+except ImportError:
+    RUST_ANIMAL_AVAILABLE = False
+
+
 class AnimalUtility:
     """Utility module for creating, spawning, and managing wild animals and rats."""
     @staticmethod

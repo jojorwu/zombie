@@ -1,3 +1,10 @@
+try:
+    from rust_engine import RustElectricityUtility
+    RUST_ELEC_AVAILABLE = True
+except ImportError:
+    RUST_ELEC_AVAILABLE = False
+
+
 class ElectricityUtility:
     """
     Utility module for managing municipal power grid cutoffs, fuel generators,
@@ -6,6 +13,8 @@ class ElectricityUtility:
     def __init__(self, cutoff_day=7, grid_enabled=True):
         self.cutoff_day = cutoff_day
         self.grid_enabled = grid_enabled
+        if RUST_ELEC_AVAILABLE:
+            self.rust_engine = RustElectricityUtility(cutoff_day)
         self.generators = []  # dicts: {x, y, z, fuel, active}
         self.switches = {}  # (x, y, z) -> active: bool
 

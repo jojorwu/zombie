@@ -13,6 +13,13 @@ class ItemConditionState(Enum):
 from src.entities.item import MetalQuality, METAL_QUALITY_MULTIPLIERS
 
 
+try:
+    from rust_engine import RustItemStateUtility
+    RUST_ITEM_STATE_AVAILABLE = True
+except ImportError:
+    RUST_ITEM_STATE_AVAILABLE = False
+
+
 class ItemStateUtility:
     """Developer utility for managing item conditions, metal quality purity, durability decay, spoilage, and repair."""
     _item_durability: Dict[str, float] = {}

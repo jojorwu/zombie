@@ -253,6 +253,27 @@ impl VulkanTileRenderer {
         PyBytes::new(py, &buffer)
     }
 
+    /// Renders headless PPM image bytes directly for offscreen video/GIF recording without Pygame.
+    pub fn render_offscreen_ppm<'py>(
+        &self,
+        py: Python<'py>,
+        rgba_buffer: &[u8],
+    ) -> &'py PyBytes {
+        let header = format!("P6\n{} {}\n255\n", self.pixel_width, self.pixel_height);
+        let mut ppm_data = header.into_bytes();
+        ppm_data.reserve((self.pixel_width * self.pixel_height * 3) as usize);
+
+        for chunk in rgba_buffer.chunks(4) {
+            if chunk.len() >= 3 {
+                ppm_data.push(chunk[0]);
+                ppm_data.push(chunk[1]);
+                ppm_data.push(chunk[2]);
+            }
+        }
+
+        PyBytes::new(py, &ppm_data)
+    }
+
     pub fn render_grid_buffer(&self, grid: Vec<i32>, light: f32) -> Vec<u8> {
         let num_pixels = (self.pixel_width * self.pixel_height * 4) as usize;
         let mut buffer = vec![20u8; num_pixels];

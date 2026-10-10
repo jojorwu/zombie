@@ -8,7 +8,7 @@ pub mod systems;
 pub mod world;
 
 use entities::{
-    RustAnatomicalHealth, RustContainerUtility, RustFoodSpoilageUtility, RustSurvivorEntity,
+    RustAnatomicalHealth, RustContainerUtility, RustEntityManager, RustFoodSpoilageUtility, RustSurvivorEntity,
     RustVehiclePhysics, RustZombieEngine,
 };
 use modding::RustLuaModManager;
@@ -19,12 +19,14 @@ use systems::{
     RustBallisticsUtility, RustElectricityUtility, RustEnvironmentManager, RustItemStateUtility,
     RustPNPComplexityEngine, RustParticleSystem, RustPlantUtility, RustTileInteractionUtility,
 };
-use world::{check_line_of_sight_rust, compute_fog_of_war_rust, RustWorldGenerator};
+use world::{check_line_of_sight_rust, compute_fog_of_war_rust, RustWorldGenerator, RustWorldGrid, RustChunkManager};
 
 #[pymodule]
 fn rust_engine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VulkanTileRenderer>()?;
     m.add_class::<RustWorldGenerator>()?;
+    m.add_class::<RustWorldGrid>()?;
+    m.add_class::<RustChunkManager>()?;
     m.add_class::<RustEngineCore>()?;
     m.add_class::<RustLuaModManager>()?;
     m.add_class::<RustVehiclePhysics>()?;
@@ -40,6 +42,7 @@ fn rust_engine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RustFullSimulationCore>()?;
     m.add_class::<RustParallelEnvManager>()?;
     m.add_class::<RustSurvivorEntity>()?;
+    m.add_class::<RustEntityManager>()?;
     m.add_class::<RustPNPComplexityEngine>()?;
     m.add_class::<RustElectricityUtility>()?;
     m.add_class::<RustTileInteractionUtility>()?;

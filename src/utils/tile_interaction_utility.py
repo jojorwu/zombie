@@ -8,6 +8,8 @@ class TileInteractionUtility:
 
     @staticmethod
     def siphon_fuel_from_pump(world, x: int, y: int, z: int, inventory: dict) -> tuple:
+        x = max(0, min(world.width - 1, x))
+        y = max(0, min(world.height - 1, y))
         z_idx = world.z_to_idx(z)
         if world.grid[z_idx, y, x] == TileType.GAS_PUMP:
             inventory["fuel"] = inventory.get("fuel", 0) + 2
@@ -16,6 +18,8 @@ class TileInteractionUtility:
 
     @staticmethod
     def push_furniture(world, x: int, y: int, z: int, dx: int = 0, dy: int = 0, push_dx: int = 0, push_dy: int = 0) -> bool:
+        x = max(0, min(world.width - 1, x))
+        y = max(0, min(world.height - 1, y))
         shift_x = push_dx if push_dx != 0 else dx
         shift_y = push_dy if push_dy != 0 else dy
         z_idx = world.z_to_idx(z)
@@ -32,6 +36,8 @@ class TileInteractionUtility:
 
     @staticmethod
     def dismantle_furniture(world, x: int, y: int, z: int, inventory: dict) -> tuple:
+        x = max(0, min(world.width - 1, x))
+        y = max(0, min(world.height - 1, y))
         z_idx = world.z_to_idx(z)
         tile = world.grid[z_idx, y, x]
         if tile in TileInteractionUtility.MOVABLE_FURNITURE_TILES:
@@ -45,6 +51,8 @@ class TileInteractionUtility:
 
     @staticmethod
     def lockpick_door_or_safe(world, x: int, y: int, z: int, inventory: dict) -> bool:
+        x = max(0, min(world.width - 1, x))
+        y = max(0, min(world.height - 1, y))
         z_idx = world.z_to_idx(z)
         tile = world.grid[z_idx, y, x]
         if tile == TileType.DOOR_LOCKED:

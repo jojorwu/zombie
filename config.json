@@ -28,6 +28,15 @@
     "mutation_scale": 0.2,
     "elite_fraction": 0.2
   },
+  "ppo_training": {
+    "parallel_envs": 16,
+    "learning_rate": 0.0003,
+    "gamma": 0.99,
+    "clip_eps": 0.2,
+    "ppo_epochs": 4,
+    "batch_size": 64,
+    "entropy_coef": 0.01
+  },
   "survivor": {
     "max_health": 100.0,
     "max_hunger": 100.0,

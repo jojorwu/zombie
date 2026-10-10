@@ -1,6 +1,5 @@
 import random
 import time
-import threading
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from src.world import World
@@ -16,7 +15,7 @@ from src.simulation.environment import EnvironmentManager
 from src.simulation.event_bus import EventBus, NoiseEmittedEvent, DamageDealtEvent
 from src.simulation.snapshot import DoubleBufferedStateExchanger
 from src.entities.state_manager import LazyChunkStatePersistence
-from src.simulation.rust_engine import PythonRustEngineBridge
+from src.simulation.rust_engine import PythonRustEngineBridge, RUST_ENGINE_AVAILABLE
 from src.utils.memory_monitor_utility import MemoryMonitorUtility
 from src.utils.electricity_utility import ElectricityUtility
 
@@ -58,7 +57,13 @@ class SimulationEngine:
             grid_enabled=self.sim_cfg.get("electricity_enabled", True)
         )
 
-        self.rust_bridge = PythonRustEngineBridge(width=self.world.width, height=self.world.height)
+        self.rust_bridge = PythonRustEngineBridge(
+            width=self.world.width,
+            height=self.world.height,
+            num_survivors=self.sim_cfg.get("num_survivors", 20),
+            num_zombies=self.sim_cfg.get("num_zombies", 30)
+        )
+
         self.spawner = EntitySpawner(self.world, self.factory)
         self.env_manager = EnvironmentManager(self.world, self.electricity_utility)
 
@@ -104,6 +109,9 @@ class SimulationEngine:
         """Processes published noise events and creates sensory noise entities."""
         ne = NoiseEvent(event.x, event.y, event.z, volume=event.volume, source_type=event.source_type)
         self.noise_events.append(ne)
+
+        if self.rust_bridge and self.rust_bridge.full_sim_core:
+            self.rust_bridge.full_sim_core.emit_noise(float(event.x), float(event.y), int(event.z), float(event.volume))
 
     def _handle_damage_dealt(self, event: DamageDealtEvent):
         """Processes published damage events across entities."""
@@ -173,6 +181,15 @@ class SimulationEngine:
             coord = walkable_coords.pop()
             self.survivors.append(Survivor(coord[0] + 0.5, coord[1] + 0.5, z=coord[2]))
 
+        # Re-sync Rust engine bridge
+        self.rust_bridge = PythonRustEngineBridge(
+            width=self.world.width,
+            height=self.world.height,
+            num_survivors=len(self.survivors),
+            num_zombies=len(self.zombies)
+        )
+        self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies)
+
     def tick(self):
         t0 = time.time()
         self.env_manager.tick_environment()
@@ -202,17 +219,13 @@ class SimulationEngine:
 
             step_outputs = batch_get_action_and_movement(active_brains, active_inputs, active_hiddens)
 
+            movements = []
+            actions = []
+
             for idx, orig_i in enumerate(alive_indices):
                 survivor = self.survivors[orig_i]
                 planner = self.planners[orig_i]
                 survivor.update_needs(world=self.world)
-                if self.rust_bridge:
-                    self.rust_bridge.sync_survivor_state(survivor, self.world.current_tick)
-
-                if not survivor.is_alive and survivor.is_infected:
-                    new_z = self.factory.create_zombie(survivor.x, survivor.y, z=survivor.z)
-                    self.zombies.append(new_z)
-                    continue
 
                 raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx]
                 self.hidden_states[orig_i] = new_hidden
@@ -225,8 +238,16 @@ class SimulationEngine:
                     survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, raw_dx, raw_dy, raw_action
                 )
 
+                movements.append((dx, dy))
+                actions.append(action)
+
                 survivor.move(dx, dy, self.world, noise_events=self.noise_events)
                 survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors, noise_events=self.noise_events)
+
+            if self.rust_bridge and self.rust_bridge.full_sim_core:
+                self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies)
+                self.rust_bridge.step_full_simulation(actions, movements)
+                self.rust_bridge.sync_rust_to_entities(self.survivors, self.zombies)
 
         for s in self.survivors:
             if s.is_alive and not s.in_vehicle and self.world.current_tick % 5 == 0:
@@ -249,39 +270,40 @@ class SimulationEngine:
             if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
         ]
 
-        if RUST_STEERING_AVAILABLE and len(active_zombies) > 5:
-            z_coords = np.empty(len(active_zombies) * 3, dtype=np.float32)
-            for i, z in enumerate(active_zombies):
-                z_coords[i * 3] = z.x
-                z_coords[i * 3 + 1] = z.y
-                z_coords[i * 3 + 2] = float(z.z)
-            steer_vecs = compute_zombie_flock_steering(z_coords, separation_dist=1.5)
-            for idx, z in enumerate(active_zombies):
-                nx = z.x + steer_vecs[idx * 2] * 0.02
-                ny = z.y + steer_vecs[idx * 2 + 1] * 0.02
-                if self.world.is_walkable(nx, ny, z.z):
-                    z.x, z.y = nx, ny
+        if not (self.rust_bridge and self.rust_bridge.full_sim_core):
+            if RUST_STEERING_AVAILABLE and len(active_zombies) > 5:
+                z_coords = np.empty(len(active_zombies) * 3, dtype=np.float32)
+                for i, z in enumerate(active_zombies):
+                    z_coords[i * 3] = z.x
+                    z_coords[i * 3 + 1] = z.y
+                    z_coords[i * 3 + 2] = float(z.z)
+                steer_vecs = compute_zombie_flock_steering(z_coords, separation_dist=1.5)
+                for idx, z in enumerate(active_zombies):
+                    nx = z.x + steer_vecs[idx * 2] * 0.02
+                    ny = z.y + steer_vecs[idx * 2 + 1] * 0.02
+                    if self.world.is_walkable(nx, ny, z.z):
+                        z.x, z.y = nx, ny
 
-        z_grid = {}
-        for z in active_zombies:
-            cell = (int(z.x // 6.0), int(z.y // 6.0), z.z)
-            if cell not in z_grid:
-                z_grid[cell] = []
-            z_grid[cell].append(z)
+            z_grid = {}
+            for z in active_zombies:
+                cell = (int(z.x // 6.0), int(z.y // 6.0), z.z)
+                if cell not in z_grid:
+                    z_grid[cell] = []
+                z_grid[cell].append(z)
 
-        if len(active_zombies) > 8:
-            def _update_zombie_chunk(z_sublist):
-                for z in z_sublist:
-                    z.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
+            if len(active_zombies) > 8:
+                def _update_zombie_chunk(z_sublist):
+                    for z in z_sublist:
+                        z.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
-            c_size = max(1, len(active_zombies) // 4)
-            z_chunks = [active_zombies[i:i + c_size] for i in range(0, len(active_zombies), c_size)]
-            futures = [SIM_EXECUTOR.submit(_update_zombie_chunk, zc) for zc in z_chunks]
-            for f in futures:
-                f.result()
-        else:
-            for zombie in active_zombies:
-                zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
+                c_size = max(1, len(active_zombies) // 4)
+                z_chunks = [active_zombies[i:i + c_size] for i in range(0, len(active_zombies), c_size)]
+                futures = [SIM_EXECUTOR.submit(_update_zombie_chunk, zc) for zc in z_chunks]
+                for f in futures:
+                    f.result()
+            else:
+                for zombie in active_zombies:
+                    zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
         # Vehicle-Zombie Momentum Collision Processing
         for v in self.vehicles:

@@ -1,6 +1,3 @@
-from src.entities.vehicle import Vehicle
-
-
 class VehicleType:
     SEDAN = "sedan"
     SUV_OFFROAD = "offroad_suv"
@@ -52,7 +49,7 @@ class VehicleData:
 class VehiclePhysicsUtility:
     """Utility allowing developers and modders to inspect, configure, and fine-tune vehicle physics parameters on the fly."""
     @staticmethod
-    def customize_physics(vehicle: Vehicle, mass: float = None, max_speed: float = None, acceleration: float = None,
+    def customize_physics(vehicle, mass: float = None, max_speed: float = None, acceleration: float = None,
                           brake_force: float = None, friction: float = None, steer_rate: float = None, collision_factor: float = None):
         p = vehicle.physics
         if mass is not None:
@@ -94,7 +91,8 @@ class VehicleRegistry:
         return VehicleData.PRESETS.get(model_id, VehicleData.PRESETS[VehicleType.SEDAN])
 
     @classmethod
-    def create_vehicle(cls, model_id: str, x: float, y: float, z: int = 0, fuel: float = None) -> Vehicle:
+    def create_vehicle(cls, model_id: str, x: float, y: float, z: int = 0, fuel: float = None):
+        from src.entities.vehicle import Vehicle
         info = cls.get_vehicle_info(model_id)
         if fuel is None:
             fuel = info["max_fuel"] * 0.5

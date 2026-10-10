@@ -4,7 +4,6 @@ import uuid
 from typing import Dict, List
 import numpy as np
 from src.world.tiles import TileType, BuildingType, SettlementType
-from src.utils.p_np_math import PolynomialVerifier
 
 
 class GraphGrammarBuildingGenerator:
@@ -293,5 +292,3 @@ class WorldGenerator:
                 world.grid[g_idx, ry, rx] = TileType.SANDBAG
                 if rx + 1 < world.width:
                     world.grid[g_idx, ry, rx + 1] = TileType.BARBED_WIRE
-
-        PolynomialVerifier.verify_spatial_partitioning([(b["x"], b["y"]) for b in world.buildings])

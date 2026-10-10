@@ -56,16 +56,17 @@ class PythonRustEngineBridge:
                 self.full_sim_core.add_survivor(float(s.x), float(s.y), int(s.z))
 
         for idx, z in enumerate(zombies):
+            zhp = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
             if idx < self.full_sim_core.get_zombies_count():
                 self.full_sim_core.sync_zombie_at(
                     idx,
                     float(z.x),
                     float(z.y),
                     int(z.z),
-                    float(getattr(z, 'health', 50.0))
+                    zhp
                 )
             else:
-                self.full_sim_core.add_zombie(float(z.x), float(z.y), int(z.z), float(getattr(z, 'health', 50.0)), float(getattr(z, 'speed', 0.08)))
+                self.full_sim_core.add_zombie(float(z.x), float(z.y), int(z.z), zhp, float(getattr(z, 'speed', 0.08)))
 
     def step_full_simulation(self, actions: list, movements: list) -> np.ndarray:
         """Executes full simulation step in Rust and returns 2D observation tensor for PyTorch."""
@@ -87,6 +88,7 @@ class PythonRustEngineBridge:
             if idx < self.full_sim_core.get_zombies_count():
                 zx, zy, zz, zhp, zalive = self.full_sim_core.get_zombie_pos(idx)
                 z.x, z.y, z.z = zx, zy, zz
+                z.hp = zhp
                 z.health = zhp
                 z.is_alive = zalive
 

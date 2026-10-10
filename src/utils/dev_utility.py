@@ -12,6 +12,7 @@ import numpy as np
 import torch
 from src.utils.p_np_math import PNPComplexityEngine, PolynomialVerifier
 
+
 class DevUtility:
     def __init__(self):
         self.pnp_engine = PNPComplexityEngine(degree=3)

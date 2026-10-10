@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use pyo3::exceptions::PyValueError;
 use numpy::{PyArray3, IntoPyArray, ndarray::Array3};
 use crate::world::grid::{RustWorldGrid, TILE_ROAD, TILE_BUILDING_WALL, TILE_FLOOR, TILE_DOOR, TILE_WINDOW};
 
@@ -20,6 +21,9 @@ impl RustWorldGenerator {
         z_min: i32,
         z_max: i32,
     ) -> PyResult<Py<PyArray3<i64>>> {
+        if z_max < z_min {
+            return Err(PyValueError::new_err("z_max cannot be smaller than z_min"));
+        }
         let grid = Self::generate_map(width, height, z_min, z_max);
         let z_layers = (z_max - z_min + 1) as usize;
         let mut arr = vec![0i64; z_layers * height * width];
@@ -36,7 +40,7 @@ impl RustWorldGenerator {
         }
 
         let py_array = Array3::from_shape_vec((z_layers, height, width), arr)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(py_array.into_pyarray(py).to_owned())
     }
 }

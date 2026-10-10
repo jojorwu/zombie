@@ -4,6 +4,6 @@ except ImportError:
     ZombieEngine = None
     compute_zombie_flock_steering = None
 
-from src.entities.zombie.zombie_entity import Zombie, ZombieState
+from src.entities.zombie.zombie_entity import Zombie, ZombieState, ZombieType
 
-__all__ = ["ZombieEngine", "compute_zombie_flock_steering", "Zombie", "ZombieState"]
+__all__ = ["ZombieEngine", "compute_zombie_flock_steering", "Zombie", "ZombieState", "ZombieType"]

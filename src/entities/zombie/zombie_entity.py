@@ -13,6 +13,13 @@ except ImportError:
     RUST_STEERING_AVAILABLE = False
 
 
+class ZombieType:
+    STANDARD = "standard"
+    RUNNER = "runner"
+    BRUTE = "brute"
+    SCREAMER = "screamer"
+
+
 class ZombieState:
     IDLE = "idle"
     INVESTIGATE = "investigate"
@@ -22,22 +29,39 @@ class ZombieState:
 
 
 class Zombie:
-    def __init__(self, x, y, hp=50.0, z=0, config=None):
+    def __init__(self, x, y, hp=50.0, z=0, config=None, zombie_type: str = ZombieType.STANDARD):
         self.x = float(x)
         self.y = float(y)
         self.z = int(z)
+        self.zombie_type = zombie_type
+        self.is_crawler = False
+
         self.body = AnatomicalHealth(35.0, 100.0, 40.0, 40.0, 45.0, 45.0)
         self.hp = hp
         self.max_hp = 100.0
         self.is_alive = True
 
         z_cfg = config.get("zombie", {}) if config else {}
-        self.speed = z_cfg.get("speed", 0.08)
         self.damage = z_cfg.get("damage", 12.0)
         self.bite_infection_chance = z_cfg.get("bite_infection_chance", 0.25)
         self.grab_slowdown = z_cfg.get("grab_slowdown", 0.5)
         self.memory_duration_ticks = z_cfg.get("memory_duration_ticks", 150)
         self.pathfinding_max_nodes = z_cfg.get("pathfinding_max_nodes", 300)
+
+        # Apply Zombie Variant Specs
+        if zombie_type == ZombieType.RUNNER:
+            self.speed = 0.15
+            self.hp = 35.0
+        elif zombie_type == ZombieType.BRUTE:
+            self.speed = 0.05
+            self.hp = 180.0
+            self.damage = 25.0
+        elif zombie_type == ZombieType.SCREAMER:
+            self.speed = 0.09
+            self.hp = 45.0
+            self.shriek_cooldown = 0
+        else:
+            self.speed = z_cfg.get("speed", 0.08)
 
         self.state = ZombieState.IDLE
         self.target = None
@@ -52,8 +76,11 @@ class Zombie:
     def take_targeted_damage(self, amount, target_part=None, attacker_pos=None):
         if hasattr(self.body, 'apply_targeted_damage'):
             actual_damage = self.body.apply_targeted_damage(target_part or "torso", amount, 0.0)
+            if target_part in ("left_leg", "right_leg") and (self.body.left_leg <= 0 or self.body.right_leg <= 0):
+                self.is_crawler = True
         else:
             actual_damage = amount
+
         self.hp = max(0.0, self.hp - actual_damage)
         if self.hp <= 0.0:
             self.is_alive = False
@@ -62,6 +89,16 @@ class Zombie:
             self.investigate_pos = (attacker_pos[0], attacker_pos[1], attacker_pos[2])
             self.memory_timer = self.memory_duration_ticks
         return actual_damage
+
+    def trigger_screamer_shriek(self, noise_events=None):
+        if self.zombie_type == ZombieType.SCREAMER and getattr(self, 'shriek_cooldown', 0) == 0:
+            self.shriek_cooldown = 150
+            if noise_events is not None:
+                noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=85.0, source_type="screamer_shriek"))
+            return True
+        elif getattr(self, 'shriek_cooldown', 0) > 0:
+            self.shriek_cooldown -= 1
+        return False
 
     def has_line_of_sight(self, tx, ty, tz, world):
         if self.z != tz:
@@ -153,6 +190,9 @@ class Zombie:
         if not self.is_alive:
             return
 
+        if self.zombie_type == ZombieType.SCREAMER:
+            self.trigger_screamer_shriek(noise_events)
+
         if self.astar_engine is None or self.astar_engine.world is not world:
             self.astar_engine = AStar3D(world)
 
@@ -205,6 +245,8 @@ class Zombie:
         if all_zombies:
             flock_dx, flock_dy = self.compute_flocking_vector(all_zombies, spatial_grid=spatial_grid)
 
+        effective_speed = self.speed * 0.4 if self.is_crawler else self.speed
+
         if dest_pos:
             target_grid_pos = (int(dest_pos[0]), int(dest_pos[1]), int(dest_pos[2]))
             dist_to_dest = math.hypot(dest_pos[0] - self.x, dest_pos[1] - self.y)
@@ -232,7 +274,7 @@ class Zombie:
 
             angle = math.atan2(ty - self.y, tx - self.x)
             tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
-            cur_speed = self.speed * tile_mod
+            cur_speed = effective_speed * tile_mod
 
             vx = math.cos(angle) + flock_dx * 0.5
             vy = math.sin(angle) + flock_dy * 0.5
@@ -270,7 +312,7 @@ class Zombie:
             if random.random() < 0.3:
                 angle = random.uniform(0, 2 * math.pi)
                 tile_mod = world.get_tile_speed_modifier(self.x, self.y, self.z)
-                cur_speed = self.speed * tile_mod
+                cur_speed = effective_speed * tile_mod
                 nx = self.x + (math.cos(angle) + flock_dx) * cur_speed
                 ny = self.y + (math.sin(angle) + flock_dy) * cur_speed
                 if world.is_walkable(nx, ny, self.z):

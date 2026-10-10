@@ -241,7 +241,8 @@ class SimulationEngine:
                 movements.append((dx, dy))
                 actions.append(action)
 
-                survivor.move(dx, dy, self.world, noise_events=self.noise_events)
+                if not (self.rust_bridge and self.rust_bridge.full_sim_core):
+                    survivor.move(dx, dy, self.world, noise_events=self.noise_events)
                 survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors, noise_events=self.noise_events)
 
             if self.rust_bridge and self.rust_bridge.full_sim_core:

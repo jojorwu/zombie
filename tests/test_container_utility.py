@@ -2,8 +2,8 @@ import unittest
 from src.entities.item import ResourceItem
 from src.world.tiles import TileType
 from src.entities.state_manager import FurnitureState, FurnitureStateManager
-from utils.container_utility import ContainerUtility, ItemCategory
-from utils.food_spoilage_utility import FoodSpoilageUtility
+from src.utils.container_utility import ContainerUtility, ItemCategory
+from src.utils.food_spoilage_utility import FoodSpoilageUtility
 
 
 class TestContainerUtility(unittest.TestCase):

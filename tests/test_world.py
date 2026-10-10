@@ -6,7 +6,7 @@ import unittest
 from src.world import World, TileType, ChunkState
 from src.world.generation import GraphGrammarBuildingGenerator
 from src.entities.item import MetalQuality
-from utils.item_state_utility import ItemStateUtility
+from src.utils.item_state_utility import ItemStateUtility
 
 class TestWorld(unittest.TestCase):
     def test_sparse_spatial_hashing(self):
@@ -14,11 +14,11 @@ class TestWorld(unittest.TestCase):
         g_idx0 = world.z_to_idx(0)
         g_idx1 = world.z_to_idx(2)
 
-        world.grid[g_idx0, 10, 10] = TileType.ROAD.value
-        world.grid[g_idx1, 10, 10] = TileType.BUILDING_WALL.value
+        world.grid[g_idx0, 10, 10] = TileType.ROAD
+        world.grid[g_idx1, 10, 10] = TileType.BUILDING_WALL
 
-        self.assertEqual(world.grid[g_idx0, 10, 10], TileType.ROAD.value)
-        self.assertEqual(world.grid[g_idx1, 10, 10], TileType.BUILDING_WALL.value)
+        self.assertEqual(world.grid[g_idx0, 10, 10], TileType.ROAD)
+        self.assertEqual(world.grid[g_idx1, 10, 10], TileType.BUILDING_WALL)
         self.assertIn((g_idx1, 10, 10), world.sparse_z_grid)
 
     def test_graph_grammar_building_generator(self):
@@ -153,7 +153,7 @@ class TestWorld(unittest.TestCase):
 
         world.grid[z_idx, 5, 5] = TileType.DOOR_LOCKED
         from src.entities.item import ResourceItem
-        from utils.tile_interaction_utility import TileInteractionUtility
+        from src.utils.tile_interaction_utility import TileInteractionUtility
         inventory = {ResourceItem.LOCKPICK: 1}
         success = TileInteractionUtility.lockpick_door_or_safe(world, 5, 5, 0, inventory)
         self.assertTrue(success)

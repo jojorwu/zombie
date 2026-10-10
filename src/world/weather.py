@@ -1,6 +1,12 @@
 import math
 import random
 
+try:
+    from rust_engine import RustEnvironmentManager
+    RUST_ENV_AVAILABLE = True
+except ImportError:
+    RUST_ENV_AVAILABLE = False
+
 
 class Season:
     SPRING = "Spring"
@@ -32,7 +38,8 @@ class WeatherManager:
         self.rain_front = None
         self.next_rain_tick = 3600 * 3
         self.season = Season.SPRING
-        self.temperature = 15.0  # Celsius
+        self.temperature = 15.0
+        self.rust_env = RustEnvironmentManager() if RUST_ENV_AVAILABLE else None
 
     def update_season(self, current_tick):
         total_mins = current_tick / 2.5
@@ -52,10 +59,14 @@ class WeatherManager:
     def update(self, current_tick):
         self.update_season(current_tick)
 
-        # Wind dynamics
-        self.wind_angle += random.uniform(-0.02, 0.02)
-        base_wind = 40.0 if self.season == Season.AUTUMN else 20.0
-        self.wind_speed = max(0.0, min(100.0, base_wind + random.uniform(-5.0, 5.0)))
+        if self.rust_env:
+            light_lvl, rust_temp, wind_sp = self.rust_env.update_weather(current_tick, False)
+            self.temperature = rust_temp
+            self.wind_speed = wind_sp
+        else:
+            self.wind_angle += random.uniform(-0.02, 0.02)
+            base_wind = 40.0 if self.season == Season.AUTUMN else 20.0
+            self.wind_speed = max(0.0, min(100.0, base_wind + random.uniform(-5.0, 5.0)))
 
         # Trigger rain/snow storm front based on season
         storm_freq = 3600 * 2 if self.season in (Season.SPRING, Season.WINTER) else 3600 * 4

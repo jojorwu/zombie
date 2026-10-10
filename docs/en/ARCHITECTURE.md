@@ -36,7 +36,7 @@ The simulation engine is organized into modular subpackages under `src/`:
 ### 5. `src/ui/`
 - **`renderer.py`**: `RendererUI` Pygame viewport rendering with camera culling and theme toggles.
 - **`hud_renderer.py`**: Heads-Up Display (HUD) rendering health, emotional states, time, weather, and inventory.
-- **`vulkan_bridge.py`**: `VulkanBridge` interface connecting to the native Rust Vulkan rendering engine (`rust_vulkan_render`).
+- **`vulkan_bridge.py`**: `VulkanBridge` interface connecting to the native Rust Vulkan rendering engine (`rust_engine`).
 - **`menu.py`**: `MainMenuUI` for world parameters and generation options.
 - **`camera.py`**: `Camera` viewport panning and zooming logic.
 

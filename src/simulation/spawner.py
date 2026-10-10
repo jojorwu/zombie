@@ -1,7 +1,10 @@
 import random
+import numpy as np
 from typing import List, Tuple
-from src.world import TileType, BuildingType
+from src.world import TileType, BuildingType, TILE_WALKABLE
 from src.entities import Vehicle, ResourceItem
+
+_WALKABLE_TILE_LIST = [t for t, w in TILE_WALKABLE.items() if w]
 
 
 class EntitySpawner:
@@ -13,31 +16,49 @@ class EntitySpawner:
         self.factory = factory
 
     def scan_walkable_coordinates(self) -> Tuple[List[Tuple[int, int, int]], List[Tuple[int, int, int]], List[Tuple[int, int, int]]]:
-        """Scans grid for walkable coordinates, parking spots, and trash cans."""
+        """Scans grid for walkable coordinates, parking spots, and trash cans using fast NumPy lookups."""
         walkable_coords, parking_coords, trash_coords = [], [], []
 
-        for z in range(self.world.z_min, self.world.z_max + 1):
-            z_idx = self.world.z_to_idx(z)
-            for y in range(self.world.height):
-                for x in range(self.world.width):
-                    if self.world.is_walkable(x, y, z):
-                        coord = (x, y, z)
-                        walkable_coords.append(coord)
-                        tile = self.world.grid[z_idx, y, x]
-                        if tile == TileType.PARKING:
-                            parking_coords.append(coord)
-                        elif tile == TileType.TRASH_CAN:
-                            trash_coords.append(coord)
+        # 1. Vectorized lookup for Z=0 ground_grid
+        ground = self.world.ground_grid
+        walkable_mask = np.isin(ground, _WALKABLE_TILE_LIST)
+        ys, xs = np.where(walkable_mask)
+        for y, x in zip(ys, xs):
+            walkable_coords.append((int(x), int(y), 0))
+
+        py, px = np.where(ground == TileType.PARKING)
+        for y, x in zip(py, px):
+            parking_coords.append((int(x), int(y), 0))
+
+        ty, tx = np.where(ground == TileType.TRASH_CAN)
+        for y, x in zip(ty, tx):
+            trash_coords.append((int(x), int(y), 0))
+
+        # 2. Fast sparse Hash Map lookup for non-zero Z levels
+        for (z_idx, y, x), tile in self.world.sparse_z_grid.items():
+            z = self.world.idx_to_z(z_idx)
+            if TILE_WALKABLE.get(tile, False):
+                coord = (x, y, z)
+                walkable_coords.append(coord)
+                if tile == TileType.PARKING:
+                    parking_coords.append(coord)
+                elif tile == TileType.TRASH_CAN:
+                    trash_coords.append(coord)
 
         random.shuffle(walkable_coords)
         random.shuffle(parking_coords)
         random.shuffle(trash_coords)
         return walkable_coords, parking_coords, trash_coords
 
-    def spawn_street_corpses_and_loot(self, items_list: list, num_corpses: int = 15) -> None:
+    def spawn_street_corpses_and_loot(self, items_list: list, walkable_coords: list = None, num_corpses: int = 15) -> None:
         """Spawns lootable dead human corpses on streets and sidewalks containing random gear and ammo."""
-        walkable, parking, trash = self.scan_walkable_coordinates()
-        street_coords = [(x, y, z) for x, y, z in walkable if z == 0 and self.world.grid[self.world.z_to_idx(z), y, x] in (TileType.ROAD, TileType.SIDEWALK, TileType.CROSSWALK)]
+        if walkable_coords is None:
+            walkable_coords, _, _ = self.scan_walkable_coordinates()
+
+        street_coords = [
+            (x, y, z) for x, y, z in walkable_coords
+            if z == 0 and self.world.ground_grid[y, x] in (TileType.ROAD, TileType.SIDEWALK, TileType.CROSSWALK)
+        ]
         random.shuffle(street_coords)
 
         for _ in range(min(num_corpses, len(street_coords))):
@@ -47,7 +68,6 @@ class EntitySpawner:
                 ResourceItem.CANNED_FOOD, ResourceItem.WATER_BOTTLE, ResourceItem.KNIFE,
                 ResourceItem.MONEY, ResourceItem.CLOTHES, ResourceItem.MEDKIT
             ])
-            # Container item representing lootable human corpse
             items_list.append(self.factory.create_item(cx + 0.5, cy + 0.5, ResourceItem.CRATE, amount=1, z=cz, contents={corpse_loot: random.randint(1, 3)}))
 
     def spawn_building_loot(self, items_list: list) -> None:

@@ -4,7 +4,7 @@ import pygame
 from src.world import TileType, TILE_COLORS, BUILDING_COLORS
 
 try:
-    import rust_vulkan_render
+    import rust_engine
     HAS_RUST_VULKAN = True
 except ImportError:
     HAS_RUST_VULKAN = False
@@ -29,7 +29,7 @@ class VulkanBridge:
             return None
 
         if self.rust_dimensions != (map_draw_w, map_draw_h) or self.rust_renderer is None:
-            self.rust_renderer = rust_vulkan_render.VulkanTileRenderer(map_draw_w, map_draw_h, self.tile_size)
+            self.rust_renderer = rust_engine.VulkanTileRenderer(map_draw_w, map_draw_h, self.tile_size)
             self.rust_dimensions = (map_draw_w, map_draw_h)
 
         grid_sub = world.grid[z_idx, min_y:max_y, min_x:max_x]

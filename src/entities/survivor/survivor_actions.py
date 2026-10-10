@@ -3,8 +3,8 @@ import math
 from src.entities.item import ResourceItem, WEAPON_STATS
 from src.world.lighting import DynamicLight
 from src.entities.sensory import NoiseEvent
-from utils.ballistics_utility import BallisticsUtility
-from utils.tile_interaction_utility import TileInteractionUtility
+from src.utils.ballistics_utility import BallisticsUtility
+from src.utils.tile_interaction_utility import TileInteractionUtility
 from src.entities.survivor.survivor_state import EmotionalState
 
 

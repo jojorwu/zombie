@@ -1,5 +1,5 @@
 import collections
-from src.entities.zombie import Zombie, ZombieState
+from src.entities.zombie.zombie_entity import Zombie, ZombieState
 from src.entities.item import ItemEntity
 from src.entities.sensory import NoiseEvent, ScentTrail
 from src.entities.animal import Animal

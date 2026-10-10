@@ -1,47 +1,70 @@
-# Обзор архитектуры
+# Архитектурный обзор проекта (Python + Rust)
 
-## Модульная структура директорий (`src/`)
+## Двойственная архитектура (Python-Rust Hybrid Architecture)
 
-Симуляционный движок структурирован по подпакетам в директории `src/`:
+Проект построен на четком разделении обязанностей между языками:
+1. **Python**: Отвечает исключительно за ИИ нейросети (PyTorch, GRU `BrainNet`, PPO, генетические алгоритмы эволюции) и Gymnasium RL-обертку.
+2. **Rust (`rust_engine`)**: Перевыполняет тяжелые симуляционные вычисления, 3D-поиск пути, физику, световые эффекты, акустику и нативную отрисовку с использованием CPython PyO3 C-API и zero-copy NumPy разделяемой памяти.
 
-### 1. `src/world/`
-- **`grid.py`**: Основной класс `World`, управляющий трехмерной сеткой мира ($X \times Y \times Z$).
-- **`chunk.py`**: `ChunkManager` и состояния `ChunkState`, обеспечивающие динамическую загрузку чанков 16x16, их активацию и привязку многочаноквых зданий.
-- **`generation.py`**: `WorldGenerator` для векторизованной генерации ландшафта, дорожных сеток, зонирования районов, внутренних комнат BSP, подвалов и автомастерских.
-- **`tiles.py`**: Перечисление типов тайлов `TileType`, флаги взаимодействия и модификаторы скорости передвижения (`TILE_SPEED_MODIFIERS`).
-- **`lighting.py`**: `LightingManager`, рассчитывающий зенитный угол солнца, 29.5-дневный лунный цикл, динамические источники света и туман войны (`compute_fog_of_war`).
-- **`weather.py`**: `WeatherManager`, симулирующий вектор ветра, перемещающиеся дождевые фронты 100x100 и 4-сезонный климат.
+---
 
-### 2. `src/ai/`
-- **`brain_net.py`**: Рекуррентная нейросеть `BrainNet` на PyTorch (GRU), принимающая 57 входных признаков с 64 скрытыми юнитами. Поддерживает бинарное сжатие `.zbrain`.
-- **`brain_actions.py`**: Пакетное матричное умножение тензоров (`batch_get_action_and_movement`) для параллельного вычисления действий выживших.
-- **`pathfinding.py`**: `AStar3D` навигация с приоритетной очередью по 3D-сетке, учитывающая лестницы, люки, двери и окна.
-- **`brain.py`**: Высокоуровневая логика принятия решений и обертки действий выживших.
+## Модульная структура директорий (`src/` и `rust_engine/`)
 
-### 3. `src/entities/`
-- **`survivor/`**: Сущность выжившего (`Survivor`), алгоритмы оптимизации лута (`survivor_looting.py`) и крафтинг.
-- **`zombie/`**: ИИ зомби (`zombie_entity.py`), светочувствительное зрение (`zombie_perception.py`), акустический отклик, отслеживание запахов и стайный флоккинг (`zombie_flock.py`).
-- **`animal.py`**: Базовый класс `Animal` и сущность крысы (`Rat`) с высокой скоростью навигации в зданиях и обыском мусорок.
-- **`vehicle.py`**: Транспортные средства (`Vehicle`), модульные детали `VehiclePart` в стиле CDDA, векторная физика (`VehiclePhysics`) и столкновения.
-- **`item.py`**: `ResourceItem`, свойства баллистики, уровни качества металла (`MetalQuality`) и скоропортящиеся продукты.
-- **`factory.py`**: `EntityFactory` с пулом объектов (`ObjectPool`) для зомби, запахов, шумов, предметов и животных.
-- **`health.py`**: Анатомическая модель здоровья (`AnatomicalHealth`), отслеживающая состояние головы, торса и конечностей, травмы и расчленение.
-- **`state_manager.py`**: `FurnitureStateManager` и `ItemStateManager` для отслеживания состояния мебели, прочности, вместимости инвентаря в стиле Project Zomboid (`capacity_kg`) и содержимого контейнеров.
+### 1. Rust C-Extension Crate (`rust_engine/`)
+- **`compute_a_star_3d_path`**: Полноценный 3D A* поиск пути по 3D-сетке `[num_levels, height, width]`, учитывающий лестницы, люки, стены и ломаемые тайлы (двери, окна).
+- **`compute_zombie_flock_steering`**: Векторное стайное руление ордой зомби по разделяемой памяти NumPy.
+- **`check_line_of_sight_rust` & `compute_fog_of_war_rust`**: Быстрый рэйкастинг линии видимости и тумана войны с учетом угловых конусов обзора и типа стен.
+- **`RustVehiclePhysics`**: CDDA-физика транспорта, инерция, торможение, расход топлива и столкновения с зомби/стенами.
+- **`RustAcousticSystem`**: Симуляция распространения децибел шума в 3D-пространстве с геом-затуханием.
+- **`RustAnatomicalHealth`**: Анатомическая модель здоровья (голова, торс, конечности), кровотечение и травматические штрафы к скорости.
+- **`RustEnvironmentManager`**: Солнечный зенит, температура, ветер и сезонная климатология.
+- **`RustLuaModManager`**: Нативный движок выполнения скриптов Lua 5.4 через `mlua`.
+- **`RustContainerUtility` & `RustBallisticsUtility`**: Вычисление вместимости инвентаря, траекторий пуль и порчи продуктов (`RustFoodSpoilageUtility`).
+- **`VulkanTileRenderer`**: Высокоскоростная генерация кадров viewport тайлов.
 
-### 4. `src/simulation/`
-- **`engine.py`**: `SimulationEngine` симуляционного цикла, обновление чанков, спавн предметов и сброс поколений.
-- **`spawner.py`**: `EntitySpawner` для процедурного размещения сущностей.
-- **`environment.py`**: Распространение экологических и физических событий.
+---
 
-### 5. `src/ui/`
-- **`renderer.py`**: `RendererUI` отрисовки Pygame с отсечением по камере и переключением тем.
-- **`hud_renderer.py`**: Отрисовка HUD (здоровье, эмоции, время, погода, инвентарь).
-- **`vulkan_bridge.py`**: `VulkanBridge` взаимодействия с нативным Rust Vulkan рендерером (`rust_vulkan_render`).
-- **`menu.py`**: Главное меню `MainMenuUI` для настройки параметров мира.
-- **`camera.py`**: `Camera` панорамирования и зумирования.
+### 2. Python AI & Simulation Layers (`src/`)
 
-### 6. `src/modding/`
-- **`manager.py`**: `LuaModManager` для загрузки и выполнения скриптов Lua из `mods/` с использованием `lupa`, экспортирующий API `ContainerUtility`.
+#### A. `src/ai/` (ИИ и Нейросети)
+- **`brain_net.py`**: Рекуррентная нейросеть `BrainNet` на PyTorch (GRU, 57 входов, 13 действий) с бинарным FP16 сжатием `.zbrain`.
+- **`brain_actions.py`**: Пакетное матричное умножение тензоров (`batch_get_action_and_movement`) для параллельного вывода нейросетей.
+- **`pathfinding.py`**: `AStar3D` обертка над нативной Rust-функцией `compute_a_star_3d_path`.
+- **`hierarchical_ai.py`**: Иерархический планировщик целей `HierarchicalDecisionPlanner` (`SURVIVE`, `FLEE`, `ATTACK`, `LOOT`, `SHELTER`).
+- **`gym_env.py`**: Gymnasium-совместимая среда `SurvivorGymEnv` для обучения PPO-агентов.
 
-### 7. `utils/`
-Модули утилит: `container_utility.py` (инвентарь, вес предметов и вместимость контейнеров в стиле Project Zomboid), `tile_interaction_utility.py`, `p_np_math.py`, `vehicle_utility.py`, `ballistics_utility.py`, `food_spoilage_utility.py`, `electricity_utility.py`, `sound_utility.py`, `item_state_utility.py`, `mod_utility.py`, `dev_utility.py`, `memory_monitor_utility.py`, `plant_utility.py`, `animal_utility.py` и `pathfinding_utility.py`.
+#### B. `src/world/` (Мир и Освещение)
+- **`grid.py`**: Класс `World` с трехуровневой пространственной хэш-сеткой ($X \times Y \times Z$), NumPy массивом для $Z=0$ и автоматическим кэшированием `get_3d_grid_array()`.
+- **`chunk.py`**: `ChunkManager` динамической загрузки 16x16 чанков.
+- **`generation.py`**: `WorldGenerator` процедурного зонирования районов, генерации рек, BSP-комнат, Graph Grammar и WFC-мебели.
+- **`lighting.py`**: `LightingEngine` с оберткой над нативным туманом войны Rust.
+- **`weather.py`**: `WeatherManager` климатических фронтов и температуры.
+
+#### C. `src/entities/` (Сущности)
+- **`survivor/`**: Сущность выжившего `Survivor`, метаболизм (`metabolism.py`) и алгоритмы лута (`survivor_looting.py`).
+- **`zombie/`**: Зомби `Zombie`, слух, зрение (`zombie_perception.py`) и стайное поведение (`zombie_flock.py`).
+- **`vehicle.py`**: Модульный транспорт `Vehicle` с интеграцией `RustVehiclePhysics`.
+- **`health.py`**: `AnatomicalHealth` с интеграцией `RustAnatomicalHealth`.
+- **`item.py`**: Внутриигровые предметы, баллистика и качество металла.
+- **`factory.py`**: `EntityFactory` с O(1) пулом объектов `ObjectPool`.
+
+#### D. `src/simulation/` (Ядро Симуляции)
+- **`engine.py`**: `SimulationEngine` координации тиков мира, связи с `PythonRustEngineBridge` и генетической эволюции `GeneticEvolutionManager`.
+- **`rust_engine.py`**: `PythonRustEngineBridge` интерфейса нулевого копирования данных между Python и Rust.
+- **`event_bus.py` & `systems.py`**: Шина событий `EventBus` и ECS-системы (`AcousticSystem`, `InfectionSystem`, `ParticleSystem`).
+
+#### E. `src/ui/` (Пользовательский Интерфейс)
+- **`renderer.py`**: Pygame интерфейс `RendererUI` с темами и интеграцией Vulkan моста (`vulkan_bridge.py`).
+- **`hud_renderer.py`**: Отрисовка HUD показателей здоровья, времени, погоды и чата.
+- **`menu.py`**: Главное меню `MainMenuUI` с настройкой генерации мира.
+
+---
+
+### 3. Моддинг и Утилиты (`src/modding/` и `utils/`)
+- **`src/modding/manager.py`**: `LuaModManager` с поддержкой `lupa` и `RustLuaModManager`.
+- **`utils/`**:
+  - `container_utility.py`: Инвентарь Project Zomboid style с `RustContainerUtility`.
+  - `ballistics_utility.py`: Баллистика с `RustBallisticsUtility`.
+  - `food_spoilage_utility.py`: Скоропортящиеся продукты с `RustFoodSpoilageUtility`.
+  - `tile_interaction_utility.py`: Забаррикадирование, разборка мебели и взлом замков.
+  - `p_np_math.py`: Оптимизация инвентаря рюкзаков через алгоритм Кнапсака.

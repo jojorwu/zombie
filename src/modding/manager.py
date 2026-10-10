@@ -1,8 +1,14 @@
 import os
 import glob
 import sys
-from utils.container_utility import ContainerUtility
-from utils.ballistics_utility import BallisticsUtility
+from src.utils.container_utility import ContainerUtility
+from src.utils.ballistics_utility import BallisticsUtility
+
+try:
+    from rust_engine import RustLuaModManager
+    HAS_RUST_LUA = True
+except ImportError:
+    HAS_RUST_LUA = False
 
 try:
     import lupa
@@ -27,6 +33,8 @@ class LuaModManager:
     def __init__(self, mods_dir="mods"):
         self.mods_dir = mods_dir
         self.mods = {}
+        self.rust_lua = RustLuaModManager() if HAS_RUST_LUA else None
+
         if HAS_LUPA:
             try:
                 self.lua = LuaRuntime(unpack_returned_tuples=True)
@@ -70,6 +78,10 @@ class LuaModManager:
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     lua_code = f.read()
+
+                if self.rust_lua:
+                    self.rust_lua.load_mod_script(lua_code)
+
                 if HAS_LUPA and not isinstance(self.lua, FallbackLuaRuntime):
                     self.lua.execute(lua_code)
                     mod_load_fn = self.lua.eval("on_mod_load")
@@ -81,6 +93,9 @@ class LuaModManager:
                 print(f"[LuaModManager] Failed to load mod {mod_name}: {e}")
 
     def trigger_event(self, event_name, *args):
+        if self.rust_lua and args and isinstance(args[0], int):
+            self.rust_lua.trigger_event(event_name, args[0])
+
         if not HAS_LUPA or isinstance(self.lua, FallbackLuaRuntime):
             return None
         try:

@@ -45,9 +45,15 @@ class World:
         # Sparse Spatial Hash Map for non-zero Z levels: {(z_idx, y, x): tile_type_int}
         self.sparse_z_grid = {}
 
+        self._cached_3d_grid = None
+        self._grid_dirty = True
+
         self.building_grid = {}
         self.buildings = []
         self.generate_world()
+
+    def invalidate_grid_cache(self):
+        self._grid_dirty = True
 
     @property
     def grid(self):
@@ -58,6 +64,16 @@ class World:
                 self.z_idx = z_idx
                 self.shape = (world.height, world.width)
 
+            def __eq__(self, other):
+                val = other.value if hasattr(other, 'value') else int(other)
+                if self.z_idx == self.world.z_to_idx(0):
+                    return self.world.ground_grid == val
+                arr = np.zeros(self.shape, dtype=int)
+                for (z, y, x), tile_val in self.world.sparse_z_grid.items():
+                    if z == self.z_idx:
+                        arr[y, x] = tile_val
+                return arr == val
+
             def __getitem__(self, key):
                 if self.z_idx == self.world.z_to_idx(0):
                     return self.world.ground_grid[key]
@@ -67,6 +83,7 @@ class World:
                 return 0
 
             def __setitem__(self, key, value):
+                self.world.invalidate_grid_cache()
                 tile_val = value.value if hasattr(value, 'value') else int(value)
                 if self.z_idx == self.world.z_to_idx(0):
                     self.world.ground_grid[key] = tile_val
@@ -84,6 +101,7 @@ class World:
                                 self.world.sparse_z_grid[(self.z_idx, y_curr, x_curr)] = tile_val
 
             def fill(self, val):
+                self.world.invalidate_grid_cache()
                 tile_val = val.value if hasattr(val, 'value') else int(val)
                 if self.z_idx == self.world.z_to_idx(0):
                     self.world.ground_grid.fill(tile_val)
@@ -103,6 +121,7 @@ class World:
                 self.dtype = int
 
             def fill(self, val):
+                self.world.invalidate_grid_cache()
                 tile_val = val.value if hasattr(val, 'value') else int(val)
                 self.world.ground_grid.fill(tile_val)
                 self.world.sparse_z_grid.clear()
@@ -122,10 +141,10 @@ class World:
                     if len(key) == 3:
                         z_idx, y, x = key
                         if isinstance(z_idx, slice) or isinstance(y, slice) or isinstance(x, slice):
-                            ys = range(self.world.height) if isinstance(y, slice) else [y]
-                            xs = range(self.world.width) if isinstance(x, slice) else [x]
-                            zs = [z_idx] if not isinstance(z_idx, slice) else range(self.world.num_levels)
-                            res = np.zeros((len(zs), len(ys) if isinstance(y, slice) else 1, len(xs) if isinstance(x, slice) else 1), dtype=int)
+                            ys = list(range(self.world.height)[y]) if isinstance(y, slice) else [y]
+                            xs = list(range(self.world.width)[x]) if isinstance(x, slice) else [x]
+                            zs = list(range(self.world.num_levels)[z_idx]) if isinstance(z_idx, slice) else [z_idx]
+                            res = np.zeros((len(zs), len(ys), len(xs)), dtype=int)
                             for i, z_curr in enumerate(zs):
                                 if z_curr == self.world.z_to_idx(0):
                                     res[i] = self.world.ground_grid[y, x]
@@ -144,6 +163,7 @@ class World:
                 return LayerProxy(self.world, self.world.z_to_idx(0))
 
             def __setitem__(self, key, value):
+                self.world.invalidate_grid_cache()
                 tile_val = value.value if hasattr(value, 'value') else int(value)
                 if isinstance(key, int):
                     LayerProxy(self.world, key).fill(tile_val)
@@ -153,9 +173,9 @@ class World:
                     if len(key) == 3:
                         z_idx, y, x = key
                         if isinstance(z_idx, slice) or isinstance(y, slice) or isinstance(x, slice):
-                            ys = range(self.world.height) if isinstance(y, slice) else [y]
-                            xs = range(self.world.width) if isinstance(x, slice) else [x]
-                            zs = [z_idx] if not isinstance(z_idx, slice) else range(self.world.num_levels)
+                            ys = list(range(self.world.height)[y]) if isinstance(y, slice) else [y]
+                            xs = list(range(self.world.width)[x]) if isinstance(x, slice) else [x]
+                            zs = list(range(self.world.num_levels)[z_idx]) if isinstance(z_idx, slice) else [z_idx]
                             for z_curr in zs:
                                 if z_curr == self.world.z_to_idx(0):
                                     self.world.ground_grid[y, x] = tile_val
@@ -179,6 +199,17 @@ class World:
                         LayerProxy(self.world, z_idx)[slice_spec] = tile_val
 
         return GridProxy(self)
+
+    def get_3d_grid_array(self) -> np.ndarray:
+        """Returns cached dense 3D NumPy array [num_levels, height, width] of tile integers for Rust C-API."""
+        if getattr(self, '_cached_3d_grid', None) is None or getattr(self, '_grid_dirty', True):
+            arr = np.zeros((self.num_levels, self.height, self.width), dtype=np.int64)
+            arr[self.z_to_idx(0)] = self.ground_grid.astype(np.int64)
+            for (z, y, x), val in self.sparse_z_grid.items():
+                arr[z, y, x] = val
+            self._cached_3d_grid = arr
+            self._grid_dirty = False
+        return self._cached_3d_grid
 
     def z_to_idx(self, z):
         return max(0, min(self.num_levels - 1, int(z) - self.z_min))

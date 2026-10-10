@@ -8,7 +8,7 @@ from src.entities.survivor.survivor_state import EmotionalState
 from src.entities.survivor.survivor_looting import SurvivorLooting
 from src.entities.survivor.survivor_actions import SurvivorActions
 from src.entities.survivor.metabolism import MetabolicBalanceSimulator
-from utils.container_utility import ContainerUtility
+from src.utils.container_utility import ContainerUtility
 
 
 class Survivor:

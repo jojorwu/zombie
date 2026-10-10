@@ -1,12 +1,21 @@
 from typing import List
 from src.simulation.event_bus import EventBus, NoiseEmittedEvent, InfectionProgressEvent, DamageDealtEvent
 
+try:
+    from rust_engine import RustAcousticSystem, RustParticleSystem
+    RUST_ACOUSTIC_AVAILABLE = True
+    RUST_PARTICLES_AVAILABLE = True
+except ImportError:
+    RUST_ACOUSTIC_AVAILABLE = False
+    RUST_PARTICLES_AVAILABLE = False
+
 
 class AcousticSystem:
     """ECS Acoustic System processing published noise propagation events."""
     def __init__(self, event_bus: EventBus):
         self.event_bus = event_bus
         self.active_noises: List[dict] = []
+        self.rust_acoustics = RustAcousticSystem() if RUST_ACOUSTIC_AVAILABLE else None
         self.event_bus.subscribe(NoiseEmittedEvent, self.handle_noise)
 
     def _handle_noise(self, event: NoiseEmittedEvent):
@@ -17,6 +26,13 @@ class AcousticSystem:
 
     def handle_noise(self, event: NoiseEmittedEvent):
         self._handle_noise(event)
+
+    def calculate_noise_at(self, src_x: float, src_y: float, src_z: int, vol: float, target_x: float, target_y: float, target_z: int) -> float:
+        if self.rust_acoustics:
+            return RustAcousticSystem.propagate_noise_decibels(src_x, src_y, src_z, vol, target_x, target_y, target_z)
+        import math
+        dist = math.hypot(target_x - src_x, target_y - src_y) + abs(src_z - target_z) * 2.0
+        return max(0.0, vol - dist)
 
 
 class InfectionSystem:
@@ -35,6 +51,10 @@ class ParticleSystem:
     def __init__(self, event_bus: EventBus):
         self.event_bus = event_bus
         self.particles: List[dict] = []
+        self.rust_particles = RustParticleSystem() if RUST_PARTICLES_AVAILABLE else None
 
     def spawn_shatter_particles(self, x: float, y: float, z: int):
+        if self.rust_particles:
+            self.rust_particles.spawn_particles(float(x), float(y), int(z), 8, 10)
+            self.rust_particles.tick()
         self.particles.append({"x": x, "y": y, "z": z, "type": "glass_shatter", "lifetime": 10})

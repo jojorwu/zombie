@@ -157,7 +157,8 @@ class HierarchicalDecisionPlanner:
             if hasattr(world, 'building_grid') and world.building_grid:
                 bx, by = survivor.x, survivor.y
                 min_b_dist = 999.0
-                for (x, y) in world.building_grid.keys():
+                for k in world.building_grid.keys():
+                    x, y = k[0], k[1]
                     d = math.hypot(x - survivor.x, y - survivor.y)
                     if d < min_b_dist:
                         min_b_dist = d

@@ -4,10 +4,12 @@ import numpy as np
 from src.ai.brain_net import DEVICE
 
 try:
-    from rust_engine import check_line_of_sight_rust
+    from rust_engine import check_line_of_sight_rust, RustBrainInference
     RUST_LOS_AVAILABLE = True
+    RUST_BRAIN_AVAILABLE = True
 except ImportError:
     RUST_LOS_AVAILABLE = False
+    RUST_BRAIN_AVAILABLE = False
 
 
 def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens: list) -> list:

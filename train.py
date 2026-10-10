@@ -9,6 +9,12 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from src.simulation.engine import SimulationEngine
 from src.ai.brain_net import DEVICE
 
+try:
+    import rust_engine
+    HAS_RUST_PARALLEL = hasattr(rust_engine, "RustParallelEnvManager")
+except ImportError:
+    HAS_RUST_PARALLEL = False
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Autonomous High-Speed AI Brain Training Engine")
@@ -17,6 +23,7 @@ def parse_args():
     parser.add_argument("--zombies", type=int, default=100, help="Number of zombies spawned")
     parser.add_argument("--map-size", type=int, default=200, help="Width and height of the simulation world")
     parser.add_argument("--max-ticks", type=int, default=108000, help="Max ticks per generation (1 month = 108,000 ticks)")
+    parser.add_argument("--parallel-envs", type=int, default=1, help="Number of parallel environments for Rust multi-threading")
     parser.add_argument("--output", type=str, default="best_brain.zbrain", help="Output compressed model filename")
     return parser.parse_args()
 
@@ -33,8 +40,26 @@ def main():
     print(f"Zombie Count        : {args.zombies}")
     print(f"Map Size            : {args.map_size}x{args.map_size}")
     print(f"Max Gen Ticks       : {args.max_ticks} (1 Month)")
+    print(f"Parallel Envs (Rust): {args.parallel_envs} (Parallelism: {'Enabled' if args.parallel_envs > 1 and HAS_RUST_PARALLEL else 'Single Core'})")
     print(f"Output Model File   : {args.output}")
     print("-" * 65)
+
+    if args.parallel_envs > 1 and HAS_RUST_PARALLEL:
+        print(f"\n[Multi-Env Engine] Launching {args.parallel_envs} parallel simulation worlds in Rust via Rayon...")
+        manager = rust_engine.RustParallelEnvManager(
+            args.parallel_envs, args.map_size, args.map_size, args.survivors, args.zombies
+        )
+        start_time = time.time()
+        dummy_actions = [[0] * args.survivors for _ in range(args.parallel_envs)]
+        dummy_moves = [[(0.0, 0.0)] * args.survivors for _ in range(args.parallel_envs)]
+
+        print("[Multi-Env Engine] Running benchmark step across parallel environments...")
+        step_start = time.time()
+        for _ in range(100):
+            obs = manager.step_all_parallel(dummy_actions, dummy_moves)
+        step_dur = time.time() - step_start
+        print(f"[Multi-Env Engine] 100 parallel steps executed in {step_dur:.3f} s ({(100 * args.parallel_envs) / step_dur:.1f} total env-steps/s)")
+        print(f"[Multi-Env Engine] Observation matrix shape: {obs.shape}")
 
     sim_config = {
         "simulation": {

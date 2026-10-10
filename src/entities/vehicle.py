@@ -1,5 +1,4 @@
 import math
-from src.utils.container_utility import ContainerUtility
 
 try:
     from rust_engine import RustVehiclePhysics
@@ -197,10 +196,16 @@ class Vehicle:
                 self.driver.x, self.driver.y, self.driver.z = self.x, self.y, self.z
 
     def store_in_trunk(self, item_type: str, amount: int = 1) -> bool:
-        """Stores items in vehicle trunk using Project Zomboid ContainerUtility weight rules."""
-        success, added = ContainerUtility.add_item_to_container(self, item_type, amount)
-        return success
+        """Stores items in vehicle trunk."""
+        self.trunk_inventory[item_type] = self.trunk_inventory.get(item_type, 0) + amount
+        return True
 
     def take_from_trunk(self, item_type: str, amount: int = 1) -> int:
-        """Takes items from vehicle trunk using ContainerUtility."""
-        return ContainerUtility.remove_item_from_container(self, item_type, amount)
+        """Takes items from vehicle trunk."""
+        curr = self.trunk_inventory.get(item_type, 0)
+        taken = min(curr, amount)
+        if taken > 0:
+            self.trunk_inventory[item_type] -= taken
+            if self.trunk_inventory[item_type] <= 0:
+                del self.trunk_inventory[item_type]
+        return taken

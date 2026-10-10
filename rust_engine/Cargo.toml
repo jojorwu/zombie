@@ -12,3 +12,4 @@ pyo3 = { version = "0.20", features = ["extension-module"] }
 numpy = "0.20"
 mlua = { version = "0.9", features = ["lua54", "vendored"] }
 rand = "0.8"
+rayon = "1.8"

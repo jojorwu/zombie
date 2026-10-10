@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
+use crate::world::RustWorldGrid;
 
-/// Native Vehicle Physics in Rust.
+/// Native Vehicle Physics & High-Momentum Wall Breaching in Rust.
 #[pyclass]
 pub struct RustVehiclePhysics {
     #[pyo3(get, set)]
@@ -66,5 +67,33 @@ impl RustVehiclePhysics {
         } else {
             (false, 0.0)
         }
+    }
+
+    /// Checks high-momentum vehicle wall/door breaching on world grid.
+    /// If vehicle momentum >= 120.0, breaches walls and locked doors, replacing them with floor tiles.
+    pub fn check_wall_breach(&mut self, grid: &mut RustWorldGrid, z: i32) -> (bool, i32, i32) {
+        let speed = (self.vx * self.vx + self.vy * self.vy).sqrt();
+        let momentum = self.mass * speed;
+
+        let tx = (self.x + self.vx) as i32;
+        let ty = (self.y + self.vy) as i32;
+
+        let tile = grid.get_tile(tx, ty, z);
+        // Breachable tiles: BUILDING_WALL (2), DOOR (7), WINDOW (49), SANDBAG (62)
+        if matches!(tile, 2 | 7 | 49 | 62) {
+            if momentum >= 120.0 {
+                // Breach wall/obstacle, turn into floor (3)
+                grid.set_tile(tx, ty, z, 3);
+                // Apply momentum dampening on impact
+                self.vx *= 0.4;
+                self.vy *= 0.4;
+                return (true, tx, ty);
+            } else {
+                // Insufficient momentum: bounce back
+                self.vx = -self.vx * 0.3;
+                self.vy = -self.vy * 0.3;
+            }
+        }
+        (false, 0, 0)
     }
 }

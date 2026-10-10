@@ -47,4 +47,24 @@ impl RustTileInteractionUtility {
 
         (new_vehicle_fuel, new_canister_fuel)
     }
+
+    #[staticmethod]
+    pub fn evaluate_vehicle_crash_impact(vehicle_mass: f32, speed: f32, tile_type: i64) -> (bool, f32, bool) {
+        let momentum = vehicle_mass * speed;
+        // Breachable obstacles: WALL (2), DOOR (7), WINDOW (49), SANDBAG (62)
+        let is_breachable = matches!(tile_type, 2 | 7 | 49 | 62);
+        if is_breachable && momentum >= 120.0 {
+            let damage_to_vehicle = 10.0 + (momentum / 50.0);
+            (true, damage_to_vehicle, true)
+        } else {
+            (false, 5.0, false)
+        }
+    }
+
+    #[staticmethod]
+    pub fn evaluate_horde_pressure(zombie_count: u32, tile_type: i64) -> bool {
+        // Locked door (7), barricade (62, 63), window (49) breached if >= 3 zombies push
+        let is_destructible = matches!(tile_type, 7 | 49 | 62 | 63);
+        is_destructible && zombie_count >= 3
+    }
 }

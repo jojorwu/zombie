@@ -106,7 +106,7 @@ class RendererUI:
 
         if self.vulkan_bridge.is_available:
             viewport_surf = self.vulkan_bridge.render_viewport(
-                self.sim.world, cur_z, z_idx, min_x, max_x, min_y, max_y, map_draw_w, map_draw_h, light, visible_tiles
+                self.sim.world, cur_z, z_idx, min_x, max_x, min_y, max_y, map_draw_w, map_draw_h, light, visible_tiles, self.sim
             )
             if viewport_surf:
                 self.screen.blit(viewport_surf, (0, 0))

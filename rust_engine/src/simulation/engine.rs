@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use numpy::{PyArray1, PyArray2, PyArray3, IntoPyArray, PyReadonlyArray1};
 use rayon::prelude::*;
+use std::collections::HashMap;
 use crate::world::RustWorldGrid;
 use crate::entities::{RustSurvivorEntity, RustZombieEngine};
 use crate::systems::RustAcousticSystem;
@@ -292,6 +293,9 @@ impl RustFullSimulationCore {
             steerings[i] = (sep_x, sep_y);
         }
 
+        // Track zombie pressure against door/barricade tiles
+        let mut tile_pressure: HashMap<(i32, i32, i32), usize> = HashMap::new();
+
         // Move zombies and check bite attacks
         for (i, zombie) in self.zombies.iter_mut().enumerate() {
             if !zombie.is_alive {
@@ -344,6 +348,11 @@ impl RustFullSimulationCore {
                     if self.world_grid.is_walkable(new_zx, new_zy, zombie.z) {
                         zombie.x = new_zx;
                         zombie.y = new_zy;
+                    } else {
+                        // Accumulate pressure on blocked obstacle tile
+                        let obstacle_x = new_zx as i32;
+                        let obstacle_y = new_zy as i32;
+                        *tile_pressure.entry((obstacle_x, obstacle_y, zombie.z)).or_insert(0) += 1;
                     }
                 }
             }
@@ -358,6 +367,17 @@ impl RustFullSimulationCore {
                             surv.is_alive = false;
                         }
                     }
+                }
+            }
+        }
+
+        // Apply horde pressure: breach obstacles pushed by >= 3 zombies
+        for ((ox, oy, oz), pressure) in tile_pressure {
+            if pressure >= 3 {
+                let tile = self.world_grid.get_tile(ox, oy, oz);
+                // Locked door (7), barricades (62, 63), window (49)
+                if matches!(tile, 7 | 49 | 62 | 63) {
+                    self.world_grid.set_tile(ox, oy, oz, 3); // Replace with floor
                 }
             }
         }

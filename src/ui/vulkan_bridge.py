@@ -81,11 +81,11 @@ class VulkanBridge:
                 b_bytes,
                 self.palette,
                 light_factor,
-                fog_bytes,
                 survivors,
                 zombies,
                 vehicles,
-                items
+                items,
+                fog_bytes
             )
         else:
             pixel_buf = self.rust_renderer.render_viewport_bytes(

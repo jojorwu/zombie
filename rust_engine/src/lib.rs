@@ -1,11 +1,14 @@
 use pyo3::prelude::*;
 
+pub mod ai;
 pub mod entities;
 pub mod modding;
 pub mod renderer;
 pub mod simulation;
 pub mod systems;
 pub mod world;
+
+use ai::RustBrainInference;
 
 use entities::{
     RustAnatomicalHealth, RustContainerUtility, RustEntityManager, RustFoodSpoilageUtility, RustSurvivorEntity,
@@ -24,6 +27,7 @@ use world::{check_line_of_sight_rust, compute_fog_of_war_rust, RustWorldGenerato
 #[pymodule]
 fn rust_engine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VulkanTileRenderer>()?;
+    m.add_class::<RustBrainInference>()?;
     m.add_class::<RustWorldGenerator>()?;
     m.add_class::<RustWorldGrid>()?;
     m.add_class::<RustChunkManager>()?;

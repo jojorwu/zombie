@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
-use numpy::{PyArray1, PyArray2, IntoPyArray, PyReadonlyArray1};
+use numpy::{PyArray1, PyArray2, PyArray3, IntoPyArray, PyReadonlyArray1};
+use rayon::prelude::*;
 use crate::world::RustWorldGrid;
 use crate::entities::{RustSurvivorEntity, RustZombieEngine};
 use crate::systems::RustAcousticSystem;
@@ -71,6 +72,7 @@ impl RustEngineCore {
 }
 
 /// Native Full Simulation Core in Rust.
+#[derive(Clone)]
 #[pyclass]
 pub struct RustFullSimulationCore {
     pub width: usize,
@@ -437,5 +439,97 @@ impl RustFullSimulationCore {
 
     pub fn get_current_tick(&self) -> u64 {
         self.current_tick
+    }
+}
+
+/// Multi-Environment Parallel Simulation Manager for High-Speed PPO Reinforcement Learning.
+/// Runs N independent simulation environments in parallel threads via Rayon without Python GIL overhead.
+#[pyclass]
+pub struct RustParallelEnvManager {
+    num_envs: usize,
+    num_survivors_per_env: usize,
+    envs: Vec<RustFullSimulationCore>,
+}
+
+#[pymethods]
+impl RustParallelEnvManager {
+    #[new]
+    pub fn new(num_envs: usize, width: usize, height: usize, num_survivors: usize, num_zombies: usize) -> Self {
+        let mut envs = Vec::with_capacity(num_envs);
+        for _ in 0..num_envs {
+            envs.push(RustFullSimulationCore::new(width, height, num_survivors, num_zombies));
+        }
+        RustParallelEnvManager {
+            num_envs,
+            num_survivors_per_env: num_survivors,
+            envs,
+        }
+    }
+
+    pub fn get_num_envs(&self) -> usize {
+        self.num_envs
+    }
+
+    /// Steps all parallel environments concurrently using Rayon parallel threads while GIL is released.
+    pub fn step_all_parallel<'py>(
+        &mut self,
+        py: Python<'py>,
+        all_actions: Vec<Vec<i32>>,
+        all_movements: Vec<Vec<(f32, f32)>>,
+    ) -> &'py PyArray3<f32> {
+        let num_envs = self.num_envs;
+        let num_survivors = self.num_survivors_per_env;
+
+        let envs = &mut self.envs;
+
+        // Release Python GIL and execute Rayon parallel simulation step
+        py.allow_threads(|| {
+            envs.par_iter_mut().enumerate().for_each(|(i, env)| {
+                let actions = if i < all_actions.len() { all_actions[i].clone() } else { vec![] };
+                let movements = if i < all_movements.len() { all_movements[i].clone() } else { vec![] };
+                env.step_simulation(actions, movements);
+            });
+        });
+
+        // Collect 3D observation tensor (num_envs, num_survivors, 57)
+        let mut total_obs = vec![0.0f32; num_envs * num_survivors * 57];
+
+        for (e_idx, env) in self.envs.iter().enumerate() {
+            let env_offset = e_idx * num_survivors * 57;
+            for (s_idx, surv) in env.survivors.iter().enumerate() {
+                let s_offset = env_offset + s_idx * 57;
+
+                total_obs[s_offset] = surv.hp / 100.0;
+                total_obs[s_offset + 1] = surv.hunger / 100.0;
+                total_obs[s_offset + 2] = surv.thirst / 100.0;
+                total_obs[s_offset + 3] = if surv.is_alive { 1.0 } else { 0.0 };
+                total_obs[s_offset + 4] = env.ambient_light;
+
+                total_obs[s_offset + 20] = (surv.x / env.width as f32).clamp(0.0, 1.0);
+                total_obs[s_offset + 21] = (surv.y / env.height as f32).clamp(0.0, 1.0);
+                total_obs[s_offset + 22] = (surv.z as f32 / 20.0).clamp(-1.0, 1.0);
+                total_obs[s_offset + 23] = (env.current_tick % 3600) as f32 / 3600.0;
+
+                let sx = surv.x as i32;
+                let sy = surv.y as i32;
+                let sz = surv.z;
+                let mut sensor_idx = 32;
+
+                for dy in -2..=2 {
+                    for dx in -2..=2 {
+                        if sensor_idx < 57 {
+                            let tx = sx + dx;
+                            let ty = sy + dy;
+                            let is_walk = if env.world_grid.is_walkable(tx as f32, ty as f32, sz) { 1.0f32 } else { 0.0f32 };
+                            total_obs[s_offset + sensor_idx] = is_walk;
+                            sensor_idx += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        let array3d = numpy::ndarray::Array3::from_shape_vec((num_envs, num_survivors, 57), total_obs).unwrap();
+        array3d.into_pyarray(py)
     }
 }

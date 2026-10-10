@@ -13,7 +13,7 @@ use entities::{
 };
 use modding::RustLuaModManager;
 use renderer::VulkanTileRenderer;
-use simulation::{RustEngineCore, RustFullSimulationCore, RustSpatialGrid};
+use simulation::{RustEngineCore, RustFullSimulationCore, RustParallelEnvManager, RustSpatialGrid};
 use systems::{
     compute_a_star_3d_path, compute_zombie_flock_steering, RustAcousticSystem, RustAnimalUtility,
     RustBallisticsUtility, RustElectricityUtility, RustEnvironmentManager, RustItemStateUtility,
@@ -38,6 +38,7 @@ fn rust_engine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RustFoodSpoilageUtility>()?;
     m.add_class::<RustParticleSystem>()?;
     m.add_class::<RustFullSimulationCore>()?;
+    m.add_class::<RustParallelEnvManager>()?;
     m.add_class::<RustSurvivorEntity>()?;
     m.add_class::<RustPNPComplexityEngine>()?;
     m.add_class::<RustElectricityUtility>()?;

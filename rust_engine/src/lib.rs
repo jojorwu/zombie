@@ -19,11 +19,12 @@ use systems::{
     RustBallisticsUtility, RustElectricityUtility, RustEnvironmentManager, RustItemStateUtility,
     RustPNPComplexityEngine, RustParticleSystem, RustPlantUtility, RustTileInteractionUtility,
 };
-use world::{check_line_of_sight_rust, compute_fog_of_war_rust};
+use world::{check_line_of_sight_rust, compute_fog_of_war_rust, RustWorldGenerator};
 
 #[pymodule]
 fn rust_engine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VulkanTileRenderer>()?;
+    m.add_class::<RustWorldGenerator>()?;
     m.add_class::<RustEngineCore>()?;
     m.add_class::<RustLuaModManager>()?;
     m.add_class::<RustVehiclePhysics>()?;

@@ -5,6 +5,12 @@ from typing import Dict, List
 import numpy as np
 from src.world.tiles import TileType, BuildingType, SettlementType
 
+try:
+    from rust_engine import RustWorldGenerator
+    RUST_WORLD_GEN_AVAILABLE = True
+except ImportError:
+    RUST_WORLD_GEN_AVAILABLE = False
+
 
 class GraphGrammarBuildingGenerator:
     """

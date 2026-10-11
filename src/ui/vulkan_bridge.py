@@ -24,7 +24,7 @@ class VulkanBridge:
     def is_available(self) -> bool:
         return HAS_RUST_VULKAN
 
-    def render_viewport(self, world, cur_z: int, z_idx: int, min_x: int, max_x: int, min_y: int, max_y: int, map_draw_w: int, map_draw_h: int, light: float, visible_tiles: Optional[set]) -> Optional[pygame.Surface]:
+    def render_viewport(self, world, cur_z: int, z_idx: int, min_x: int, max_x: int, min_y: int, max_y: int, map_draw_w: int, map_draw_h: int, light: float, visible_tiles: Optional[set], sim=None) -> Optional[pygame.Surface]:
         if not HAS_RUST_VULKAN:
             return None
 
@@ -53,13 +53,48 @@ class VulkanBridge:
             fog_bytes = None
 
         light_factor = light if cur_z >= 0 else 0.8
-        pixel_buf = self.rust_renderer.render_viewport_bytes(
-            grid_bytes,
-            b_bytes,
-            self.palette,
-            light_factor,
-            fog_bytes
-        )
+
+        if sim is not None and hasattr(self.rust_renderer, 'render_composite_viewport'):
+            survivors = [
+                (s.x - min_x, s.y - min_y, idx == sim.selected_survivor_idx)
+                for idx, s in enumerate(sim.survivors)
+                if s.is_alive and s.z == cur_z and min_x <= s.x <= max_x and min_y <= s.y <= max_y
+            ]
+            zombies = [
+                (z.x - min_x, z.y - min_y)
+                for z in sim.zombies
+                if z.is_alive and z.z == cur_z and min_x <= z.x <= max_x and min_y <= z.y <= max_y
+            ]
+            vehicles = [
+                (v.x - min_x, v.y - min_y)
+                for v in sim.vehicles
+                if v.z == cur_z and min_x <= v.x <= max_x and min_y <= v.y <= max_y
+            ]
+            items = [
+                (it.x - min_x, it.y - min_y)
+                for it in sim.items
+                if not it.collected and it.z == cur_z and min_x <= it.x <= max_x and min_y <= it.y <= max_y
+            ]
+
+            pixel_buf = self.rust_renderer.render_composite_viewport(
+                grid_bytes,
+                b_bytes,
+                self.palette,
+                light_factor,
+                survivors,
+                zombies,
+                vehicles,
+                items,
+                fog_bytes
+            )
+        else:
+            pixel_buf = self.rust_renderer.render_viewport_bytes(
+                grid_bytes,
+                b_bytes,
+                self.palette,
+                light_factor,
+                fog_bytes
+            )
 
         return pygame.image.frombuffer(
             pixel_buf,

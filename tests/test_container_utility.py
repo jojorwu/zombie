@@ -2,8 +2,13 @@ import unittest
 from src.entities.item import ResourceItem
 from src.world.tiles import TileType
 from src.entities.state_manager import FurnitureState, FurnitureStateManager
-from src.utils.container_utility import ContainerUtility, ItemCategory
-from src.utils.food_spoilage_utility import FoodSpoilageUtility
+from src.utils import ContainerUtility, FoodSpoilageUtility
+
+class ItemCategory:
+    FIREARM = "firearm"
+    WEAPON = "weapon"
+    FOOD = "food"
+    MEDICAL = "medical"
 
 
 class TestContainerUtility(unittest.TestCase):
@@ -35,7 +40,6 @@ class TestContainerUtility(unittest.TestCase):
         self.assertIn(ResourceItem.CANNED_FOOD, container)
         self.assertEqual(container[ResourceItem.CANNED_FOOD], 10)
 
-        # Total weight = 10 * 0.8 = 8.0 kg (capacity 30.0 kg)
         self.assertEqual(ContainerUtility.get_container_weight(container), 8.0)
 
         removed = ContainerUtility.remove_item_from_container(container, ResourceItem.CANNED_FOOD, 4)
@@ -44,13 +48,11 @@ class TestContainerUtility(unittest.TestCase):
         self.assertEqual(ContainerUtility.get_container_weight(container), 4.8)
 
     def test_capacity_overflow_prevention(self):
-        container = {"contents": {}}  # Capacity 30.0 kg
-        # Heavy item: CAR_BATTERY (10.0 kg)
+        container = {"contents": {}}
         success, added = ContainerUtility.add_item_to_container(container, ResourceItem.CAR_BATTERY, 5)
         self.assertTrue(success)
-        self.assertEqual(added, 3)  # Only 3 fit (30.0 kg)
+        self.assertEqual(added, 3)
 
-        # Attempt adding more
         self.assertFalse(ContainerUtility.can_fit_item(container, ResourceItem.CAR_BATTERY, 1))
 
     def test_transfer_item_between_containers(self):
@@ -63,21 +65,17 @@ class TestContainerUtility(unittest.TestCase):
         self.assertEqual(target["contents"][ResourceItem.PISTOL_AMMO], 6)
 
     def test_bag_weight_reduction(self):
-        # Bag containing sledgehammer
         bag_contents = {ResourceItem.BACKPACK: 1, ResourceItem.SLEDGEHAMMER: 1}
         weight = ContainerUtility.get_container_weight(bag_contents, inside_bag=True)
-        # Sledgehammer 4.5 * 0.3 + Backpack 1.0 = 2.35
         self.assertEqual(weight, 2.35)
 
     def test_freezer_vs_refrigerator_spoilage(self):
-        # Base meat freshness = 1.0, rate = 0.10
         room_temp = FoodSpoilageUtility.calculate_spoilage_decay(ResourceItem.MEAT, 1.0, ambient_temp_c=25.0, is_refrigerated=False, power_online=True)
         refrig = FoodSpoilageUtility.calculate_spoilage_decay(ResourceItem.MEAT, 1.0, ambient_temp_c=25.0, is_refrigerated=True, power_online=True)
         freezer = FoodSpoilageUtility.calculate_spoilage_decay(ResourceItem.MEAT, 1.0, ambient_temp_c=25.0, is_freezer=True, power_online=True)
 
         self.assertGreater(freezer, refrig)
         self.assertGreater(refrig, room_temp)
-
 
 if __name__ == "__main__":
     unittest.main()

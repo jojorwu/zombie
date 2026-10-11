@@ -12,7 +12,7 @@ class PythonRustEngineBridge:
     """
     Python-Rust Engine Bridge interface.
     Delegates world, entity, physics, and pathfinding logic execution to Rust,
-    providing flat observation arrays for Python neural networks.
+    providing zero-copy flat observation arrays for Python neural networks.
     """
     def __init__(self, width: int = 1000, height: int = 1000, num_survivors: int = 1, num_zombies: int = 20):
         self.width = width
@@ -37,12 +37,60 @@ class PythonRustEngineBridge:
                 int(current_tick)
             )
 
+    def sync_entities_to_rust(self, survivors: list, zombies: list):
+        """Synchronizes Python survivors and zombies into RustFullSimulationCore."""
+        if not self.full_sim_core:
+            return
+        for idx, s in enumerate(survivors):
+            if idx < self.full_sim_core.get_survivors_count():
+                self.full_sim_core.sync_survivor_at(
+                    idx,
+                    float(s.x),
+                    float(s.y),
+                    int(s.z),
+                    float(getattr(s, 'health', 100.0)),
+                    float(getattr(s, 'hunger', 100.0)),
+                    float(getattr(s, 'thirst', 100.0))
+                )
+            else:
+                self.full_sim_core.add_survivor(float(s.x), float(s.y), int(s.z))
+
+        for idx, z in enumerate(zombies):
+            zhp = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
+            if idx < self.full_sim_core.get_zombies_count():
+                self.full_sim_core.sync_zombie_at(
+                    idx,
+                    float(z.x),
+                    float(z.y),
+                    int(z.z),
+                    zhp
+                )
+            else:
+                self.full_sim_core.add_zombie(float(z.x), float(z.y), int(z.z), zhp, float(getattr(z, 'speed', 0.08)))
+
     def step_full_simulation(self, actions: list, movements: list) -> np.ndarray:
         """Executes full simulation step in Rust and returns 2D observation tensor for PyTorch."""
         if self.full_sim_core:
             self.full_sim_core.step_simulation(actions, movements)
             return self.full_sim_core.get_observations_matrix()
         return np.zeros((len(actions), 57), dtype=np.float32)
+
+    def sync_rust_to_entities(self, survivors: list, zombies: list):
+        """Synchronizes updated positions and vitals back from Rust to Python entities."""
+        if not self.full_sim_core:
+            return
+        for idx, s in enumerate(survivors):
+            if idx < self.full_sim_core.get_survivors_count():
+                rx, ry, rz = self.full_sim_core.get_survivor_pos(idx)
+                s.x, s.y, s.z = rx, ry, rz
+
+        for idx, z in enumerate(zombies):
+            if idx < self.full_sim_core.get_zombies_count():
+                zx, zy, zz, zhp, zalive = self.full_sim_core.get_zombie_pos(idx)
+                z.x, z.y, z.z = zx, zy, zz
+                z.hp = zhp
+                z.health = zhp
+                z.is_alive = zalive
 
     def step(self, dx: float = 0.0, dy: float = 0.0, action: int = 0) -> Tuple[np.ndarray, bool]:
         """Executes one simulation tick step in Rust and extracts zero-copy observations."""

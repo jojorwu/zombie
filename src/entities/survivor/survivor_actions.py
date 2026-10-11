@@ -3,9 +3,13 @@ import math
 from src.entities.item import ResourceItem, WEAPON_STATS
 from src.world.lighting import DynamicLight
 from src.entities.sensory import NoiseEvent
-from src.utils.ballistics_utility import BallisticsUtility
-from src.utils.tile_interaction_utility import TileInteractionUtility
 from src.entities.survivor.survivor_state import EmotionalState
+from src.utils import TileInteractionUtility
+
+try:
+    from rust_engine import RustBallisticsUtility as BallisticsUtility
+except ImportError:
+    from src.utils.ballistics_utility import BallisticsUtility
 
 
 class SurvivorActions:
@@ -43,7 +47,7 @@ class SurvivorActions:
 
         w_stats = WEAPON_STATS.get(best_weapon, {"damage": 15.0, "range": 1.0, "noise": 4.0})
         attack_range = w_stats["range"]
-        damage = w_stats["damage"] * survivor.body.attack_damage_multiplier
+        damage = w_stats["damage"]
         stype = "pistol_shot"
 
         if is_firearm and ammo_type:
@@ -75,32 +79,30 @@ class SurvivorActions:
             survivor.inventory[ammo_type] -= 1
             world.dynamic_lights.append(DynamicLight(survivor.x, survivor.y, survivor.z, radius=12.0, color=(255, 200, 100), intensity=1.5, lifetime=2))
 
-            # Combine all targets in line of fire for multi-target penetration
             all_targets = [z for z in zombies if z.is_alive] + [a for a in animals if a.is_alive] + [s for s in survivors if s is not survivor and s.is_alive]
 
-            # Raycast ballistics flight with penetration, glass shattering, and ricochets
-            sim_res = BallisticsUtility.simulate_bullet_flight(
-                world,
-                start_x=survivor.x,
-                start_y=survivor.y,
-                start_z=survivor.z,
-                angle_rad=survivor.facing_angle,
-                caliber=caliber,
-                wind_speed_kmh=world.weather.wind_speed,
-                wind_angle_rad=world.weather.wind_angle,
-                targets=all_targets,
-                noise_events=noise_events
-            )
+            if hasattr(BallisticsUtility, 'simulate_bullet_flight'):
+                sim_res = BallisticsUtility.simulate_bullet_flight(
+                    world,
+                    start_x=survivor.x,
+                    start_y=survivor.y,
+                    start_z=survivor.z,
+                    angle_rad=survivor.facing_angle,
+                    caliber=caliber,
+                    wind_speed_kmh=world.weather.wind_speed,
+                    wind_angle_rad=world.weather.wind_angle,
+                    targets=all_targets,
+                    noise_events=noise_events
+                )
 
-            # Award kills and scores for all hit targets
-            for hit in sim_res["hits"]:
-                target = hit["target"]
-                if not getattr(target, 'is_alive', True):
-                    survivor.kills += 1
-                    survivor.score += 25.0
-                    survivor.fear = max(0.0, survivor.fear - 15.0)
-                    survivor.panic = max(0.0, survivor.panic - 20.0)
-                    survivor.morale = min(100.0, survivor.morale + 10.0)
+                for hit in sim_res.get("hits", []):
+                    target = hit.get("target")
+                    if target and not getattr(target, 'is_alive', True):
+                        survivor.kills += 1
+                        survivor.score += 25.0
+                        survivor.fear = max(0.0, survivor.fear - 15.0)
+                        survivor.panic = max(0.0, survivor.panic - 20.0)
+                        survivor.morale = min(100.0, survivor.morale + 10.0)
 
             if noise_events is not None:
                 noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=35.0, source_type=stype))
@@ -151,42 +153,10 @@ class SurvivorActions:
                 return
 
     @staticmethod
-    def repair_vehicle_parts(survivor, vehicle) -> bool:
-        """Repairs vehicle parts if survivor possesses wrench and spare parts."""
-        if not vehicle:
-            return False
-
-        if survivor.inventory.get(ResourceItem.WRENCH, 0) <= 0:
-            return False
-
-        repaired = False
-        if survivor.inventory.get(ResourceItem.ENGINE_PARTS, 0) > 0 and vehicle.parts.get("engine") and vehicle.parts["engine"].hp < vehicle.parts["engine"].max_hp:
-            survivor.inventory[ResourceItem.ENGINE_PARTS] -= 1
-            vehicle.parts["engine"].repair(40.0)
-            repaired = True
-        elif survivor.inventory.get(ResourceItem.SPARE_WHEEL, 0) > 0:
-            for w in ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"]:
-                if w in vehicle.parts and vehicle.parts[w].hp < vehicle.parts[w].max_hp:
-                    survivor.inventory[ResourceItem.SPARE_WHEEL] -= 1
-                    vehicle.parts[w].repair(50.0)
-                    repaired = True
-                    break
-        elif survivor.inventory.get(ResourceItem.CAR_BATTERY, 0) > 0 and vehicle.parts.get("battery") and vehicle.parts["battery"].hp < vehicle.parts["battery"].max_hp:
-            survivor.inventory[ResourceItem.CAR_BATTERY] -= 1
-            vehicle.parts["battery"].repair(60.0)
-            repaired = True
-        elif survivor.inventory.get(ResourceItem.METAL, 0) > 0 and vehicle.parts.get("bumper") and vehicle.parts["bumper"].hp < vehicle.parts["bumper"].max_hp:
-            survivor.inventory[ResourceItem.METAL] -= 1
-            vehicle.parts["bumper"].repair(30.0)
-            repaired = True
-
-        return repaired
-
-    @staticmethod
     def push_furniture(survivor, world, noise_events):
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
-            if TileInteractionUtility.push_furniture(world, fx, fy, survivor.z, dx, dy):
+            if hasattr(TileInteractionUtility, 'push_furniture') and TileInteractionUtility.push_furniture(world, fx, fy, survivor.z, dx, dy):
                 survivor.score += 8.0
                 if noise_events is not None:
                     noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=14.0, source_type="furniture_push"))
@@ -196,9 +166,10 @@ class SurvivorActions:
     def dismantle_furniture(survivor, world, noise_events):
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
-            success, w_amt, m_amt = TileInteractionUtility.dismantle_furniture(world, fx, fy, survivor.z, survivor.inventory)
-            if success:
-                survivor.score += 12.0
-                if noise_events is not None:
-                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=15.0, source_type="dismantling"))
-                break
+            if hasattr(TileInteractionUtility, 'dismantle_furniture'):
+                success, w_amt, m_amt = TileInteractionUtility.dismantle_furniture(world, fx, fy, survivor.z, survivor.inventory)
+                if success:
+                    survivor.score += 12.0
+                    if noise_events is not None:
+                        noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=15.0, source_type="dismantling"))
+                    break

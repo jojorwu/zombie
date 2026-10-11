@@ -1,6 +1,5 @@
 from enum import Enum, auto
 from typing import Dict, Tuple, Optional, Any, List
-from src.utils.container_utility import ContainerUtility
 
 
 class FurnitureCondition(Enum):
@@ -29,23 +28,28 @@ class FurnitureState:
     @property
     def capacity(self) -> float:
         """Returns maximum container capacity in kg for this furniture item."""
+        from src.utils.container_utility import ContainerUtility
         return ContainerUtility.get_container_capacity(self)
 
     @property
     def contents_weight(self) -> float:
         """Calculates total weight in kg of items stored inside this furniture container."""
+        from src.utils.container_utility import ContainerUtility
         return ContainerUtility.get_container_weight(self)
 
     def can_fit_item(self, item_type: str, amount: int = 1) -> bool:
         """Checks if adding amount units of item_type exceeds container capacity."""
+        from src.utils.container_utility import ContainerUtility
         return ContainerUtility.can_fit_item(self, item_type, amount)
 
     def add_item(self, item_type: str, amount: int = 1) -> Tuple[bool, int]:
         """Adds item to container using ContainerUtility capacity rules."""
+        from src.utils.container_utility import ContainerUtility
         return ContainerUtility.add_item_to_container(self, item_type, amount)
 
     def remove_item(self, item_type: str, amount: int = 1) -> int:
         """Removes item from container using ContainerUtility."""
+        from src.utils.container_utility import ContainerUtility
         return ContainerUtility.remove_item_from_container(self, item_type, amount)
 
     def take_damage(self, amount: float) -> bool:

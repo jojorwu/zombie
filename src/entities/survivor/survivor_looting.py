@@ -3,8 +3,15 @@ import math
 from src.entities.item import ResourceItem
 from src.world.tiles import TileType
 from src.entities.sensory import NoiseEvent
-from src.utils.p_np_math import PolynomialKnapsackSolver
-from src.utils.container_utility import ContainerUtility
+from src.utils import ContainerUtility
+
+try:
+    from rust_engine import RustPNPComplexityEngine as PolynomialKnapsackSolver
+except ImportError:
+    class PolynomialKnapsackSolver:
+        @staticmethod
+        def optimize_inventory(items, max_capacity=20):
+            return items[:3]
 
 
 class SurvivorLooting:
@@ -17,7 +24,7 @@ class SurvivorLooting:
         ]
 
         if nearby_items:
-            optimal_subset = PolynomialKnapsackSolver.optimize_inventory(nearby_items, max_capacity=20)
+            optimal_subset = nearby_items
             for item in optimal_subset:
                 if ContainerUtility.can_fit_item(survivor, item.item_type, item.amount):
                     item.collected = True

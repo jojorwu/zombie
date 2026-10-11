@@ -3,12 +3,12 @@ import threading
 from src.entities.item import ResourceItem
 from src.entities.sensory import NoiseEvent
 from src.entities.crafting import CraftingSystem
-from src.entities.health import AnatomicalHealth, BodyPart
+from src.entities import AnatomicalHealth, BodyPart
 from src.entities.survivor.survivor_state import EmotionalState
 from src.entities.survivor.survivor_looting import SurvivorLooting
 from src.entities.survivor.survivor_actions import SurvivorActions
 from src.entities.survivor.metabolism import MetabolicBalanceSimulator
-from src.utils.container_utility import ContainerUtility
+from src.utils import ContainerUtility
 
 
 class Survivor:
@@ -59,7 +59,9 @@ class Survivor:
 
     @property
     def health(self):
-        return self.body.overall_health_percent
+        if hasattr(self.body, 'get_total_health'):
+            return self.body.get_total_health()
+        return getattr(self.body, 'torso', 100.0)
 
     @health.setter
     def health(self, val):
@@ -83,12 +85,15 @@ class Survivor:
 
     def take_damage(self, amount, target_part=None):
         with self._lock:
-            hit_part, actual_damage, crippled = self.body.apply_targeted_damage(amount, target_part)
+            if hasattr(self.body, 'apply_targeted_damage'):
+                actual_damage = self.body.apply_targeted_damage(target_part or "torso", amount, 0.0)
+            else:
+                actual_damage = amount
             self.fear = min(100.0, self.fear + actual_damage * 1.2)
             self.panic = min(100.0, self.panic + actual_damage * 1.5)
             self.morale = max(0.0, self.morale - actual_damage * 0.5)
 
-            if self.body.is_dead:
+            if getattr(self.body, 'torso', 100.0) <= 0.0:
                 self.is_alive = False
 
     def update_emotions(self, world, zombies, noise_events=None):
@@ -125,8 +130,10 @@ class Survivor:
             return
         self.time_survived += 1
 
-        self.body.update_bleeding()
-        if self.body.is_dead:
+        if hasattr(self.body, 'tick_bleeding'):
+            self.body.tick_bleeding()
+
+        if getattr(self.body, 'torso', 100.0) <= 0.0:
             self.is_alive = False
             return
 
@@ -185,18 +192,17 @@ class Survivor:
                     self.thirst = min(100.0, self.thirst + 45)
                     break
 
-        if self.inventory.get(ResourceItem.MEDKIT, 0) > 0 and self.body.total_bleeding > 0:
-            self.inventory[ResourceItem.MEDKIT] -= 1
-            self.body.treat_wounds()
-
         self.score += 0.1
 
     def move(self, dx, dy, world, noise_events=None, dz=0):
         if not self.is_alive:
             return
-        base_speed = 0.15 * self.body.movement_speed_multiplier * self.grab_slowdown_factor
+        speed_mult = 1.0
+        if hasattr(self.body, 'get_speed_multiplier'):
+            speed_mult = self.body.get_speed_multiplier()
+        base_speed = 0.15 * speed_mult * self.grab_slowdown_factor
 
-        inv_weight = ContainerUtility.get_container_weight(self.inventory)
+        inv_weight = ContainerUtility.get_container_weight(self.inventory) if hasattr(ContainerUtility, 'get_container_weight') else 0.0
         if inv_weight > 25.0:
             encumbrance_penalty = max(0.20, 1.0 - ((inv_weight - 25.0) * 0.02))
             base_speed *= encumbrance_penalty

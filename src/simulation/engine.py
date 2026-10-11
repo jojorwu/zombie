@@ -17,7 +17,7 @@ from src.simulation.environment import EnvironmentManager
 from src.simulation.event_bus import EventBus, NoiseEmittedEvent, DamageDealtEvent
 from src.simulation.snapshot import DoubleBufferedStateExchanger
 from src.entities.state_manager import LazyChunkStatePersistence
-from src.simulation.rust_engine import PythonRustEngineBridge, RUST_ENGINE_AVAILABLE
+from src.simulation.bridge import PythonRustEngineBridge, RUST_ENGINE_AVAILABLE
 from src.utils.memory_monitor_utility import MemoryMonitorUtility
 from src.utils.electricity_utility import ElectricityUtility
 

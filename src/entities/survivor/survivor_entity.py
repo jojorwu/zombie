@@ -4,9 +4,17 @@ from src.entities.item import ResourceItem
 from src.entities.sensory import NoiseEvent
 from src.entities.crafting import CraftingSystem
 from src.entities import AnatomicalHealth, BodyPart
-from src.entities.survivor.survivor_state import EmotionalState
 from src.entities.survivor.survivor_looting import SurvivorLooting
-from src.entities.survivor.survivor_actions import SurvivorActions
+
+
+class EmotionalState:
+    CALM = "CALM"
+    CONFIDENT = "CONFIDENT"
+    PANICKED = "PANICKED"
+    TERRIFIED = "TERRIFIED"
+    ENRAGED = "ENRAGED"
+
+
 from src.entities.survivor.metabolism import MetabolicBalanceSimulator
 from src.utils import ContainerUtility
 
@@ -307,6 +315,7 @@ class Survivor:
             self.fear = max(0.0, self.fear - 0.5)
             self.panic = max(0.0, self.panic - 0.8)
         elif action == 6:
+            from src.entities.survivor.survivor_actions import SurvivorActions
             SurvivorActions.attack(self, world, zombies, animals, survivors, noise_events)
         elif action == 7:
             if self.z < world.num_levels - 1 and world.is_walkable(self.x, self.y, self.z + 1):
@@ -319,6 +328,8 @@ class Survivor:
                 if self.in_vehicle:
                     self.in_vehicle.z = self.z
         elif action == 9:
+            from src.entities.survivor.survivor_actions import SurvivorActions
             SurvivorActions.push_furniture(self, world, noise_events)
         elif action == 10:
+            from src.entities.survivor.survivor_actions import SurvivorActions
             SurvivorActions.dismantle_furniture(self, world, noise_events)

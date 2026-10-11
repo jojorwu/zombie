@@ -36,14 +36,18 @@ class SurvivorGymEnv:
     def reset(self) -> Tuple[np.ndarray, Dict[str, Any]]:
         """Resets the simulation environment and returns initial observation."""
         self.engine.reset_generation()
-        survivor = self.engine.survivors[0] if self.engine.survivors else None
-        if survivor:
-            obs = extract_survivor_inputs(
-                survivor, self.engine.world, self.engine.items,
-                self.engine.vehicles, self.engine.zombies, self.engine.animals
-            )
+        if self.engine.rust_bridge and self.engine.rust_bridge.full_sim_core:
+            obs_matrix = self.engine.rust_bridge.full_sim_core.get_observations_matrix()
+            obs = obs_matrix[0] if len(obs_matrix) > 0 else np.zeros(self.observation_space_size, dtype=np.float32)
         else:
-            obs = np.zeros(self.observation_space_size, dtype=np.float32)
+            survivor = self.engine.survivors[0] if self.engine.survivors else None
+            if survivor:
+                obs = extract_survivor_inputs(
+                    survivor, self.engine.world, self.engine.items,
+                    self.engine.vehicles, self.engine.zombies, self.engine.animals
+                )
+            else:
+                obs = np.zeros(self.observation_space_size, dtype=np.float32)
         return obs, {}
 
     def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
@@ -56,12 +60,26 @@ class SurvivorGymEnv:
         prev_visited = len(survivor.visited_tiles)
         prev_kills = survivor.kills
 
-        survivor.update_needs()
-        survivor.perform_action(
-            action, self.engine.world, self.engine.items,
-            self.engine.vehicles, self.engine.zombies, self.engine.animals,
-            self.engine.survivors, noise_events=self.engine.noise_events
-        )
+        if self.engine.rust_bridge and self.engine.rust_bridge.full_sim_core:
+            move_map = {
+                0: (0.0, 0.0), 1: (0.0, -1.0), 2: (0.0, 1.0), 3: (-1.0, 0.0), 4: (1.0, 0.0),
+                5: (0.707, -0.707), 6: (0.707, 0.707), 7: (-0.707, -0.707), 8: (-0.707, 0.707)
+            }
+            dx, dy = move_map.get(action, (0.0, 0.0))
+            obs_matrix = self.engine.rust_bridge.step_full_simulation([action], [(dx, dy)])
+            self.engine.rust_bridge.sync_rust_to_entities(self.engine.survivors, self.engine.zombies)
+            obs = obs_matrix[0] if len(obs_matrix) > 0 else np.zeros(self.observation_space_size, dtype=np.float32)
+        else:
+            survivor.update_needs()
+            survivor.perform_action(
+                action, self.engine.world, self.engine.items,
+                self.engine.vehicles, self.engine.zombies, self.engine.animals,
+                self.engine.survivors, noise_events=self.engine.noise_events
+            )
+            obs = extract_survivor_inputs(
+                survivor, self.engine.world, self.engine.items,
+                self.engine.vehicles, self.engine.zombies, self.engine.animals
+            )
 
         self.engine.world.current_tick += 1
         terminated = not survivor.is_alive
@@ -75,10 +93,5 @@ class SurvivorGymEnv:
             reward += 1.5  # Exploration reward
         if survivor.kills > prev_kills:
             reward += 10.0  # Zombie kill reward
-
-        obs = extract_survivor_inputs(
-            survivor, self.engine.world, self.engine.items,
-            self.engine.vehicles, self.engine.zombies, self.engine.animals
-        )
 
         return obs, reward, terminated, truncated, {"kills": survivor.kills, "visited": len(survivor.visited_tiles)}

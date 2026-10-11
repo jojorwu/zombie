@@ -3,7 +3,7 @@ import math
 from src.entities.item import ResourceItem, WEAPON_STATS
 from src.world.lighting import DynamicLight
 from src.entities.sensory import NoiseEvent
-from src.entities.survivor.survivor_state import EmotionalState
+from src.entities.survivor.survivor_entity import EmotionalState
 from src.utils import TileInteractionUtility
 
 try:

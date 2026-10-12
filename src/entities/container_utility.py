@@ -64,6 +64,8 @@ class ContainerUtility:
 
     @staticmethod
     def get_container_capacity(furniture) -> float:
+        if hasattr(furniture, 'trunk_capacity'):
+            return float(furniture.trunk_capacity)
         ttype = getattr(furniture, 'tile_type', None)
         if ttype == TileType.CABINET:
             return 50.0
@@ -77,7 +79,9 @@ class ContainerUtility:
 
     @staticmethod
     def get_container_weight(container, inside_bag: bool = False) -> float:
-        if isinstance(container, dict):
+        if hasattr(container, "trunk_inventory"):
+            contents = container.trunk_inventory
+        elif isinstance(container, dict):
             contents = container.get("contents", container)
         elif hasattr(container, "contents"):
             contents = container.contents
@@ -108,7 +112,9 @@ class ContainerUtility:
 
     @classmethod
     def add_item_to_container(cls, container, item_type: str, amount: int = 1):
-        if isinstance(container, dict):
+        if hasattr(container, "trunk_inventory"):
+            contents = container.trunk_inventory
+        elif isinstance(container, dict):
             if "contents" in container:
                 contents = container["contents"]
             else:
@@ -135,7 +141,9 @@ class ContainerUtility:
 
     @classmethod
     def remove_item_from_container(cls, container, item_type: str, amount: int = 1) -> int:
-        if isinstance(container, dict):
+        if hasattr(container, "trunk_inventory"):
+            contents = container.trunk_inventory
+        elif isinstance(container, dict):
             contents = container.get("contents", container)
         elif hasattr(container, "contents"):
             contents = container.contents

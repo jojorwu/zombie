@@ -109,7 +109,8 @@ class SimulationEngine:
 
     def _handle_noise_emitted(self, event: NoiseEmittedEvent):
         """Processes published noise events and creates sensory noise entities."""
-        ne = NoiseEvent(event.x, event.y, event.z, volume=event.volume, source_type=event.source_type)
+        from src.simulation.utility_facade import EngineUtilityFacade
+        ne = EngineUtilityFacade.create_noise_event(event.x, event.y, event.z, source_type=event.source_type, volume=event.volume)
         self.noise_events.append(ne)
 
         if self.rust_bridge and self.rust_bridge.full_sim_core:

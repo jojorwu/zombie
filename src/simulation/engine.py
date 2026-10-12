@@ -123,6 +123,7 @@ class SimulationEngine:
     def _recycle_entities(self):
         import gc
         import torch
+        from src.ai.inference import clear_weight_cache
 
         if hasattr(self, 'zombies'):
             for z in self.zombies:
@@ -144,10 +145,13 @@ class SimulationEngine:
 
         self.chunk_persistence.clear()
         self.event_bus.clear()
+        clear_weight_cache()
 
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+            torch.cuda.reset_peak_memory_stats()
 
     def reset_generation(self):
         self._recycle_entities()

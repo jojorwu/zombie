@@ -37,6 +37,15 @@ class BrainNet(nn.Module):
         value_out = self.value_head(h_next)
         return actions_out, duration_out, value_out, h_next
 
+    def compile_model(self):
+        """Attempts TorchScript JIT tracing / torch.compile for optimal CUDA execution."""
+        if hasattr(torch, "compile") and DEVICE.type == "cuda":
+            try:
+                return torch.compile(self, mode="reduce-overhead")
+            except Exception:
+                pass
+        return self
+
     def init_hidden(self) -> torch.Tensor:
         return torch.zeros(1, self.hidden_size, dtype=torch.float32, device=DEVICE)
 

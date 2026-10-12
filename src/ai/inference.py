@@ -14,11 +14,50 @@ except ImportError:
     RUST_LOS_AVAILABLE = False
     RUST_BRAIN_AVAILABLE = False
 
+CUDA_STREAM = torch.cuda.Stream() if torch.cuda.is_available() else None
+_WEIGHT_CACHE = {}
+
+
+def get_cached_stacked_weights(brains: list):
+    """
+    Caches stacked weight tensors for population brains to eliminate
+    per-tick torch.stack GPU allocation overhead.
+    """
+    key = tuple(id(b) for b in brains)
+    if key in _WEIGHT_CACHE:
+        return _WEIGHT_CACHE[key]
+
+    with torch.no_grad():
+        w_fc1 = torch.stack([b.fc1.weight for b in brains]).to(DEVICE)
+        b_fc1 = torch.stack([b.fc1.bias for b in brains]).to(DEVICE)
+        w_ih = torch.stack([b.gru.weight_ih for b in brains]).to(DEVICE)
+        w_hh = torch.stack([b.gru.weight_hh for b in brains]).to(DEVICE)
+        b_ih = torch.stack([b.gru.bias_ih for b in brains]).to(DEVICE)
+        b_hh = torch.stack([b.gru.bias_hh for b in brains]).to(DEVICE)
+        w_out = torch.stack([b.fc_out.weight for b in brains]).to(DEVICE)
+        b_out = torch.stack([b.fc_out.bias for b in brains]).to(DEVICE)
+
+    weights = (w_fc1, b_fc1, w_ih, w_hh, b_ih, b_hh, w_out, b_out)
+    _WEIGHT_CACHE[key] = weights
+
+    # Keep cache compact (evict oldest if cache grows > 10)
+    if len(_WEIGHT_CACHE) > 10:
+        first_key = next(iter(_WEIGHT_CACHE))
+        del _WEIGHT_CACHE[first_key]
+
+    return weights
+
+
+def clear_weight_cache():
+    """Clears cached population weight tensors on generation end / reset."""
+    _WEIGHT_CACHE.clear()
+
 
 def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens: list) -> list:
     """
     High-performance batched PyTorch inference over active survivors.
-    Executes batched tensor matrix multiplication (BMM) for max speed and zero memory allocation churn.
+    Executes batched tensor matrix multiplication (BMM) with weight caching,
+    CUDA stream overlap, and pinned memory transfers for maximum speed.
     """
     if not brains or not inputs_list:
         return []
@@ -28,17 +67,15 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
     if num_survivors == 1:
         return [brains[0].get_action_and_movement(inputs_list[0], prev_hiddens[0])]
 
-    w_fc1 = torch.stack([b.fc1.weight for b in brains])
-    b_fc1 = torch.stack([b.fc1.bias for b in brains])
-    w_ih = torch.stack([b.gru.weight_ih for b in brains])
-    w_hh = torch.stack([b.gru.weight_hh for b in brains])
-    b_ih = torch.stack([b.gru.bias_ih for b in brains])
-    b_hh = torch.stack([b.gru.bias_hh for b in brains])
-    w_out = torch.stack([b.fc_out.weight for b in brains])
-    b_out = torch.stack([b.fc_out.bias for b in brains])
+    w_fc1, b_fc1, w_ih, w_hh, b_ih, b_hh, w_out, b_out = get_cached_stacked_weights(brains)
 
     inp_np = np.ascontiguousarray(np.array(inputs_list, dtype=np.float32))
-    x = torch.from_numpy(inp_np).to(DEVICE).unsqueeze(1)
+
+    # Pinned memory transfer for CUDA non-blocking speedup if GPU is available
+    if DEVICE.type == "cuda":
+        inp_tensor = torch.from_numpy(inp_np).pin_memory().to(DEVICE, non_blocking=True).unsqueeze(1)
+    else:
+        inp_tensor = torch.from_numpy(inp_np).to(DEVICE).unsqueeze(1)
 
     valid_hiddens = []
     for h in prev_hiddens:
@@ -49,13 +86,13 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
         elif h.dim() == 1:
             h = h.unsqueeze(0)
         if h.device != DEVICE:
-            h = h.to(DEVICE)
+            h = h.to(DEVICE, non_blocking=True if DEVICE.type == "cuda" else False)
         valid_hiddens.append(h)
 
     h_cat = torch.cat(valid_hiddens, dim=0).to(DEVICE)
 
-    with torch.inference_mode():
-        out = torch.bmm(x, w_fc1.transpose(1, 2)).squeeze(1) + b_fc1
+    def _forward_pass():
+        out = torch.bmm(inp_tensor, w_fc1.transpose(1, 2)).squeeze(1) + b_fc1
         out = torch.relu(out)
 
         gi = torch.bmm(out.unsqueeze(1), w_ih.transpose(1, 2)).squeeze(1) + b_ih
@@ -70,6 +107,16 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
         h_next = newgate + inputgate * (h_cat - newgate)
 
         out_final = torch.bmm(h_next.unsqueeze(1), w_out.transpose(1, 2)).squeeze(1) + b_out
+        return out_final, h_next
+
+    with torch.inference_mode():
+        if CUDA_STREAM and DEVICE.type == "cuda":
+            with torch.cuda.stream(CUDA_STREAM):
+                out_final, h_next = _forward_pass()
+            CUDA_STREAM.synchronize()
+        else:
+            out_final, h_next = _forward_pass()
+
         out_arr = out_final.cpu().numpy()
 
         dxs = np.tanh(out_arr[:, 0])

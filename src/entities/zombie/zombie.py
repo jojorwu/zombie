@@ -4,7 +4,7 @@ from src.world.tiles import TileType
 from src.entities.sensory import NoiseEvent
 from src.ai.pathfinding import AStar3D
 from src.entities import AnatomicalHealth, BodyPart
-from src.ai.brain_actions import check_line_of_sight
+from src.ai.inference import check_line_of_sight
 
 try:
     from rust_engine import compute_zombie_flock_steering

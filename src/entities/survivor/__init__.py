@@ -1,5 +1,5 @@
-from src.entities.survivor.survivor_looting import SurvivorLooting
-from src.entities.survivor.survivor_actions import SurvivorActions
-from src.entities.survivor.survivor_entity import Survivor, EmotionalState
+from src.entities.survivor.looting import SurvivorLooting
+from src.entities.survivor.actions import SurvivorActions
+from src.entities.survivor.survivor import Survivor, EmotionalState
 
 __all__ = ["EmotionalState", "SurvivorLooting", "SurvivorActions", "Survivor"]

@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Tuple, Dict, Any, Optional
-from src.ai.brain_actions import extract_survivor_inputs
+from src.ai.inference import extract_survivor_inputs
 
 
 class SurvivorGymEnv:

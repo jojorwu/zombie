@@ -7,7 +7,7 @@ import argparse
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from src.simulation import SimulationEngine, ReportManager
-from src.ai.brain_net import DEVICE
+from src.ai.network import DEVICE
 
 try:
     import rust_engine

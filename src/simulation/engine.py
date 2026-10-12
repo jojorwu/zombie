@@ -8,8 +8,8 @@ from src.entities.vehicle import Vehicle
 from src.entities.item import ResourceItem
 from src.entities.factory import EntityFactory
 from src.entities.sensory import NoiseEvent
-from src.ai.brain_net import BrainNet, GeneticEvolutionManager
-from src.ai.brain_actions import extract_survivor_inputs, batch_get_action_and_movement
+from src.ai.network import BrainNet, GeneticEvolutionManager
+from src.ai.inference import extract_survivor_inputs, batch_get_action_and_movement
 from src.ai.hierarchical_ai import HierarchicalDecisionPlanner
 from src.modding.manager import LuaModManager
 from src.simulation.spawner import EntitySpawner

@@ -8,16 +8,18 @@ from src.entities.vehicle import Vehicle
 from src.entities.item import ResourceItem
 from src.entities.factory import EntityFactory
 from src.entities.sensory import NoiseEvent
-from src.ai.brain import BrainNet, extract_survivor_inputs, GeneticEvolutionManager, batch_get_action_and_movement, HierarchicalDecisionPlanner
+from src.ai.network import BrainNet, GeneticEvolutionManager
+from src.ai.inference import extract_survivor_inputs, batch_get_action_and_movement
+from src.ai.hierarchical_ai import HierarchicalDecisionPlanner
 from src.modding.manager import LuaModManager
 from src.simulation.spawner import EntitySpawner
 from src.simulation.environment import EnvironmentManager
 from src.simulation.event_bus import EventBus, NoiseEmittedEvent, DamageDealtEvent
 from src.simulation.snapshot import DoubleBufferedStateExchanger
 from src.entities.state_manager import LazyChunkStatePersistence
-from src.simulation.rust_engine import PythonRustEngineBridge, RUST_ENGINE_AVAILABLE
-from src.utils.memory_monitor_utility import MemoryMonitorUtility
-from src.utils.electricity_utility import ElectricityUtility
+from src.simulation.bridge import PythonRustEngineBridge, RUST_ENGINE_AVAILABLE
+from src.simulation.memory_monitor_utility import MemoryMonitorUtility
+from src.world.electricity_utility import ElectricityUtility
 
 try:
     from rust_engine import compute_zombie_flock_steering
@@ -208,6 +210,12 @@ class SimulationEngine:
         entity_positions = [(s.x, s.y) for s in self.survivors if s.is_alive]
         if entity_positions:
             self.world.chunk_manager.update_active_chunks(entity_positions, view_distance_chunks=2)
+            rehydrated = self.world.chunk_manager.rehydrate_zombies_from_active_chunks()
+            if rehydrated:
+                for rz in rehydrated:
+                    if rz not in self.zombies:
+                        self.zombies.append(rz)
+            self.zombies = self.world.chunk_manager.store_zombies_in_chunks(self.zombies)
 
         alive_indices = [i for i, s in enumerate(self.survivors) if s.is_alive]
         alive_count = len(alive_indices)
@@ -227,7 +235,7 @@ class SimulationEngine:
                 planner = self.planners[orig_i]
                 survivor.update_needs(world=self.world)
 
-                raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx]
+                raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx][:4]
                 self.hidden_states[orig_i] = new_hidden
 
                 if self.world.current_tick - planner.last_eval_tick >= planner.goal_eval_interval:

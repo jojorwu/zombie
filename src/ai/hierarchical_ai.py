@@ -1,7 +1,7 @@
 import math
 import random
 from enum import Enum, auto
-from src.ai.brain_actions import check_line_of_sight
+from src.ai.inference import check_line_of_sight
 
 
 class HighLevelGoal(Enum):

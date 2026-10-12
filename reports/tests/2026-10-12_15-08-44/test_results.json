@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-10-12T15:09:01.812725",
+  "tests_run": 58,
+  "failures": 0,
+  "errors": 2,
+  "skipped": 0,
+  "passed": false,
+  "elapsed_seconds": 17.1021,
+  "failure_details": [],
+  "error_details": [
+    "test_batch_get_action_and_movement (ai.test_brain.TestBrain.test_batch_get_action_and_movement): Traceback (most recent call last):\n  File \"/app/tests/ai/test_brain.py\", line 61, in test_batch_get_action_and_movement\n    for dx, dy, act, h in outputs:\n        ^^^^^^^^^^^^^^\nValueError: too many values to unpack (expected 4)\n",
+    "test_brain_net_forward_and_action (ai.test_brain.TestBrain.test_brain_net_forward_and_action): Traceback (most recent call last):\n  File \"/app/tests/ai/test_brain.py\", line 25, in test_brain_net_forward_and_action\n    dx, dy, action_idx, new_hidden = brain.get_action_and_movement(inputs, hidden)\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: too many values to unpack (expected 4)\n"
+  ]
+}

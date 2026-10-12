@@ -1,11 +1,13 @@
 import math
-from src.utils.sound_utility import SoundUtility
+from src.entities.sound_utility import SoundUtility
 
 
 class NoiseEvent:
     """
     Acoustic noise event with decibel sound pressure level (dB) and realistic propagation decay.
     """
+    __slots__ = ("x", "y", "z", "volume", "lifetime", "source_type")
+
     def __init__(self, x, y, z, volume=10.0, lifetime=5, source_type="general"):
         self.x = float(x)
         self.y = float(y)
@@ -25,6 +27,8 @@ class NoiseEvent:
 
 class ScentTrail:
     """Represents a survivor's olfactory trail left behind in the environment."""
+    __slots__ = ("x", "y", "z", "intensity")
+
     def __init__(self, x, y, z, intensity=100.0):
         self.x = float(x)
         self.y = float(y)

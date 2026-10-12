@@ -19,6 +19,7 @@ class Chunk:
         self.size = size
         self.buildings = []
         self.entities = []
+        self.stored_zombies = []
         self.furniture_states = {}
         self.item_states = {}
         self.state = ChunkState.GENERATED
@@ -155,6 +156,37 @@ class ChunkManager:
 
         self.active_chunks = new_active
         return self.active_chunks
+
+    def store_zombies_in_chunks(self, zombies: list) -> list:
+        """
+        Stores active zombies located in INACTIVE chunks into chunk persistence,
+        returning only the zombies located inside ACTIVE chunks.
+        """
+        active_zombies = []
+        for z in zombies:
+            if not getattr(z, 'is_alive', True):
+                continue
+            cx, cy = self.get_chunk_coords(z.x, z.y)
+            chunk = self.get_chunk(cx, cy)
+            if chunk and chunk.state == ChunkState.ACTIVE:
+                active_zombies.append(z)
+            elif chunk:
+                chunk.stored_zombies.append(z)
+        return active_zombies
+
+    def rehydrate_zombies_from_active_chunks(self) -> list:
+        """
+        Re-hydrates zombies stored in newly activated chunks back into the simulation.
+        """
+        rehydrated = []
+        for coords in self.active_chunks:
+            chunk = self.get_chunk(coords[0], coords[1])
+            if chunk and chunk.stored_zombies:
+                for z in chunk.stored_zombies:
+                    if getattr(z, 'is_alive', True):
+                        rehydrated.append(z)
+                chunk.stored_zombies.clear()
+        return rehydrated
 
     def update_active_chunks_async(self, entity_positions, view_distance_chunks: int = 2):
         """Asynchronously updates active chunks using CHUNK_EXECUTOR background thread worker."""

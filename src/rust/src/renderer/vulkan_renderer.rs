@@ -104,15 +104,13 @@ impl VulkanTileRenderer {
                     )
                 };
 
+                let pixel = [r_base, g_base, b_base, 255u8];
                 for dy in 0..ts {
                     let line_start = (py_start + dy) * stride + px_start * 4;
                     for dx in 0..ts {
                         let px_idx = line_start + dx * 4;
-                        if px_idx + 3 < buffer.len() {
-                            buffer[px_idx] = r_base;
-                            buffer[px_idx + 1] = g_base;
-                            buffer[px_idx + 2] = b_base;
-                            buffer[px_idx + 3] = 255;
+                        if px_idx + 4 <= buffer.len() {
+                            buffer[px_idx..px_idx + 4].copy_from_slice(&pixel);
                         }
                     }
                 }
@@ -206,15 +204,13 @@ impl VulkanTileRenderer {
                     )
                 };
 
+                let pixel = [r_base, g_base, b_base, 255u8];
                 for dy in 0..ts {
                     let line_start = (py_start + dy) * stride + px_start * 4;
                     for dx in 0..ts {
                         let px_idx = line_start + dx * 4;
-                        if px_idx + 3 < buffer.len() {
-                            buffer[px_idx] = r_base;
-                            buffer[px_idx + 1] = g_base;
-                            buffer[px_idx + 2] = b_base;
-                            buffer[px_idx + 3] = 255;
+                        if px_idx + 4 <= buffer.len() {
+                            buffer[px_idx..px_idx + 4].copy_from_slice(&pixel);
                         }
                     }
                 }

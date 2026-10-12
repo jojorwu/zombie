@@ -495,47 +495,56 @@ impl RustFullSimulationCore {
         let num_survivors = self.survivors.len();
         let mut obs_matrix = vec![0.0f32; num_survivors * 57];
 
-        for (i, surv) in self.survivors.iter().enumerate() {
-            let row_offset = i * 57;
+        let survivors_ref = &self.survivors;
+        let zombies_ref = &self.zombies;
+        let ambient = self.ambient_light;
+        let width_f = self.width as f32;
+        let height_f = self.height as f32;
+        let cur_tick = self.current_tick;
+        let grid_ref = &self.world_grid;
 
-            // Status features (0..4)
-            obs_matrix[row_offset] = surv.hp / 100.0;
-            obs_matrix[row_offset + 1] = surv.hunger / 100.0;
-            obs_matrix[row_offset + 2] = surv.thirst / 100.0;
-            obs_matrix[row_offset + 3] = if surv.is_alive { 1.0 } else { 0.0 };
-            obs_matrix[row_offset + 4] = self.ambient_light;
+        obs_matrix.par_chunks_mut(57).enumerate().for_each(|(i, slice)| {
+            if i >= survivors_ref.len() {
+                return;
+            }
+            let surv = &survivors_ref[i];
 
-            // Closest zombie features (5..21) - Up to 3 closest zombies
+            slice[0] = surv.hp / 100.0;
+            slice[1] = surv.hunger / 100.0;
+            slice[2] = surv.thirst / 100.0;
+            slice[3] = if surv.is_alive { 1.0 } else { 0.0 };
+            slice[4] = ambient;
+
             let mut zombie_dists: Vec<(f32, f32, f32, f32, f32)> = Vec::new();
-            for z in &self.zombies {
+            for z in zombies_ref {
                 if z.is_alive && z.z == surv.z {
                     let dx = z.x - surv.x;
                     let dy = z.y - surv.y;
-                    let dist = (dx * dx + dy * dy).sqrt();
-                    zombie_dists.push((dist, dx, dy, z.hp, z.speed));
+                    let dist2 = dx * dx + dy * dy;
+                    if dist2 <= 2500.0 {
+                        zombie_dists.push((dist2.sqrt(), dx, dy, z.hp, z.speed));
+                    }
                 }
             }
             zombie_dists.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
             for z_idx in 0..3 {
-                let base = row_offset + 5 + (z_idx * 5);
+                let base = 5 + (z_idx * 5);
                 if z_idx < zombie_dists.len() {
                     let (dist, dx, dy, hp, speed) = zombie_dists[z_idx];
-                    obs_matrix[base] = (dx / 50.0).clamp(-1.0, 1.0);
-                    obs_matrix[base + 1] = (dy / 50.0).clamp(-1.0, 1.0);
-                    obs_matrix[base + 2] = (dist / 50.0).clamp(0.0, 1.0);
-                    obs_matrix[base + 3] = hp / 100.0;
-                    obs_matrix[base + 4] = speed;
+                    slice[base] = (dx / 50.0).clamp(-1.0, 1.0);
+                    slice[base + 1] = (dy / 50.0).clamp(-1.0, 1.0);
+                    slice[base + 2] = (dist / 50.0).clamp(0.0, 1.0);
+                    slice[base + 3] = hp / 100.0;
+                    slice[base + 4] = speed;
                 }
             }
 
-            // Position & Status metrics (20..31)
-            obs_matrix[row_offset + 20] = (surv.x / self.width as f32).clamp(0.0, 1.0);
-            obs_matrix[row_offset + 21] = (surv.y / self.height as f32).clamp(0.0, 1.0);
-            obs_matrix[row_offset + 22] = (surv.z as f32 / 20.0).clamp(-1.0, 1.0);
-            obs_matrix[row_offset + 23] = (self.current_tick % 3600) as f32 / 3600.0;
+            slice[20] = (surv.x / width_f).clamp(0.0, 1.0);
+            slice[21] = (surv.y / height_f).clamp(0.0, 1.0);
+            slice[22] = (surv.z as f32 / 20.0).clamp(-1.0, 1.0);
+            slice[23] = (cur_tick % 3600) as f32 / 3600.0;
 
-            // 5x5 Spatial Sensor Grid around survivor (32..57)
             let sx = surv.x as i32;
             let sy = surv.y as i32;
             let sz = surv.z;
@@ -546,17 +555,12 @@ impl RustFullSimulationCore {
                     if sensor_idx < 57 {
                         let tx = sx + dx;
                         let ty = sy + dy;
-                        let is_walk = if self.world_grid.is_walkable(tx as f32, ty as f32, sz) {
-                            1.0f32
-                        } else {
-                            0.0f32
-                        };
-                        obs_matrix[row_offset + sensor_idx] = is_walk;
+                        slice[sensor_idx] = if grid_ref.is_walkable(tx as f32, ty as f32, sz) { 1.0 } else { 0.0 };
                         sensor_idx += 1;
                     }
                 }
             }
-        }
+        });
 
         let array2d = numpy::ndarray::Array2::from_shape_vec((num_survivors, 57), obs_matrix).unwrap();
         array2d.into_pyarray(py)

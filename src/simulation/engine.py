@@ -235,7 +235,7 @@ class SimulationEngine:
                 planner = self.planners[orig_i]
                 survivor.update_needs(world=self.world)
 
-                raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx]
+                raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx][:4]
                 self.hidden_states[orig_i] = new_hidden
 
                 if self.world.current_tick - planner.last_eval_tick >= planner.goal_eval_interval:

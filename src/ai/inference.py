@@ -79,7 +79,8 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
                 float(dxs[i]),
                 float(dys[i]),
                 int(actions[i]),
-                h_next[i:i + 1]
+                h_next[i:i + 1],
+                4
             ))
         return results
 

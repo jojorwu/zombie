@@ -210,6 +210,12 @@ class SimulationEngine:
         entity_positions = [(s.x, s.y) for s in self.survivors if s.is_alive]
         if entity_positions:
             self.world.chunk_manager.update_active_chunks(entity_positions, view_distance_chunks=2)
+            rehydrated = self.world.chunk_manager.rehydrate_zombies_from_active_chunks()
+            if rehydrated:
+                for rz in rehydrated:
+                    if rz not in self.zombies:
+                        self.zombies.append(rz)
+            self.zombies = self.world.chunk_manager.store_zombies_in_chunks(self.zombies)
 
         alive_indices = [i for i, s in enumerate(self.survivors) if s.is_alive]
         alive_count = len(alive_indices)

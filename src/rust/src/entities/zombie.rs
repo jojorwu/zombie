@@ -1,15 +1,14 @@
 use pyo3::prelude::*;
 
-/// Zombie Variant Types
+/// Behavior Mode for Standard Zombie
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RustZombieType {
-    Standard = 0,
-    Runner = 1,
-    Brute = 2,
-    Screamer = 3,
+pub enum ZombieBehaviorMode {
+    Solitary = 0, // Individual idle wandering / patrolling
+    Group = 1,    // Small group cohesion (3-8 zombies nearby)
+    Horde = 2,    // Large horde swarming / chasing target
 }
 
-/// Native Zombie Entity Life Cycle Engine in Rust with Special Variants & Dismemberment.
+/// Native Standard Zombie Entity Engine in Rust.
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct RustZombieEngine {
@@ -26,11 +25,11 @@ pub struct RustZombieEngine {
     #[pyo3(get, set)]
     pub is_alive: bool,
     #[pyo3(get, set)]
-    pub zombie_type: u8, // 0 = Standard, 1 = Runner, 2 = Brute, 3 = Screamer
-    #[pyo3(get, set)]
     pub is_crawler: bool,
     #[pyo3(get, set)]
-    pub shriek_cooldown: u32,
+    pub behavior_mode: u8, // 0 = Solitary, 1 = Group, 2 = Horde
+    #[pyo3(get, set)]
+    pub wander_angle: f32,
 }
 
 #[pymethods]
@@ -41,38 +40,12 @@ impl RustZombieEngine {
             x,
             y,
             z,
-            hp,
-            speed,
+            hp: if hp > 0.0 { hp } else { 50.0 },
+            speed: if speed > 0.0 { speed } else { 0.08 },
             is_alive: true,
-            zombie_type: 0,
             is_crawler: false,
-            shriek_cooldown: 0,
-        }
-    }
-
-    pub fn set_variant(&mut self, variant_id: u8) {
-        self.zombie_type = variant_id;
-        match variant_id {
-            1 => {
-                // Runner
-                self.speed = 0.15;
-                self.hp = 35.0;
-            }
-            2 => {
-                // Brute
-                self.speed = 0.05;
-                self.hp = 180.0;
-            }
-            3 => {
-                // Screamer
-                self.speed = 0.09;
-                self.hp = 45.0;
-            }
-            _ => {
-                // Standard
-                self.speed = 0.08;
-                self.hp = 50.0;
-            }
+            behavior_mode: 0,
+            wander_angle: (x * 12.3 + y * 45.6) % std::f32::consts::TAU,
         }
     }
 
@@ -105,22 +78,9 @@ impl RustZombieEngine {
         let dist_sq = dx * dx + dy * dy;
 
         if self.is_alive && dist_sq < 1.0 {
-            let dmg = if self.zombie_type == 2 { 45.0 } else { 25.0 }; // Brute deals extra bite damage
-            (true, dmg, 0.25)
+            (true, 25.0, 0.25) // Standard bite attack
         } else {
             (false, 0.0, 0.0)
-        }
-    }
-
-    pub fn trigger_screamer_shriek(&mut self) -> (bool, f32) {
-        if self.zombie_type == 3 && self.shriek_cooldown == 0 {
-            self.shriek_cooldown = 150; // Cooldown of 150 ticks
-            (true, 85.0) // Screamer shriek generates 85 dB noise
-        } else {
-            if self.shriek_cooldown > 0 {
-                self.shriek_cooldown -= 1;
-            }
-            (false, 0.0)
         }
     }
 }

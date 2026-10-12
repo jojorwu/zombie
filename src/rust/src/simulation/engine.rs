@@ -264,16 +264,19 @@ impl RustFullSimulationCore {
 
         let num_zombies = self.zombies.len();
         let mut steerings = vec![(0.0f32, 0.0f32); num_zombies];
+        let mut behavior_modes = vec![0u8; num_zombies];
 
-        // Parallelized Flocking separation between zombies using Rayon
+        // Parallelized Flocking separation and mode assessment using Rayon
         let zombies_ref = &self.zombies;
-        steerings.par_iter_mut().enumerate().for_each(|(i, steer)| {
+        steerings.par_iter_mut().zip(behavior_modes.par_iter_mut()).enumerate().for_each(|(i, (steer, mode))| {
             let z1 = &zombies_ref[i];
             if !z1.is_alive {
                 return;
             }
             let mut sep_x = 0.0f32;
             let mut sep_y = 0.0f32;
+            let mut nearby_count = 0usize;
+
             for (j, z2) in zombies_ref.iter().enumerate() {
                 if i == j || !z2.is_alive || z1.z != z2.z {
                     continue;
@@ -281,6 +284,9 @@ impl RustFullSimulationCore {
                 let dx = z1.x - z2.x;
                 let dy = z1.y - z2.y;
                 let d2 = dx * dx + dy * dy;
+                if d2 < 36.0 {
+                    nearby_count += 1;
+                }
                 if d2 > 0.0001 && d2 < 2.25 {
                     let d = d2.sqrt();
                     sep_x += (dx / d) * (1.5 - d);
@@ -288,6 +294,7 @@ impl RustFullSimulationCore {
                 }
             }
             *steer = (sep_x, sep_y);
+            *mode = if nearby_count >= 9 { 2 } else if nearby_count >= 3 { 1 } else { 0 };
         });
 
         // Track zombie pressure against door/barricade tiles
@@ -298,6 +305,8 @@ impl RustFullSimulationCore {
             if !zombie.is_alive {
                 continue;
             }
+
+            zombie.behavior_mode = behavior_modes[i];
 
             // Find target (closest alive survivor within active distance <= 35.0)
             let mut closest_target: Option<(f32, f32)> = None;
@@ -336,8 +345,12 @@ impl RustFullSimulationCore {
                 let dist = (dx * dx + dy * dy).sqrt();
                 if dist > 0.2 {
                     let (sep_x, sep_y) = steerings[i];
-                    let move_x = (dx / dist) * zombie.speed + sep_x * 0.05;
-                    let move_y = (dy / dist) * zombie.speed + sep_y * 0.05;
+                    // Speed multiplier based on behavior mode (Horde mode moves faster with momentum)
+                    let mode_speed_mult = if zombie.behavior_mode == 2 { 1.25 } else if zombie.behavior_mode == 1 { 1.0 } else { 0.85 };
+                    let cur_speed = zombie.speed * mode_speed_mult;
+
+                    let move_x = (dx / dist) * cur_speed + sep_x * 0.05;
+                    let move_y = (dy / dist) * cur_speed + sep_y * 0.05;
 
                     let new_zx = (zombie.x + move_x).max(0.0).min((self.width - 1) as f32);
                     let new_zy = (zombie.y + move_y).max(0.0).min((self.height - 1) as f32);
@@ -351,6 +364,21 @@ impl RustFullSimulationCore {
                         let obstacle_y = new_zy as i32;
                         *tile_pressure.entry((obstacle_x, obstacle_y, zombie.z)).or_insert(0) += 1;
                     }
+                }
+            } else {
+                // Idle / Solitary / Group wandering when no active target in sight
+                let (sep_x, sep_y) = steerings[i];
+                zombie.wander_angle += ((self.current_tick + i as u64) % 7) as f32 * 0.1 - 0.3;
+                let wander_speed = zombie.speed * 0.35;
+                let move_x = zombie.wander_angle.cos() * wander_speed + sep_x * 0.03;
+                let move_y = zombie.wander_angle.sin() * wander_speed + sep_y * 0.03;
+
+                let new_zx = (zombie.x + move_x).max(0.0).min((self.width - 1) as f32);
+                let new_zy = (zombie.y + move_y).max(0.0).min((self.height - 1) as f32);
+
+                if self.world_grid.is_walkable(new_zx, new_zy, zombie.z) {
+                    zombie.x = new_zx;
+                    zombie.y = new_zy;
                 }
             }
 

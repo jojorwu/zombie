@@ -63,14 +63,15 @@ class TestSimulation(unittest.TestCase):
         for s in sim.survivors:
             s.x, s.y = 10.0, 10.0
         sim.zombies[0].x, sim.zombies[0].y = 12.0, 10.0
-        sim.zombies[1].x, sim.zombies[1].y = 90.0, 90.0
+        far_zombie = sim.zombies[1]
+        far_zombie.x, far_zombie.y = 90.0, 90.0
 
-        z2_initial_pos = (sim.zombies[1].x, sim.zombies[1].y)
+        z2_initial_pos = (far_zombie.x, far_zombie.y)
 
         for _ in range(10):
             sim.tick()
 
-        self.assertEqual((sim.zombies[1].x, sim.zombies[1].y), z2_initial_pos)
+        self.assertEqual((far_zombie.x, far_zombie.y), z2_initial_pos)
 
     def test_street_corpse_spawning_and_ballistics(self):
         with open("config.json", "r") as f:

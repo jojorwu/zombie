@@ -1,0 +1,13 @@
+=== ZOMBIE AI SIMULATION LAUNCH REPORT ===
+Timestamp   : 2026-10-12T13:25:07.527975
+Launch Type : training
+---------------------------------------------
+generations         : 1
+population          : 25
+zombies             : 100
+map_size            : 200x200
+max_ticks           : 50
+parallel_envs       : 2
+total_time_seconds  : 8.29
+best_fitness        : 110.98
+model_file          : best_brain.zbrain

@@ -15,9 +15,6 @@ except ImportError:
 
 class ZombieType:
     STANDARD = "standard"
-    RUNNER = "runner"
-    BRUTE = "brute"
-    SCREAMER = "screamer"
 
 
 class ZombieState:
@@ -33,11 +30,11 @@ class Zombie:
         self.x = float(x)
         self.y = float(y)
         self.z = int(z)
-        self.zombie_type = zombie_type
+        self.zombie_type = ZombieType.STANDARD
         self.is_crawler = False
 
         self.body = AnatomicalHealth(35.0, 100.0, 40.0, 40.0, 45.0, 45.0)
-        self.hp = hp
+        self.hp = hp if hp > 0.0 else 50.0
         self.max_hp = 100.0
         self.is_alive = True
 
@@ -47,21 +44,7 @@ class Zombie:
         self.grab_slowdown = z_cfg.get("grab_slowdown", 0.5)
         self.memory_duration_ticks = z_cfg.get("memory_duration_ticks", 150)
         self.pathfinding_max_nodes = z_cfg.get("pathfinding_max_nodes", 300)
-
-        # Apply Zombie Variant Specs
-        if zombie_type == ZombieType.RUNNER:
-            self.speed = 0.15
-            self.hp = 35.0
-        elif zombie_type == ZombieType.BRUTE:
-            self.speed = 0.05
-            self.hp = 180.0
-            self.damage = 25.0
-        elif zombie_type == ZombieType.SCREAMER:
-            self.speed = 0.09
-            self.hp = 45.0
-            self.shriek_cooldown = 0
-        else:
-            self.speed = z_cfg.get("speed", 0.08)
+        self.speed = z_cfg.get("speed", 0.08)
 
         self.state = ZombieState.IDLE
         self.target = None
@@ -90,15 +73,6 @@ class Zombie:
             self.memory_timer = self.memory_duration_ticks
         return actual_damage
 
-    def trigger_screamer_shriek(self, noise_events=None):
-        if self.zombie_type == ZombieType.SCREAMER and getattr(self, 'shriek_cooldown', 0) == 0:
-            self.shriek_cooldown = 150
-            if noise_events is not None:
-                noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=85.0, source_type="screamer_shriek"))
-            return True
-        elif getattr(self, 'shriek_cooldown', 0) > 0:
-            self.shriek_cooldown -= 1
-        return False
 
     def has_line_of_sight(self, tx, ty, tz, world):
         if self.z != tz:
@@ -190,8 +164,6 @@ class Zombie:
         if not self.is_alive:
             return
 
-        if self.zombie_type == ZombieType.SCREAMER:
-            self.trigger_screamer_shriek(noise_events)
 
         if self.astar_engine is None or self.astar_engine.world is not world:
             self.astar_engine = AStar3D(world)

@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-10-12T13:21:02.371794",
+  "tests_run": 58,
+  "failures": 1,
+  "errors": 0,
+  "skipped": 0,
+  "passed": false,
+  "elapsed_seconds": 14.7642,
+  "failure_details": [
+    "test_chunk_entity_freezing (simulation.test_simulation.TestSimulation.test_chunk_entity_freezing): Traceback (most recent call last):\n  File \"/app/tests/simulation/test_simulation.py\", line 73, in test_chunk_entity_freezing\n    self.assertEqual((sim.zombies[1].x, sim.zombies[1].y), z2_initial_pos)\nAssertionError: Tuples differ: (0.4873318374156952, 47.77491760253906) != (90.0, 90.0)\n\nFirst differing element 0:\n0.4873318374156952\n90.0\n\n- (0.4873318374156952, 47.77491760253906)\n+ (90.0, 90.0)\n"
+  ],
+  "error_details": []
+}

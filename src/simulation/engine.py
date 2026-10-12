@@ -137,6 +137,14 @@ class SimulationEngine:
             for ne in self.noise_events:
                 self.factory.release_noise_event(ne)
 
+        if hasattr(self, 'world') and self.world:
+            self.world.furniture_state_manager.clear()
+            self.world.item_state_manager.clear()
+            self.world.chunk_manager.clear()
+
+        self.chunk_persistence.clear()
+        self.event_bus.clear()
+
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -194,9 +202,19 @@ class SimulationEngine:
 
     def tick(self):
         t0 = time.time()
+
         self.env_manager.tick_environment()
         self.mod_manager.trigger_event("on_tick", self.world.current_tick)
         self.event_bus.process_events()
+
+        if self.world.current_tick % 100 == 0:
+            self.world.furniture_state_manager.purge_destroyed_and_stale()
+            self.world.item_state_manager.purge_stale(active_item_entities=set(self.items))
+            dead_zombies = [z for z in self.zombies if not z.is_alive]
+            if dead_zombies:
+                for dz in dead_zombies:
+                    self.factory.release_zombie(dz)
+                self.zombies = [z for z in self.zombies if z.is_alive]
 
         active_noises = []
         for ne in self.noise_events:
@@ -332,6 +350,7 @@ class SimulationEngine:
 
         self.env_manager.check_dynamic_item_respawn(self.items, self.factory)
         self.state_exchanger.capture_snapshot(self.world, self.survivors, self.zombies, self.vehicles, self.items)
+
         self.memory_monitor.record_tick_time(time.time() - t0)
 
         # Max simulation length = 1 month (108,000 ticks)

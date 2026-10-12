@@ -13,6 +13,11 @@ class ChunkState(Enum):
 
 
 class Chunk:
+    __slots__ = (
+        'chunk_x', 'chunk_y', 'size', 'buildings', 'entities',
+        'stored_zombies', 'furniture_states', 'item_states', 'state'
+    )
+
     def __init__(self, chunk_x: int, chunk_y: int, size: int = 16):
         self.chunk_x = chunk_x
         self.chunk_y = chunk_y
@@ -192,3 +197,13 @@ class ChunkManager:
         """Asynchronously updates active chunks using CHUNK_EXECUTOR background thread worker."""
         future = CHUNK_EXECUTOR.submit(self.update_active_chunks, entity_positions, view_distance_chunks)
         return future
+
+    def clear(self) -> None:
+        """Clears all stored entities and references in chunks for memory cleanup."""
+        for chunk in self.chunks.values():
+            chunk.entities.clear()
+            chunk.stored_zombies.clear()
+            chunk.furniture_states.clear()
+            chunk.item_states.clear()
+        self.chunks.clear()
+        self.active_chunks.clear()

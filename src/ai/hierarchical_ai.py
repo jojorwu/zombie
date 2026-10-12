@@ -51,13 +51,19 @@ class HierarchicalDecisionPlanner:
 
         closest_zombie = None
         min_z_dist = 999.0
+        sx, sy, sz = survivor.x, survivor.y, int(survivor.z)
+
+        # Fast AABB filtering before expensive distance & raycasting
         for z in zombies:
-            if getattr(z, "is_alive", True) and z.z == survivor.z:
-                d = math.hypot(z.x - survivor.x, z.y - survivor.y)
-                if d < min_z_dist:
-                    if check_line_of_sight(world, survivor.x, survivor.y, z.x, z.y, int(survivor.z)):
-                        min_z_dist = d
-                        closest_zombie = z
+            if getattr(z, "is_alive", True) and int(z.z) == sz:
+                dx = z.x - sx
+                dy = z.y - sy
+                if abs(dx) < 8.0 and abs(dy) < 8.0:
+                    d = math.hypot(dx, dy)
+                    if d < min_z_dist:
+                        if check_line_of_sight(world, sx, sy, z.x, z.y, sz):
+                            min_z_dist = d
+                            closest_zombie = z
 
         if closest_zombie and min_z_dist < 6.0:
             has_weapon = survivor.inventory.get("weapon", 0) > 0 or survivor.inventory.get("pistol", 0) > 0
@@ -74,8 +80,8 @@ class HierarchicalDecisionPlanner:
         current_tick = getattr(world, 'current_tick', 0)
         if hasattr(survivor, 'spatial_memory') and "zombie" in survivor.spatial_memory:
             zx, zy, zz, ztick = survivor.spatial_memory["zombie"]
-            if current_tick - ztick <= 150 and int(zz) == int(survivor.z):
-                d = math.hypot(zx - survivor.x, zy - survivor.y)
+            if current_tick - ztick <= 150 and int(zz) == sz:
+                d = math.hypot(zx - sx, zy - sy)
                 if d < 5.0:
                     self.current_goal = HighLevelGoal.FLEE_THREAT
                     self.target_pos = (zx, zy, zz)
@@ -86,7 +92,7 @@ class HierarchicalDecisionPlanner:
             return self.current_goal
 
         building_grid = getattr(world, 'building_grid', {})
-        building = building_grid.get((int(survivor.x), int(survivor.y))) if building_grid else None
+        building = building_grid.get((int(sx), int(sy))) if building_grid else None
         light_lvl = world.get_light_level() if hasattr(world, 'get_light_level') else 1.0
 
         if building is None and (light_lvl < 0.3 or surv_sleep < 40.0):
@@ -139,12 +145,17 @@ class HierarchicalDecisionPlanner:
         elif goal == HighLevelGoal.LOOT_SUPPLIES:
             closest_item = None
             min_i_dist = 999.0
+            sx, sy, sz = survivor.x, survivor.y, int(survivor.z)
+
             for item in items:
-                if not getattr(item, 'collected', False) and item.z == survivor.z:
-                    d = math.hypot(item.x - survivor.x, item.y - survivor.y)
-                    if d < min_i_dist and check_line_of_sight(world, survivor.x, survivor.y, item.x, item.y, int(survivor.z)):
-                        min_i_dist = d
-                        closest_item = item
+                if not getattr(item, 'collected', False) and int(item.z) == sz:
+                    dx = item.x - sx
+                    dy = item.y - sy
+                    if abs(dx) < 12.0 and abs(dy) < 12.0:
+                        d = math.hypot(dx, dy)
+                        if d < min_i_dist and check_line_of_sight(world, sx, sy, item.x, item.y, sz):
+                            min_i_dist = d
+                            closest_item = item
 
             if closest_item and min_i_dist < 12.0:
                 dx = closest_item.x - survivor.x
@@ -154,18 +165,20 @@ class HierarchicalDecisionPlanner:
                 return dx / min_i_dist, dy / min_i_dist, 0
 
         elif goal == HighLevelGoal.SEEK_SHELTER:
-            if hasattr(world, 'building_grid') and world.building_grid:
-                bx, by = survivor.x, survivor.y
+            buildings = getattr(world, 'buildings', None)
+            if buildings:
                 min_b_dist = 999.0
-                for k in world.building_grid.keys():
-                    x, y = k[0], k[1]
-                    d = math.hypot(x - survivor.x, y - survivor.y)
+                best_bx, best_by = survivor.x, survivor.y
+                for b in buildings:
+                    bx = b.get("x", 0) + b.get("w", 1) / 2.0
+                    by = b.get("y", 0) + b.get("h", 1) / 2.0
+                    d = math.hypot(bx - survivor.x, by - survivor.y)
                     if d < min_b_dist:
                         min_b_dist = d
-                        bx, by = x + 0.5, y + 0.5
+                        best_bx, best_by = bx, by
                 if min_b_dist < 50.0 and min_b_dist > 1.0:
-                    dx = bx - survivor.x
-                    dy = by - survivor.y
+                    dx = best_bx - survivor.x
+                    dy = best_by - survivor.y
                     return dx / min_b_dist, dy / min_b_dist, 0
 
         mag = math.hypot(raw_dx, raw_dy)

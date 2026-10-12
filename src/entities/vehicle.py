@@ -9,6 +9,8 @@ except ImportError:
 
 class VehiclePart:
     """CDDA-style modular vehicle part (engine, battery, wheels, bumper, fuel tank, cargo trunk, armor)."""
+    __slots__ = ('name', 'part_type', 'hp', 'max_hp')
+
     def __init__(self, name: str, part_type: str, hp: float = 100.0, max_hp: float = 100.0):
         self.name = name
         self.part_type = part_type
@@ -28,6 +30,12 @@ class VehiclePart:
 
 class VehiclePhysics:
     """Configurable vehicle physics engine handling mass, velocity, acceleration, braking, friction, steering, and momentum."""
+    __slots__ = (
+        'mass', 'max_speed', 'acceleration', 'brake_force', 'friction',
+        'steer_rate', 'collision_factor', 'velocity_x', 'velocity_y',
+        'heading_angle', 'rust_physics'
+    )
+
     def __init__(self, mass: float = 1200.0, max_speed: float = 0.45, acceleration: float = 0.02,
                  brake_force: float = 0.04, friction: float = 0.05, steer_rate: float = 0.1, collision_factor: float = 1.0):
         self.mass = mass
@@ -54,6 +62,11 @@ class VehiclePhysics:
 
 class Vehicle:
     """CDDA-style modular vehicle entity with parts, customizable physics, and momentum collisions."""
+    __slots__ = (
+        'x', 'y', 'z', 'fuel', 'max_fuel', 'model_type', 'driver',
+        'trunk_inventory', 'trunk_capacity', 'noise_level', 'physics', 'parts'
+    )
+
     def __init__(self, x, y, fuel=100.0, max_fuel=100.0, z=0, model_type="sedan"):
         self.x = float(x)
         self.y = float(y)

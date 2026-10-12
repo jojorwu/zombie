@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use numpy::{PyArray1, PyArray2, PyArray3, IntoPyArray, PyReadonlyArray1};
+use numpy::{PyArray1, PyArray2, PyArray3, IntoPyArray, PyReadonlyArray1, PyReadonlyArray2};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use crate::world::RustWorldGrid;
@@ -186,6 +186,86 @@ impl RustFullSimulationCore {
 
     pub fn get_zombies_count(&self) -> usize {
         self.zombies.len()
+    }
+
+    pub fn sync_zombies_batch(&mut self, data: PyReadonlyArray2<f32>) {
+        let array = data.as_array();
+        let rows = array.nrows();
+        for i in 0..rows {
+            let x = array[[i, 0]];
+            let y = array[[i, 1]];
+            let z = array[[i, 2]] as i32;
+            let hp = array[[i, 3]];
+            let speed = array[[i, 4]];
+            if i < self.zombies.len() {
+                let zomb = &mut self.zombies[i];
+                zomb.x = x;
+                zomb.y = y;
+                zomb.z = z;
+                zomb.hp = hp;
+                zomb.is_alive = hp > 0.0;
+            } else {
+                self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed));
+            }
+        }
+    }
+
+    pub fn get_zombies_batch<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
+        let n = self.zombies.len();
+        let mut data = vec![0.0f32; n * 5];
+        for (i, z) in self.zombies.iter().enumerate() {
+            let offset = i * 5;
+            data[offset] = z.x;
+            data[offset + 1] = z.y;
+            data[offset + 2] = z.z as f32;
+            data[offset + 3] = z.hp;
+            data[offset + 4] = if z.is_alive { 1.0 } else { 0.0 };
+        }
+        let array2d = numpy::ndarray::Array2::from_shape_vec((n, 5), data).unwrap();
+        array2d.into_pyarray(py)
+    }
+
+    pub fn sync_survivors_batch(&mut self, data: PyReadonlyArray2<f32>) {
+        let array = data.as_array();
+        let rows = array.nrows();
+        for i in 0..rows {
+            let x = array[[i, 0]];
+            let y = array[[i, 1]];
+            let z = array[[i, 2]] as i32;
+            let hp = array[[i, 3]];
+            let hunger = array[[i, 4]];
+            let thirst = array[[i, 5]];
+            if i < self.survivors.len() {
+                let surv = &mut self.survivors[i];
+                surv.x = x;
+                surv.y = y;
+                surv.z = z;
+                surv.hp = hp;
+                surv.hunger = hunger;
+                surv.thirst = thirst;
+                surv.is_alive = hp > 0.0;
+            } else {
+                let mut s = RustSurvivorEntity::new(i, x, y, z);
+                s.hp = hp;
+                s.hunger = hunger;
+                s.thirst = thirst;
+                self.survivors.push(s);
+            }
+        }
+    }
+
+    pub fn get_survivors_batch<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
+        let n = self.survivors.len();
+        let mut data = vec![0.0f32; n * 4];
+        for (i, s) in self.survivors.iter().enumerate() {
+            let offset = i * 4;
+            data[offset] = s.x;
+            data[offset + 1] = s.y;
+            data[offset + 2] = s.z as f32;
+            data[offset + 3] = if s.is_alive { 1.0 } else { 0.0 };
+        }
+        let array2d = numpy::ndarray::Array2::from_shape_vec((n, 4), data).unwrap();
+        array2d.into_pyarray(py)
     }
 
     pub fn get_zombie_pos(&self, index: usize) -> (f32, f32, i32, f32, bool) {

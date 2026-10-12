@@ -2,6 +2,9 @@ import math
 import torch
 import numpy as np
 from src.ai.network import DEVICE
+from src.world.tile_interaction_utility import TileInteractionUtility
+
+MOVABLE_FURNITURE_TILES = TileInteractionUtility.MOVABLE_FURNITURE_TILES
 
 try:
     from rust_engine import check_line_of_sight_rust, RustBrainInference
@@ -116,7 +119,7 @@ def check_line_of_sight(world, x0: float, y0: float, x1: float, y1: float, z: in
 
 
 def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) -> np.ndarray:
-    """Extracts 57 numerical input features with Raycast Line-of-Sight perception masking and spatial memory."""
+    """Extracts 57 numerical input features with fast bounding box perception masking and spatial memory."""
     inputs = np.zeros(57, dtype=np.float32)
     inputs[0] = survivor.health / 100.0
     inputs[1] = survivor.hunger / 100.0
@@ -132,32 +135,44 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     def find_closest_visible_or_remembered(entities, category_key: str, max_dist: float = 15.0):
         min_dist = max_dist
         best_dx, best_dy, best_dz = 0.0, 0.0, 0.0
-        sx, sy, sz = survivor.x, survivor.y, survivor.z
+        sx, sy, sz = survivor.x, survivor.y, int(survivor.z)
 
+        # Pre-filter candidates by Z-level and AABB bounding box
+        candidates = []
         for e in entities:
             if getattr(e, 'is_alive', True) and not getattr(e, 'collected', False):
-                ez = getattr(e, 'z', 0)
+                ez = int(getattr(e, 'z', 0))
+                if ez != sz:
+                    continue
                 dx = e.x - sx
                 dy = e.y - sy
-                dz = ez - sz
-                d = math.hypot(dx, dy) + abs(dz) * 2.0
+                abs_dx = abs(dx)
+                abs_dy = abs(dy)
+                if abs_dx < max_dist and abs_dy < max_dist:
+                    m_dist = abs_dx + abs_dy
+                    candidates.append((m_dist, dx, dy, ez, e))
 
-                if d < max_dist and ez == sz:
-                    if check_line_of_sight(world, sx, sy, e.x, e.y, int(sz)):
-                        # Store in survivor's spatial memory
+        if candidates:
+            # Sort candidates by Manhattan distance to test closest raycast first
+            candidates.sort(key=lambda c: c[0])
+            for m_dist, dx, dy, ez, e in candidates:
+                if m_dist >= min_dist * 1.414:
+                    break
+                d = math.hypot(dx, dy)
+                if d < min_dist:
+                    if check_line_of_sight(world, sx, sy, e.x, e.y, sz):
                         if hasattr(survivor, 'spatial_memory'):
                             survivor.spatial_memory[category_key] = (e.x, e.y, ez, current_tick)
-                        if d < min_dist:
-                            min_dist = d
-                            best_dx = dx / max_dist
-                            best_dy = dy / max_dist
-                            best_dz = dz / 20.0
+                        min_dist = d
+                        best_dx = dx / max_dist
+                        best_dy = dy / max_dist
+                        best_dz = (ez - sz) / 20.0
 
         # Memory Fallback if no directly visible entity found
         if min_dist == max_dist and hasattr(survivor, 'spatial_memory') and category_key in survivor.spatial_memory:
             mx, my, mz, mtick = survivor.spatial_memory[category_key]
             # Retain memory for 300 ticks (~10 seconds)
-            if current_tick - mtick <= 300 and int(mz) == int(sz):
+            if current_tick - mtick <= 300 and int(mz) == sz:
                 dx = mx - sx
                 dy = my - sy
                 d = math.hypot(dx, dy)
@@ -176,7 +191,6 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     inputs[21] = 1.0 if world.is_walkable(survivor.x, survivor.y + 0.5, survivor.z) else 0.0
     inputs[22] = float(survivor.z) / 20.0
 
-    from src.world.tile_interaction_utility import TileInteractionUtility
     z_idx = world.z_to_idx(survivor.z)
     has_furniture_adj = 0.0
     sx_i, sy_i = int(survivor.x), int(survivor.y)
@@ -184,7 +198,7 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
         fx, fy = sx_i + dx, sy_i + dy
         if 0 <= fx < world.width and 0 <= fy < world.height:
-            if world.grid[z_idx, fy, fx] in TileInteractionUtility.MOVABLE_FURNITURE_TILES:
+            if world.grid[z_idx, fy, fx] in MOVABLE_FURNITURE_TILES:
                 has_furniture_adj = 1.0
                 break
 
@@ -204,7 +218,7 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
         inputs[27], inputs[28], inputs[29] = 1.0, 1.0, 1.0
 
     # Building shelter indicator (2D coordinate lookup)
-    building = world.building_grid.get((int(survivor.x), int(survivor.y)))
+    building = world.building_grid.get((sx_i, sy_i))
     inputs[30] = 1.0 if building is not None else 0.0
 
     # Exploration coverage indicator

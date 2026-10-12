@@ -38,35 +38,30 @@ class PythonRustEngineBridge:
             )
 
     def sync_entities_to_rust(self, survivors: list, zombies: list):
-        """Synchronizes Python survivors and zombies into RustFullSimulationCore."""
+        """Synchronizes Python survivors and zombies into RustFullSimulationCore using batched NumPy vectors."""
         if not self.full_sim_core:
             return
-        for idx, s in enumerate(survivors):
-            if idx < self.full_sim_core.get_survivors_count():
-                self.full_sim_core.sync_survivor_at(
-                    idx,
-                    float(s.x),
-                    float(s.y),
-                    int(s.z),
-                    float(getattr(s, 'health', 100.0)),
-                    float(getattr(s, 'hunger', 100.0)),
-                    float(getattr(s, 'thirst', 100.0))
-                )
-            else:
-                self.full_sim_core.add_survivor(float(s.x), float(s.y), int(s.z))
 
-        for idx, z in enumerate(zombies):
-            zhp = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
-            if idx < self.full_sim_core.get_zombies_count():
-                self.full_sim_core.sync_zombie_at(
-                    idx,
-                    float(z.x),
-                    float(z.y),
-                    int(z.z),
-                    zhp
-                )
-            else:
-                self.full_sim_core.add_zombie(float(z.x), float(z.y), int(z.z), zhp, float(getattr(z, 'speed', 0.08)))
+        if hasattr(self.full_sim_core, 'sync_survivors_batch') and survivors:
+            s_arr = np.empty((len(survivors), 6), dtype=np.float32)
+            for i, s in enumerate(survivors):
+                s_arr[i, 0] = float(s.x)
+                s_arr[i, 1] = float(s.y)
+                s_arr[i, 2] = float(s.z)
+                s_arr[i, 3] = float(getattr(s, 'health', 100.0))
+                s_arr[i, 4] = float(getattr(s, 'hunger', 100.0))
+                s_arr[i, 5] = float(getattr(s, 'thirst', 100.0))
+            self.full_sim_core.sync_survivors_batch(s_arr)
+
+        if hasattr(self.full_sim_core, 'sync_zombies_batch') and zombies:
+            z_arr = np.empty((len(zombies), 5), dtype=np.float32)
+            for i, z in enumerate(zombies):
+                z_arr[i, 0] = float(z.x)
+                z_arr[i, 1] = float(z.y)
+                z_arr[i, 2] = float(z.z)
+                z_arr[i, 3] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
+                z_arr[i, 4] = float(getattr(z, 'speed', 0.08))
+            self.full_sim_core.sync_zombies_batch(z_arr)
 
     def step_full_simulation(self, actions: list, movements: list) -> np.ndarray:
         """Executes full simulation step in Rust and returns 2D observation tensor for PyTorch."""
@@ -76,21 +71,26 @@ class PythonRustEngineBridge:
         return np.zeros((len(actions), 57), dtype=np.float32)
 
     def sync_rust_to_entities(self, survivors: list, zombies: list):
-        """Synchronizes updated positions and vitals back from Rust to Python entities."""
+        """Synchronizes updated positions and vitals back from Rust to Python entities in batch."""
         if not self.full_sim_core:
             return
-        for idx, s in enumerate(survivors):
-            if idx < self.full_sim_core.get_survivors_count():
-                rx, ry, rz = self.full_sim_core.get_survivor_pos(idx)
-                s.x, s.y, s.z = rx, ry, rz
 
-        for idx, z in enumerate(zombies):
-            if idx < self.full_sim_core.get_zombies_count():
-                zx, zy, zz, zhp, zalive = self.full_sim_core.get_zombie_pos(idx)
-                z.x, z.y, z.z = zx, zy, zz
-                z.hp = zhp
-                z.health = zhp
-                z.is_alive = zalive
+        if hasattr(self.full_sim_core, 'get_survivors_batch') and survivors:
+            s_arr = self.full_sim_core.get_survivors_batch()
+            for idx, s in enumerate(survivors):
+                if idx < s_arr.shape[0]:
+                    s.x, s.y, s.z = float(s_arr[idx, 0]), float(s_arr[idx, 1]), int(s_arr[idx, 2])
+
+        if hasattr(self.full_sim_core, 'get_zombies_batch') and zombies:
+            z_arr = self.full_sim_core.get_zombies_batch()
+            for idx, z in enumerate(zombies):
+                if idx < z_arr.shape[0]:
+                    z.x, z.y, z.z = float(z_arr[idx, 0]), float(z_arr[idx, 1]), int(z_arr[idx, 2])
+                    zhp = float(z_arr[idx, 3])
+                    zalive = bool(z_arr[idx, 4] > 0.5)
+                    z.hp = zhp
+                    z.health = zhp
+                    z.is_alive = zalive
 
     def step(self, dx: float = 0.0, dy: float = 0.0, action: int = 0) -> Tuple[np.ndarray, bool]:
         """Executes one simulation tick step in Rust and extracts zero-copy observations."""

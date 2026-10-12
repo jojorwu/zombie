@@ -265,20 +265,17 @@ impl RustFullSimulationCore {
         let num_zombies = self.zombies.len();
         let mut steerings = vec![(0.0f32, 0.0f32); num_zombies];
 
-        // Flocking separation between zombies
-        for i in 0..num_zombies {
-            if !self.zombies[i].is_alive {
-                continue;
+        // Parallelized Flocking separation between zombies using Rayon
+        let zombies_ref = &self.zombies;
+        steerings.par_iter_mut().enumerate().for_each(|(i, steer)| {
+            let z1 = &zombies_ref[i];
+            if !z1.is_alive {
+                return;
             }
-            let z1 = &self.zombies[i];
             let mut sep_x = 0.0f32;
             let mut sep_y = 0.0f32;
-            for j in 0..num_zombies {
-                if i == j || !self.zombies[j].is_alive {
-                    continue;
-                }
-                let z2 = &self.zombies[j];
-                if z1.z != z2.z {
+            for (j, z2) in zombies_ref.iter().enumerate() {
+                if i == j || !z2.is_alive || z1.z != z2.z {
                     continue;
                 }
                 let dx = z1.x - z2.x;
@@ -290,8 +287,8 @@ impl RustFullSimulationCore {
                     sep_y += (dy / d) * (1.5 - d);
                 }
             }
-            steerings[i] = (sep_x, sep_y);
-        }
+            *steer = (sep_x, sep_y);
+        });
 
         // Track zombie pressure against door/barricade tiles
         let mut tile_pressure: HashMap<(i32, i32, i32), usize> = HashMap::new();

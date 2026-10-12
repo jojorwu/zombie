@@ -39,7 +39,10 @@ class BrainNet(nn.Module):
             prev_hidden = self.init_hidden()
 
         with torch.inference_mode():
-            inp_tensor = torch.tensor(inputs, dtype=torch.float32, device=DEVICE)
+            if isinstance(inputs, np.ndarray):
+                inp_tensor = torch.from_numpy(inputs).float().to(DEVICE)
+            else:
+                inp_tensor = torch.tensor(inputs, dtype=torch.float32, device=DEVICE)
             if inp_tensor.dim() == 1:
                 inp_tensor = inp_tensor.unsqueeze(0)
             if prev_hidden.dim() == 3:

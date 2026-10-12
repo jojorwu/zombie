@@ -1,3 +1,5 @@
+#![allow(non_local_definitions, unused_imports, unused_variables)]
+
 use pyo3::prelude::*;
 
 pub mod ai;

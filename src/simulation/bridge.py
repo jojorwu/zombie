@@ -38,30 +38,36 @@ class PythonRustEngineBridge:
             )
 
     def sync_entities_to_rust(self, survivors: list, zombies: list):
-        """Synchronizes Python survivors and zombies into RustFullSimulationCore using batched NumPy vectors."""
+        """Synchronizes Python survivors and zombies into RustFullSimulationCore using cached NumPy buffers."""
         if not self.full_sim_core:
             return
 
         if hasattr(self.full_sim_core, 'sync_survivors_batch') and survivors:
-            s_arr = np.empty((len(survivors), 6), dtype=np.float32)
+            n_s = len(survivors)
+            if not hasattr(self, '_surv_buf') or self._surv_buf.shape[0] != n_s:
+                self._surv_buf = np.empty((n_s, 6), dtype=np.float32)
+
             for i, s in enumerate(survivors):
-                s_arr[i, 0] = float(s.x)
-                s_arr[i, 1] = float(s.y)
-                s_arr[i, 2] = float(s.z)
-                s_arr[i, 3] = float(getattr(s, 'health', 100.0))
-                s_arr[i, 4] = float(getattr(s, 'hunger', 100.0))
-                s_arr[i, 5] = float(getattr(s, 'thirst', 100.0))
-            self.full_sim_core.sync_survivors_batch(s_arr)
+                self._surv_buf[i, 0] = float(s.x)
+                self._surv_buf[i, 1] = float(s.y)
+                self._surv_buf[i, 2] = float(s.z)
+                self._surv_buf[i, 3] = float(getattr(s, 'health', 100.0))
+                self._surv_buf[i, 4] = float(getattr(s, 'hunger', 100.0))
+                self._surv_buf[i, 5] = float(getattr(s, 'thirst', 100.0))
+            self.full_sim_core.sync_survivors_batch(self._surv_buf)
 
         if hasattr(self.full_sim_core, 'sync_zombies_batch') and zombies:
-            z_arr = np.empty((len(zombies), 5), dtype=np.float32)
+            n_z = len(zombies)
+            if not hasattr(self, '_zomb_buf') or self._zomb_buf.shape[0] != n_z:
+                self._zomb_buf = np.empty((n_z, 5), dtype=np.float32)
+
             for i, z in enumerate(zombies):
-                z_arr[i, 0] = float(z.x)
-                z_arr[i, 1] = float(z.y)
-                z_arr[i, 2] = float(z.z)
-                z_arr[i, 3] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
-                z_arr[i, 4] = float(getattr(z, 'speed', 0.08))
-            self.full_sim_core.sync_zombies_batch(z_arr)
+                self._zomb_buf[i, 0] = float(z.x)
+                self._zomb_buf[i, 1] = float(z.y)
+                self._zomb_buf[i, 2] = float(z.z)
+                self._zomb_buf[i, 3] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
+                self._zomb_buf[i, 4] = float(getattr(z, 'speed', 0.08))
+            self.full_sim_core.sync_zombies_batch(self._zomb_buf)
 
     def step_full_simulation(self, actions: list, movements: list) -> np.ndarray:
         """Executes full simulation step in Rust and returns 2D observation tensor for PyTorch."""

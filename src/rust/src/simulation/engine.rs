@@ -212,17 +212,22 @@ impl RustFullSimulationCore {
 
     pub fn get_zombies_batch<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
         let n = self.zombies.len();
-        let mut data = vec![0.0f32; n * 5];
-        for (i, z) in self.zombies.iter().enumerate() {
-            let offset = i * 5;
-            data[offset] = z.x;
-            data[offset + 1] = z.y;
-            data[offset + 2] = z.z as f32;
-            data[offset + 3] = z.hp;
-            data[offset + 4] = if z.is_alive { 1.0 } else { 0.0 };
-        }
-        let array2d = numpy::ndarray::Array2::from_shape_vec((n, 5), data).unwrap();
-        array2d.into_pyarray(py)
+        let py_array = PyArray2::<f32>::zeros(py, [n, 5], false);
+        let slice = unsafe { py_array.as_slice_mut().unwrap() };
+
+        let zombies_ref = &self.zombies;
+        slice.par_chunks_mut(5).enumerate().for_each(|(i, z_slice)| {
+            if i < zombies_ref.len() {
+                let z = &zombies_ref[i];
+                z_slice[0] = z.x;
+                z_slice[1] = z.y;
+                z_slice[2] = z.z as f32;
+                z_slice[3] = z.hp;
+                z_slice[4] = if z.is_alive { 1.0 } else { 0.0 };
+            }
+        });
+
+        py_array
     }
 
     pub fn sync_survivors_batch(&mut self, data: PyReadonlyArray2<f32>) {
@@ -256,16 +261,21 @@ impl RustFullSimulationCore {
 
     pub fn get_survivors_batch<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
         let n = self.survivors.len();
-        let mut data = vec![0.0f32; n * 4];
-        for (i, s) in self.survivors.iter().enumerate() {
-            let offset = i * 4;
-            data[offset] = s.x;
-            data[offset + 1] = s.y;
-            data[offset + 2] = s.z as f32;
-            data[offset + 3] = if s.is_alive { 1.0 } else { 0.0 };
-        }
-        let array2d = numpy::ndarray::Array2::from_shape_vec((n, 4), data).unwrap();
-        array2d.into_pyarray(py)
+        let py_array = PyArray2::<f32>::zeros(py, [n, 4], false);
+        let slice = unsafe { py_array.as_slice_mut().unwrap() };
+
+        let survivors_ref = &self.survivors;
+        slice.par_chunks_mut(4).enumerate().for_each(|(i, s_slice)| {
+            if i < survivors_ref.len() {
+                let s = &survivors_ref[i];
+                s_slice[0] = s.x;
+                s_slice[1] = s.y;
+                s_slice[2] = s.z as f32;
+                s_slice[3] = if s.is_alive { 1.0 } else { 0.0 };
+            }
+        });
+
+        py_array
     }
 
     pub fn get_zombie_pos(&self, index: usize) -> (f32, f32, i32, f32, bool) {
@@ -493,7 +503,8 @@ impl RustFullSimulationCore {
 
     pub fn get_observations_matrix<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
         let num_survivors = self.survivors.len();
-        let mut obs_matrix = vec![0.0f32; num_survivors * 57];
+        let py_array = PyArray2::<f32>::zeros(py, [num_survivors, 57], false);
+        let slice = unsafe { py_array.as_slice_mut().unwrap() };
 
         let survivors_ref = &self.survivors;
         let zombies_ref = &self.zombies;
@@ -503,17 +514,17 @@ impl RustFullSimulationCore {
         let cur_tick = self.current_tick;
         let grid_ref = &self.world_grid;
 
-        obs_matrix.par_chunks_mut(57).enumerate().for_each(|(i, slice)| {
+        slice.par_chunks_mut(57).enumerate().for_each(|(i, chunk_slice)| {
             if i >= survivors_ref.len() {
                 return;
             }
             let surv = &survivors_ref[i];
 
-            slice[0] = surv.hp / 100.0;
-            slice[1] = surv.hunger / 100.0;
-            slice[2] = surv.thirst / 100.0;
-            slice[3] = if surv.is_alive { 1.0 } else { 0.0 };
-            slice[4] = ambient;
+            chunk_slice[0] = surv.hp / 100.0;
+            chunk_slice[1] = surv.hunger / 100.0;
+            chunk_slice[2] = surv.thirst / 100.0;
+            chunk_slice[3] = if surv.is_alive { 1.0 } else { 0.0 };
+            chunk_slice[4] = ambient;
 
             let mut zombie_dists: Vec<(f32, f32, f32, f32, f32)> = Vec::new();
             for z in zombies_ref {
@@ -532,18 +543,18 @@ impl RustFullSimulationCore {
                 let base = 5 + (z_idx * 5);
                 if z_idx < zombie_dists.len() {
                     let (dist, dx, dy, hp, speed) = zombie_dists[z_idx];
-                    slice[base] = (dx / 50.0).clamp(-1.0, 1.0);
-                    slice[base + 1] = (dy / 50.0).clamp(-1.0, 1.0);
-                    slice[base + 2] = (dist / 50.0).clamp(0.0, 1.0);
-                    slice[base + 3] = hp / 100.0;
-                    slice[base + 4] = speed;
+                    chunk_slice[base] = (dx / 50.0).clamp(-1.0, 1.0);
+                    chunk_slice[base + 1] = (dy / 50.0).clamp(-1.0, 1.0);
+                    chunk_slice[base + 2] = (dist / 50.0).clamp(0.0, 1.0);
+                    chunk_slice[base + 3] = hp / 100.0;
+                    chunk_slice[base + 4] = speed;
                 }
             }
 
-            slice[20] = (surv.x / width_f).clamp(0.0, 1.0);
-            slice[21] = (surv.y / height_f).clamp(0.0, 1.0);
-            slice[22] = (surv.z as f32 / 20.0).clamp(-1.0, 1.0);
-            slice[23] = (cur_tick % 3600) as f32 / 3600.0;
+            chunk_slice[20] = (surv.x / width_f).clamp(0.0, 1.0);
+            chunk_slice[21] = (surv.y / height_f).clamp(0.0, 1.0);
+            chunk_slice[22] = (surv.z as f32 / 20.0).clamp(-1.0, 1.0);
+            chunk_slice[23] = (cur_tick % 3600) as f32 / 3600.0;
 
             let sx = surv.x as i32;
             let sy = surv.y as i32;
@@ -555,15 +566,14 @@ impl RustFullSimulationCore {
                     if sensor_idx < 57 {
                         let tx = sx + dx;
                         let ty = sy + dy;
-                        slice[sensor_idx] = if grid_ref.is_walkable(tx as f32, ty as f32, sz) { 1.0 } else { 0.0 };
+                        chunk_slice[sensor_idx] = if grid_ref.is_walkable(tx as f32, ty as f32, sz) { 1.0 } else { 0.0 };
                         sensor_idx += 1;
                     }
                 }
             }
         });
 
-        let array2d = numpy::ndarray::Array2::from_shape_vec((num_survivors, 57), obs_matrix).unwrap();
-        array2d.into_pyarray(py)
+        py_array
     }
 
     pub fn get_current_tick(&self) -> u64 {

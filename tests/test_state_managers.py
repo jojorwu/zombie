@@ -8,7 +8,7 @@ from src.entities import (
     FurnitureState, FurnitureCondition, FurnitureStateManager,
     ExtendedItemState, ItemCondition, ItemStateManager, ItemEntity, ResourceItem
 )
-from src.utils.tile_interaction_utility import TileInteractionUtility
+from src.world.tile_interaction_utility import TileInteractionUtility
 
 
 class TestStateManagers(unittest.TestCase):

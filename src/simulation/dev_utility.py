@@ -2,7 +2,7 @@
 """
 Utility 2: Development & Optimization Utility Tool for Python/Rust/Lua Codebase.
 Runs math benchmarks, P=NP complexity scaling analysis, and codebase health checks.
-Usage: python -m src.utils.dev_utility [command]
+Usage: python -m src.simulation.dev_utility [command]
 """
 
 import sys
@@ -10,7 +10,7 @@ import os
 import time
 import numpy as np
 import torch
-from src.utils.p_np_math import PNPComplexityEngine, PolynomialVerifier
+from src.simulation.p_np_math import PNPComplexityEngine, PolynomialVerifier
 
 
 class DevUtility:

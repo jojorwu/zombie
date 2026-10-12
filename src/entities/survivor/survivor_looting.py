@@ -3,7 +3,7 @@ import math
 from src.entities.item import ResourceItem
 from src.world.tiles import TileType
 from src.entities.sensory import NoiseEvent
-from src.utils import ContainerUtility
+from src.entities.container_utility import ContainerUtility
 
 try:
     from rust_engine import RustPNPComplexityEngine as PolynomialKnapsackSolver

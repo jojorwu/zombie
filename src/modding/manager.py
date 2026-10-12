@@ -7,7 +7,8 @@ try:
     HAS_RUST_LUA = True
 except ImportError:
     HAS_RUST_LUA = False
-    from src.utils import ContainerUtility, BallisticsUtility
+    from src.entities.container_utility import ContainerUtility
+    from src.entities.ballistics_utility import BallisticsUtility
 
 try:
     import lupa

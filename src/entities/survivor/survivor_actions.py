@@ -4,12 +4,12 @@ from src.entities.item import ResourceItem, WEAPON_STATS
 from src.world.lighting import DynamicLight
 from src.entities.sensory import NoiseEvent
 from src.entities.survivor.survivor_entity import EmotionalState
-from src.utils import TileInteractionUtility
+from src.world.tile_interaction_utility import TileInteractionUtility
 
 try:
     from rust_engine import RustBallisticsUtility as BallisticsUtility
 except ImportError:
-    from src.utils.ballistics_utility import BallisticsUtility
+    from src.entities.ballistics_utility import BallisticsUtility
 
 
 class SurvivorActions:

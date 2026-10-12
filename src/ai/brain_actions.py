@@ -182,7 +182,7 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     inputs[21] = 1.0 if world.is_walkable(survivor.x, survivor.y + 0.5, survivor.z) else 0.0
     inputs[22] = float(survivor.z) / 20.0
 
-    from src.utils.tile_interaction_utility import TileInteractionUtility
+    from src.world.tile_interaction_utility import TileInteractionUtility
     z_idx = world.z_to_idx(survivor.z)
     has_furniture_adj = 0.0
     sx_i, sy_i = int(survivor.x), int(survivor.y)

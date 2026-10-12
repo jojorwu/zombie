@@ -2,7 +2,7 @@
 """
 Utility 1: Modding Utility Tool for Zombie AI Simulation.
 Supports Lua modding, mod validation, template creation, and Lua math execution.
-Usage: python -m src.utils.mod_utility [command]
+Usage: python -m src.modding.mod_utility [command]
 """
 
 import sys

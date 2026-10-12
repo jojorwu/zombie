@@ -16,7 +16,7 @@ class EmotionalState:
 
 
 from src.entities.survivor.metabolism import MetabolicBalanceSimulator
-from src.utils import ContainerUtility
+from src.entities.container_utility import ContainerUtility
 
 
 class Survivor:

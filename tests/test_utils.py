@@ -3,11 +3,12 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
-from src.utils.dev_utility import PolynomialVerifier, DevUtility
-from src.utils.mod_utility import ModUtility
-from src.utils.pathfinding_utility import PathfindingUtility
-from src.utils.vehicle_utility import VehicleRegistry, VehicleType, VehiclePhysicsUtility
-from src.utils import PNPComplexityEngine, TileInteractionUtility
+from src.simulation.dev_utility import PolynomialVerifier, DevUtility
+from src.modding.mod_utility import ModUtility
+from src.ai.pathfinding_utility import PathfindingUtility
+from src.entities.vehicle_utility import VehicleRegistry, VehicleType, VehiclePhysicsUtility
+from src.simulation.p_np_math import PNPComplexityEngine
+from src.world.tile_interaction_utility import TileInteractionUtility
 from src.ai.pathfinding import AStar3D
 from src.world import World, TileType, ChunkManager
 

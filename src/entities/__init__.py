@@ -45,6 +45,12 @@ from src.entities.state_manager import (
     FurnitureState, FurnitureCondition, FurnitureStateManager,
     ExtendedItemState, ItemCondition, ItemStateManager
 )
+from src.entities.container_utility import ContainerUtility, ItemCategory
+from src.entities.ballistics_utility import BallisticsUtility, MaterialResistance
+from src.entities.vehicle_utility import VehicleRegistry, VehicleType, VehiclePhysicsUtility
+from src.entities.item_state_utility import ItemStateUtility, ItemConditionState
+from src.entities.food_spoilage_utility import FoodSpoilageUtility
+from src.entities.sound_utility import SoundUtility
 
 __all__ = [
     "ItemEntity",
@@ -71,4 +77,15 @@ __all__ = [
     "ExtendedItemState",
     "ItemCondition",
     "ItemStateManager",
+    "ContainerUtility",
+    "ItemCategory",
+    "BallisticsUtility",
+    "MaterialResistance",
+    "VehicleRegistry",
+    "VehicleType",
+    "VehiclePhysicsUtility",
+    "ItemStateUtility",
+    "ItemConditionState",
+    "FoodSpoilageUtility",
+    "SoundUtility",
 ]

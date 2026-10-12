@@ -18,6 +18,8 @@ from src.world.chunk import Chunk, ChunkManager, ChunkState
 from src.world.weather import WeatherManager
 from src.world.lighting import DynamicLight, LightingEngine
 from src.world.generation import WorldGenerator
+from src.world.tile_interaction_utility import TileInteractionUtility
+from src.world.electricity_utility import ElectricityUtility
 
 __all__ = [
     "check_line_of_sight_rust",
@@ -37,4 +39,6 @@ __all__ = [
     "DynamicLight",
     "LightingEngine",
     "WorldGenerator",
+    "TileInteractionUtility",
+    "ElectricityUtility",
 ]

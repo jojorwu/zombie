@@ -6,7 +6,7 @@ import argparse
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from src.simulation.engine import SimulationEngine
+from src.simulation import SimulationEngine, ReportManager
 from src.ai.brain_net import DEVICE
 
 try:
@@ -120,11 +120,28 @@ def main():
             engine.end_generation()
 
     total_time = time.time() - start_time
+
+    # Generate timestamped launch report
+    reporter = ReportManager()
+    report_stats = {
+        "generations": args.generations,
+        "population": args.survivors,
+        "zombies": args.zombies,
+        "map_size": f"{args.map_size}x{args.map_size}",
+        "max_ticks": args.max_ticks,
+        "parallel_envs": args.parallel_envs,
+        "total_time_seconds": round(total_time, 2),
+        "best_fitness": round(engine.best_historical_score, 2),
+        "model_file": args.output,
+    }
+    report_path = reporter.create_launch_report("training", report_stats)
+
     print("\n" + "=" * 65)
     print("              TRAINING COMPLETED SUCCESSFULLY!")
     print("=" * 65)
     print(f"Total Time Elapsed : {total_time:.2f} seconds")
     print(f"Best Model Saved   : {args.output}")
+    print(f"Launch Report Saved: {report_path}")
     print("=" * 65)
 
 

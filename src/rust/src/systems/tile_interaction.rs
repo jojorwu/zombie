@@ -26,7 +26,7 @@ impl RustTileInteractionUtility {
         }
 
         let base_success = 0.3 + (lockpick_skill as f32 * 0.15) - (lock_difficulty as f32 * 0.1);
-        let success_chance = base_success.max(0.05).min(0.95);
+        let success_chance = base_success.clamp(0.05, 0.95);
 
         let roll: f32 = rand::random();
         let success = roll < success_chance;

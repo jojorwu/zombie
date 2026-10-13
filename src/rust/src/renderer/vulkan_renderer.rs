@@ -104,15 +104,13 @@ impl VulkanTileRenderer {
                     )
                 };
 
+                let pixel = [r_base, g_base, b_base, 255u8];
                 for dy in 0..ts {
                     let line_start = (py_start + dy) * stride + px_start * 4;
                     for dx in 0..ts {
                         let px_idx = line_start + dx * 4;
-                        if px_idx + 3 < buffer.len() {
-                            buffer[px_idx] = r_base;
-                            buffer[px_idx + 1] = g_base;
-                            buffer[px_idx + 2] = b_base;
-                            buffer[px_idx + 3] = 255;
+                        if px_idx + 4 <= buffer.len() {
+                            buffer[px_idx..px_idx + 4].copy_from_slice(&pixel);
                         }
                     }
                 }
@@ -206,15 +204,13 @@ impl VulkanTileRenderer {
                     )
                 };
 
+                let pixel = [r_base, g_base, b_base, 255u8];
                 for dy in 0..ts {
                     let line_start = (py_start + dy) * stride + px_start * 4;
                     for dx in 0..ts {
                         let px_idx = line_start + dx * 4;
-                        if px_idx + 3 < buffer.len() {
-                            buffer[px_idx] = r_base;
-                            buffer[px_idx + 1] = g_base;
-                            buffer[px_idx + 2] = b_base;
-                            buffer[px_idx + 3] = 255;
+                        if px_idx + 4 <= buffer.len() {
+                            buffer[px_idx..px_idx + 4].copy_from_slice(&pixel);
                         }
                     }
                 }
@@ -261,7 +257,7 @@ impl VulkanTileRenderer {
     ) -> &'py PyBytes {
         let header = format!("P6\n{} {}\n255\n", self.pixel_width, self.pixel_height);
         let mut ppm_data = header.into_bytes();
-        ppm_data.reserve((self.pixel_width * self.pixel_height * 3) as usize);
+        ppm_data.reserve(self.pixel_width * self.pixel_height * 3);
 
         for chunk in rgba_buffer.chunks(4) {
             if chunk.len() >= 3 {
@@ -275,7 +271,7 @@ impl VulkanTileRenderer {
     }
 
     pub fn render_grid_buffer(&self, grid: Vec<i32>, light: f32) -> Vec<u8> {
-        let num_pixels = (self.pixel_width * self.pixel_height * 4) as usize;
+        let num_pixels = self.pixel_width * self.pixel_height * 4;
         let mut buffer = vec![20u8; num_pixels];
 
         for (idx, &tile) in grid.iter().enumerate() {

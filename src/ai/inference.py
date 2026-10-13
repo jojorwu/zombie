@@ -1,7 +1,11 @@
 import math
+from typing import List, Tuple, Dict, Any, Optional, Union
 import torch
 import numpy as np
 from src.ai.network import DEVICE
+from src.world.tile_interaction_utility import TileInteractionUtility
+
+MOVABLE_FURNITURE_TILES = TileInteractionUtility.MOVABLE_FURNITURE_TILES
 
 try:
     from rust_engine import check_line_of_sight_rust, RustBrainInference
@@ -11,11 +15,54 @@ except ImportError:
     RUST_LOS_AVAILABLE = False
     RUST_BRAIN_AVAILABLE = False
 
+CUDA_STREAM = torch.cuda.Stream() if torch.cuda.is_available() else None
+_WEIGHT_CACHE = {}
 
-def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens: list) -> list:
+
+def get_cached_stacked_weights(brains: List[Any]) -> Tuple[torch.Tensor, ...]:
+    """
+    Caches stacked weight tensors for population brains to eliminate
+    per-tick torch.stack GPU allocation overhead.
+    """
+    key = tuple(id(b) for b in brains)
+    if key in _WEIGHT_CACHE:
+        return _WEIGHT_CACHE[key]
+
+    with torch.no_grad():
+        w_fc1 = torch.stack([b.fc1.weight for b in brains]).to(DEVICE)
+        b_fc1 = torch.stack([b.fc1.bias for b in brains]).to(DEVICE)
+        w_ih = torch.stack([b.gru.weight_ih for b in brains]).to(DEVICE)
+        w_hh = torch.stack([b.gru.weight_hh for b in brains]).to(DEVICE)
+        b_ih = torch.stack([b.gru.bias_ih for b in brains]).to(DEVICE)
+        b_hh = torch.stack([b.gru.bias_hh for b in brains]).to(DEVICE)
+        w_out = torch.stack([b.fc_out.weight for b in brains]).to(DEVICE)
+        b_out = torch.stack([b.fc_out.bias for b in brains]).to(DEVICE)
+
+    weights = (w_fc1, b_fc1, w_ih, w_hh, b_ih, b_hh, w_out, b_out)
+    _WEIGHT_CACHE[key] = weights
+
+    # Keep cache compact (evict oldest if cache grows > 10)
+    if len(_WEIGHT_CACHE) > 10:
+        first_key = next(iter(_WEIGHT_CACHE))
+        del _WEIGHT_CACHE[first_key]
+
+    return weights
+
+
+def clear_weight_cache() -> None:
+    """Clears cached population weight tensors on generation end / reset."""
+    _WEIGHT_CACHE.clear()
+
+
+def batch_get_action_and_movement(
+    brains: List[Any],
+    inputs_list: List[np.ndarray],
+    prev_hiddens: List[Optional[torch.Tensor]]
+) -> List[Tuple[float, float, int, torch.Tensor, int]]:
     """
     High-performance batched PyTorch inference over active survivors.
-    Executes batched tensor matrix multiplication (BMM) for max speed and zero memory allocation churn.
+    Executes batched tensor matrix multiplication (BMM) with weight caching,
+    CUDA stream overlap, and pinned memory transfers for maximum speed.
     """
     if not brains or not inputs_list:
         return []
@@ -25,17 +72,15 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
     if num_survivors == 1:
         return [brains[0].get_action_and_movement(inputs_list[0], prev_hiddens[0])]
 
-    w_fc1 = torch.stack([b.fc1.weight for b in brains])
-    b_fc1 = torch.stack([b.fc1.bias for b in brains])
-    w_ih = torch.stack([b.gru.weight_ih for b in brains])
-    w_hh = torch.stack([b.gru.weight_hh for b in brains])
-    b_ih = torch.stack([b.gru.bias_ih for b in brains])
-    b_hh = torch.stack([b.gru.bias_hh for b in brains])
-    w_out = torch.stack([b.fc_out.weight for b in brains])
-    b_out = torch.stack([b.fc_out.bias for b in brains])
+    w_fc1, b_fc1, w_ih, w_hh, b_ih, b_hh, w_out, b_out = get_cached_stacked_weights(brains)
 
     inp_np = np.ascontiguousarray(np.array(inputs_list, dtype=np.float32))
-    x = torch.from_numpy(inp_np).to(DEVICE).unsqueeze(1)
+
+    # Pinned memory transfer for CUDA non-blocking speedup if GPU is available
+    if DEVICE.type == "cuda":
+        inp_tensor = torch.from_numpy(inp_np).pin_memory().to(DEVICE, non_blocking=True).unsqueeze(1)
+    else:
+        inp_tensor = torch.from_numpy(inp_np).to(DEVICE).unsqueeze(1)
 
     valid_hiddens = []
     for h in prev_hiddens:
@@ -46,13 +91,13 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
         elif h.dim() == 1:
             h = h.unsqueeze(0)
         if h.device != DEVICE:
-            h = h.to(DEVICE)
+            h = h.to(DEVICE, non_blocking=True if DEVICE.type == "cuda" else False)
         valid_hiddens.append(h)
 
     h_cat = torch.cat(valid_hiddens, dim=0).to(DEVICE)
 
-    with torch.inference_mode():
-        out = torch.bmm(x, w_fc1.transpose(1, 2)).squeeze(1) + b_fc1
+    def _forward_pass():
+        out = torch.bmm(inp_tensor, w_fc1.transpose(1, 2)).squeeze(1) + b_fc1
         out = torch.relu(out)
 
         gi = torch.bmm(out.unsqueeze(1), w_ih.transpose(1, 2)).squeeze(1) + b_ih
@@ -67,6 +112,16 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
         h_next = newgate + inputgate * (h_cat - newgate)
 
         out_final = torch.bmm(h_next.unsqueeze(1), w_out.transpose(1, 2)).squeeze(1) + b_out
+        return out_final, h_next
+
+    with torch.inference_mode():
+        if CUDA_STREAM and DEVICE.type == "cuda":
+            with torch.cuda.stream(CUDA_STREAM):
+                out_final, h_next = _forward_pass()
+            CUDA_STREAM.synchronize()
+        else:
+            out_final, h_next = _forward_pass()
+
         out_arr = out_final.cpu().numpy()
 
         dxs = np.tanh(out_arr[:, 0])
@@ -85,7 +140,7 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
         return results
 
 
-def check_line_of_sight(world, x0: float, y0: float, x1: float, y1: float, z: int) -> bool:
+def check_line_of_sight(world: Any, x0: float, y0: float, x1: float, y1: float, z: int) -> bool:
     """Raycast check between two points on the same Z level to verify Line-of-Sight using fast Rust C-API."""
     if RUST_LOS_AVAILABLE:
         grid_3d = world.get_3d_grid_array() if hasattr(world, 'get_3d_grid_array') else world.grid.astype(np.int64)
@@ -115,8 +170,15 @@ def check_line_of_sight(world, x0: float, y0: float, x1: float, y1: float, z: in
     return True
 
 
-def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) -> np.ndarray:
-    """Extracts 57 numerical input features with Raycast Line-of-Sight perception masking and spatial memory."""
+def extract_survivor_inputs(
+    survivor: Any,
+    world: Any,
+    items: List[Any],
+    vehicles: List[Any],
+    zombies: List[Any],
+    animals: List[Any]
+) -> np.ndarray:
+    """Extracts 57 numerical input features with fast bounding box perception masking and spatial memory."""
     inputs = np.zeros(57, dtype=np.float32)
     inputs[0] = survivor.health / 100.0
     inputs[1] = survivor.hunger / 100.0
@@ -132,32 +194,44 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     def find_closest_visible_or_remembered(entities, category_key: str, max_dist: float = 15.0):
         min_dist = max_dist
         best_dx, best_dy, best_dz = 0.0, 0.0, 0.0
-        sx, sy, sz = survivor.x, survivor.y, survivor.z
+        sx, sy, sz = survivor.x, survivor.y, int(survivor.z)
 
+        # Pre-filter candidates by Z-level and AABB bounding box
+        candidates = []
         for e in entities:
             if getattr(e, 'is_alive', True) and not getattr(e, 'collected', False):
-                ez = getattr(e, 'z', 0)
+                ez = int(getattr(e, 'z', 0))
+                if ez != sz:
+                    continue
                 dx = e.x - sx
                 dy = e.y - sy
-                dz = ez - sz
-                d = math.hypot(dx, dy) + abs(dz) * 2.0
+                abs_dx = abs(dx)
+                abs_dy = abs(dy)
+                if abs_dx < max_dist and abs_dy < max_dist:
+                    m_dist = abs_dx + abs_dy
+                    candidates.append((m_dist, dx, dy, ez, e))
 
-                if d < max_dist and ez == sz:
-                    if check_line_of_sight(world, sx, sy, e.x, e.y, int(sz)):
-                        # Store in survivor's spatial memory
+        if candidates:
+            # Sort candidates by Manhattan distance to test closest raycast first
+            candidates.sort(key=lambda c: c[0])
+            for m_dist, dx, dy, ez, e in candidates:
+                if m_dist >= min_dist * 1.414:
+                    break
+                d = math.hypot(dx, dy)
+                if d < min_dist:
+                    if check_line_of_sight(world, sx, sy, e.x, e.y, sz):
                         if hasattr(survivor, 'spatial_memory'):
                             survivor.spatial_memory[category_key] = (e.x, e.y, ez, current_tick)
-                        if d < min_dist:
-                            min_dist = d
-                            best_dx = dx / max_dist
-                            best_dy = dy / max_dist
-                            best_dz = dz / 20.0
+                        min_dist = d
+                        best_dx = dx / max_dist
+                        best_dy = dy / max_dist
+                        best_dz = (ez - sz) / 20.0
 
         # Memory Fallback if no directly visible entity found
         if min_dist == max_dist and hasattr(survivor, 'spatial_memory') and category_key in survivor.spatial_memory:
             mx, my, mz, mtick = survivor.spatial_memory[category_key]
             # Retain memory for 300 ticks (~10 seconds)
-            if current_tick - mtick <= 300 and int(mz) == int(sz):
+            if current_tick - mtick <= 300 and int(mz) == sz:
                 dx = mx - sx
                 dy = my - sy
                 d = math.hypot(dx, dy)
@@ -176,7 +250,6 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     inputs[21] = 1.0 if world.is_walkable(survivor.x, survivor.y + 0.5, survivor.z) else 0.0
     inputs[22] = float(survivor.z) / 20.0
 
-    from src.world.tile_interaction_utility import TileInteractionUtility
     z_idx = world.z_to_idx(survivor.z)
     has_furniture_adj = 0.0
     sx_i, sy_i = int(survivor.x), int(survivor.y)
@@ -184,7 +257,7 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
     for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
         fx, fy = sx_i + dx, sy_i + dy
         if 0 <= fx < world.width and 0 <= fy < world.height:
-            if world.grid[z_idx, fy, fx] in TileInteractionUtility.MOVABLE_FURNITURE_TILES:
+            if world.grid[z_idx, fy, fx] in MOVABLE_FURNITURE_TILES:
                 has_furniture_adj = 1.0
                 break
 
@@ -204,7 +277,7 @@ def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) 
         inputs[27], inputs[28], inputs[29] = 1.0, 1.0, 1.0
 
     # Building shelter indicator (2D coordinate lookup)
-    building = world.building_grid.get((int(survivor.x), int(survivor.y)))
+    building = world.building_grid.get((sx_i, sy_i))
     inputs[30] = 1.0 if building is not None else 0.0
 
     # Exploration coverage indicator

@@ -7,10 +7,10 @@ from src.entities import AnatomicalHealth, BodyPart
 from src.ai.inference import check_line_of_sight
 
 try:
-    from rust_engine import compute_zombie_flock_steering
-    RUST_STEERING_AVAILABLE = True
+    from rust_engine import RustZombieEngine
+    RUST_ZOMBIE_AVAILABLE = True
 except ImportError:
-    RUST_STEERING_AVAILABLE = False
+    RUST_ZOMBIE_AVAILABLE = False
 
 
 class ZombieType:
@@ -56,23 +56,34 @@ class Zombie:
         self.path_target_pos = None
         self.astar_engine = None
 
+        from src.simulation.p_np_math import PNPComplexityEngine
+        self.pnp_engine = PNPComplexityEngine(degree=3)
+
+        if RUST_ZOMBIE_AVAILABLE:
+            self.rust_zombie = RustZombieEngine(self.x, self.y, self.z, self.hp, self.speed)
+        else:
+            self.rust_zombie = None
+
     def take_targeted_damage(self, amount, target_part=None, attacker_pos=None):
         if hasattr(self.body, 'apply_targeted_damage'):
             actual_damage = self.body.apply_targeted_damage(target_part or "torso", amount, 0.0)
             if target_part in ("left_leg", "right_leg") and (self.body.left_leg <= 0 or self.body.right_leg <= 0):
                 self.is_crawler = True
+                if self.rust_zombie:
+                    self.rust_zombie.dismember_legs()
         else:
             actual_damage = amount
 
         self.hp = max(0.0, self.hp - actual_damage)
         if self.hp <= 0.0:
             self.is_alive = False
+            if self.rust_zombie:
+                self.rust_zombie.is_alive = False
         elif attacker_pos:
             self.state = ZombieState.INVESTIGATE
             self.investigate_pos = (attacker_pos[0], attacker_pos[1], attacker_pos[2])
             self.memory_timer = self.memory_duration_ticks
         return actual_damage
-
 
     def has_line_of_sight(self, tx, ty, tz, world):
         if self.z != tz:
@@ -81,15 +92,46 @@ class Zombie:
 
     def check_vision(self, world, survivors):
         sight_range = 15.0
-        best_s = None
-        min_d = sight_range
+        if not survivors:
+            return None
 
+        targets_vec = []
         for s in survivors:
             if s.is_alive and s.z == self.z:
-                d = math.hypot(s.x - self.x, s.y - self.y)
-                if d < min_d and self.has_line_of_sight(s.x, s.y, s.z, world):
-                    min_d = d
-                    best_s = s
+                dx = s.x - self.x
+                dy = s.y - self.y
+                if abs(dx) < sight_range and abs(dy) < sight_range:
+                    val = 100.0 - (s.health if hasattr(s, 'health') else 100.0)
+                    targets_vec.append((float(s.x), float(s.y), int(s.z), float(val)))
+
+        # Native Rust P=NP Polynomial O(N^3) Target Selection Evaluation
+        if self.rust_zombie and targets_vec:
+            best_pos = self.rust_zombie.select_target_p_np(targets_vec)
+            if best_pos:
+                for s in survivors:
+                    if s.is_alive and abs(s.x - best_pos[0]) < 0.2 and abs(s.y - best_pos[1]) < 0.2:
+                        if self.has_line_of_sight(s.x, s.y, s.z, world):
+                            return s
+
+        best_s = None
+        min_d = sight_range
+        candidates = []
+        for s in survivors:
+            if s.is_alive and s.z == self.z:
+                dx = s.x - self.x
+                dy = s.y - self.y
+                if abs(dx) < sight_range and abs(dy) < sight_range:
+                    candidates.append((math.hypot(dx, dy), s))
+
+        candidates.sort(key=lambda c: c[0])
+        for d, s in candidates:
+            if d >= min_d:
+                break
+            if self.has_line_of_sight(s.x, s.y, s.z, world):
+                min_d = d
+                best_s = s
+                break
+
         return best_s
 
     def check_hearing(self, noise_events, world=None):
@@ -100,12 +142,15 @@ class Zombie:
 
         for ne in noise_events:
             if ne.z == self.z:
-                d = math.hypot(ne.x - self.x, ne.y - self.y)
-                if d <= ne.volume:
-                    att_vol = max(0.0, ne.volume - d)
-                    if att_vol > max_vol:
-                        max_vol = att_vol
-                        loudest = ne
+                dx = ne.x - self.x
+                dy = ne.y - self.y
+                if abs(dx) <= ne.volume and abs(dy) <= ne.volume:
+                    d = math.hypot(dx, dy)
+                    if d <= ne.volume:
+                        att_vol = max(0.0, ne.volume - d)
+                        if att_vol > max_vol:
+                            max_vol = att_vol
+                            loudest = ne
         return loudest
 
     def check_scent(self, scent_trails):
@@ -116,10 +161,13 @@ class Zombie:
 
         for st in scent_trails:
             if st.z == self.z:
-                d = math.hypot(st.x - self.x, st.y - self.y)
-                if d <= 5.0 and st.intensity > max_i:
-                    max_i = st.intensity
-                    best = st
+                dx = st.x - self.x
+                dy = st.y - self.y
+                if abs(dx) <= 5.0 and abs(dy) <= 5.0:
+                    d = math.hypot(dx, dy)
+                    if d <= 5.0 and st.intensity > max_i:
+                        max_i = st.intensity
+                        best = st
         return best
 
     def compute_flocking_vector(self, all_zombies, neighbor_radius=6.0, spatial_grid=None):
@@ -128,11 +176,12 @@ class Zombie:
             if z2 is not self and z2.is_alive and z2.z == self.z:
                 dx = self.x - z2.x
                 dy = self.y - z2.y
-                d2 = dx * dx + dy * dy
-                if 0.0001 < d2 < 2.25:
-                    d = math.sqrt(d2)
-                    sep_x += (dx / d) * (1.5 - d)
-                    sep_y += (dy / d) * (1.5 - d)
+                if abs(dx) < 2.0 and abs(dy) < 2.0:
+                    d2 = dx * dx + dy * dy
+                    if 0.0001 < d2 < 2.25:
+                        d = math.sqrt(d2)
+                        sep_x += (dx / d) * (1.5 - d)
+                        sep_y += (dy / d) * (1.5 - d)
         return sep_x, sep_y
 
     def attack_or_break_obstacle(self, world, nx, ny, noise_events=None):
@@ -164,6 +213,11 @@ class Zombie:
         if not self.is_alive:
             return
 
+        if self.rust_zombie:
+            self.rust_zombie.x = self.x
+            self.rust_zombie.y = self.y
+            self.rust_zombie.z = self.z
+            self.rust_zombie.hp = self.hp
 
         if self.astar_engine is None or self.astar_engine.world is not world:
             self.astar_engine = AStar3D(world)
@@ -289,6 +343,10 @@ class Zombie:
                 ny = self.y + (math.sin(angle) + flock_dy) * cur_speed
                 if world.is_walkable(nx, ny, self.z):
                     self.x, self.y = nx, ny
+
+        if self.rust_zombie:
+            self.rust_zombie.x = self.x
+            self.rust_zombie.y = self.y
 
         for survivor in survivors:
             if survivor.is_alive and not survivor.in_vehicle and survivor.z == self.z:

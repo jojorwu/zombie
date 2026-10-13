@@ -1,5 +1,6 @@
 import random
 import math
+from typing import List, Any, Optional
 from src.entities.item import ResourceItem, WEAPON_STATS
 from src.world.lighting import DynamicLight
 from src.entities.sensory import NoiseEvent
@@ -15,7 +16,15 @@ except ImportError:
 class SurvivorActions:
     """Handles combat attacks, ballistics, furniture manipulation, and movement for Survivor."""
     @staticmethod
-    def attack(survivor, world, zombies, animals, survivors, noise_events):
+    def attack(
+        survivor: Any,
+        world: Any,
+        zombies: List[Any],
+        animals: List[Any],
+        survivors: List[Any],
+        noise_events: Optional[List[NoiseEvent]]
+    ) -> None:
+        from src.simulation.utility_facade import EngineUtilityFacade
         best_weapon = None
         is_firearm = False
         ammo_type = None
@@ -105,7 +114,7 @@ class SurvivorActions:
                         survivor.morale = min(100.0, survivor.morale + 10.0)
 
             if noise_events is not None:
-                noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=35.0, source_type=stype))
+                noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type=stype, volume=35.0))
             return
 
         if survivor.emotional_state == EmotionalState.PANICKED and random.random() < 0.25:
@@ -128,7 +137,7 @@ class SurvivorActions:
                     survivor.panic = max(0.0, survivor.panic - 20.0)
                     survivor.morale = min(100.0, survivor.morale + 10.0)
                 if noise_events is not None:
-                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=12.0, source_type="sledgehammer"))
+                    noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type="sledgehammer", volume=12.0))
                 return
 
         for a in animals:
@@ -139,7 +148,7 @@ class SurvivorActions:
                     survivor.inventory[ResourceItem.MEAT] = survivor.inventory.get(ResourceItem.MEAT, 0) + 2
                     survivor.score += 15.0
                 if noise_events is not None:
-                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=12.0, source_type="sledgehammer"))
+                    noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type="sledgehammer", volume=12.0))
                 return
 
         for other in survivors:
@@ -149,21 +158,31 @@ class SurvivorActions:
                     survivor.kills += 1
                     survivor.score += 30.0
                 if noise_events is not None:
-                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=12.0, source_type="sledgehammer"))
+                    noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type="sledgehammer", volume=12.0))
                 return
 
     @staticmethod
-    def push_furniture(survivor, world, noise_events):
+    def push_furniture(
+        survivor: Any,
+        world: Any,
+        noise_events: Optional[List[NoiseEvent]]
+    ) -> None:
+        from src.simulation.utility_facade import EngineUtilityFacade
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
             if hasattr(TileInteractionUtility, 'push_furniture') and TileInteractionUtility.push_furniture(world, fx, fy, survivor.z, dx, dy):
                 survivor.score += 8.0
                 if noise_events is not None:
-                    noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=14.0, source_type="furniture_push"))
+                    noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type="furniture_push", volume=14.0))
                 break
 
     @staticmethod
-    def dismantle_furniture(survivor, world, noise_events):
+    def dismantle_furniture(
+        survivor: Any,
+        world: Any,
+        noise_events: Optional[List[NoiseEvent]]
+    ) -> None:
+        from src.simulation.utility_facade import EngineUtilityFacade
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
             if hasattr(TileInteractionUtility, 'dismantle_furniture'):
@@ -171,5 +190,5 @@ class SurvivorActions:
                 if success:
                     survivor.score += 12.0
                     if noise_events is not None:
-                        noise_events.append(NoiseEvent(survivor.x, survivor.y, survivor.z, volume=15.0, source_type="dismantling"))
+                        noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type="dismantling", volume=15.0))
                     break

@@ -19,19 +19,21 @@ impl RustSpatialGrid {
     }
 
     pub fn clear(&mut self) {
-        self.grid.clear();
+        for v in self.grid.values_mut() {
+            v.clear();
+        }
     }
 
     pub fn insert_entity(&mut self, entity_id: usize, x: f32, y: f32, z: i32) {
         let cx = (x / self.cell_size).floor() as i32;
         let cy = (y / self.cell_size).floor() as i32;
-        self.grid.entry((cx, cy, z)).or_insert_with(Vec::new).push(entity_id);
+        self.grid.entry((cx, cy, z)).or_default().push(entity_id);
     }
 
     pub fn get_nearby_entities(&self, x: f32, y: f32, z: i32) -> Vec<usize> {
         let cx = (x / self.cell_size).floor() as i32;
         let cy = (y / self.cell_size).floor() as i32;
-        let mut nearby = Vec::new();
+        let mut nearby = Vec::with_capacity(32);
 
         for dx in -1..=1 {
             for dy in -1..=1 {

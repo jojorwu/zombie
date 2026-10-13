@@ -4,13 +4,13 @@ from dataclasses import dataclass, field
 import time
 
 
-@dataclass
+@dataclass(slots=True)
 class GameEvent:
     """Base class for all decoupled engine simulation events."""
     timestamp: float = field(default_factory=time.time)
 
 
-@dataclass
+@dataclass(slots=True)
 class NoiseEmittedEvent(GameEvent):
     x: float = 0.0
     y: float = 0.0
@@ -19,7 +19,7 @@ class NoiseEmittedEvent(GameEvent):
     source_type: str = "generic"
 
 
-@dataclass
+@dataclass(slots=True)
 class DamageDealtEvent(GameEvent):
     target: object = None
     attacker: object = None
@@ -27,20 +27,20 @@ class DamageDealtEvent(GameEvent):
     body_part: object = None
 
 
-@dataclass
+@dataclass(slots=True)
 class InfectionProgressEvent(GameEvent):
     entity: object = None
     progress: float = 0.0
 
 
-@dataclass
+@dataclass(slots=True)
 class ItemCollectedEvent(GameEvent):
     collector: object = None
     item: object = None
 
 
 class EventBus:
-    """Thread-safe event bus for decoupled Event-Driven Engine Architecture."""
+    """Thread-safe, high-throughput event bus for decoupled Event-Driven Engine Architecture."""
     def __init__(self):
         self._lock = threading.Lock()
         self._subscribers: Dict[Type[GameEvent], List[Callable]] = {}
@@ -60,15 +60,19 @@ class EventBus:
             self._queue.append(event)
 
     def process_events(self):
-        """Flushes queued events and executes subscribed handlers in batch."""
+        """Flushes queued events and executes subscribed handlers in batch without lock contention."""
         with self._lock:
-            events_to_process = list(self._queue)
-            self._queue.clear()
+            if not self._queue:
+                return
+            events_to_process = self._queue
+            self._queue = []
+            subscribers_snapshot = {k: list(v) for k, v in self._subscribers.items()}
 
         for event in events_to_process:
             event_type = type(event)
-            with self._lock:
-                handlers = list(self._subscribers.get(event_type, []))
+            handlers = subscribers_snapshot.get(event_type)
+            if not handlers:
+                continue
 
             for handler in handlers:
                 try:
@@ -76,3 +80,9 @@ class EventBus:
                 except Exception as e:
                     import logging
                     logging.error(f"Error handling event {event_type.__name__}: {e}")
+
+    def clear(self):
+        """Resets all queues and subscribers for clean memory teardown."""
+        with self._lock:
+            self._queue.clear()
+            self._subscribers.clear()

@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any
 import numpy as np
 import pygame
 from src.world import TileType, TILE_COLORS, BUILDING_COLORS
@@ -24,13 +24,31 @@ class VulkanBridge:
     def is_available(self) -> bool:
         return HAS_RUST_VULKAN
 
-    def render_viewport(self, world, cur_z: int, z_idx: int, min_x: int, max_x: int, min_y: int, max_y: int, map_draw_w: int, map_draw_h: int, light: float, visible_tiles: Optional[set], sim=None) -> Optional[pygame.Surface]:
+    def render_viewport(
+        self,
+        world: Any,
+        cur_z: int,
+        z_idx: int,
+        min_x: int,
+        max_x: int,
+        min_y: int,
+        max_y: int,
+        map_draw_w: int,
+        map_draw_h: int,
+        light: float,
+        visible_tiles: Optional[set],
+        sim: Any = None
+    ) -> Optional[pygame.Surface]:
         if not HAS_RUST_VULKAN:
             return None
 
         if self.rust_dimensions != (map_draw_w, map_draw_h) or self.rust_renderer is None:
-            self.rust_renderer = rust_engine.VulkanTileRenderer(map_draw_w, map_draw_h, self.tile_size)
-            self.rust_dimensions = (map_draw_w, map_draw_h)
+            try:
+                self.rust_renderer = rust_engine.VulkanTileRenderer(map_draw_w, map_draw_h, self.tile_size)
+                self.rust_dimensions = (map_draw_w, map_draw_h)
+            except Exception:
+                self.rust_renderer = None
+                return None
 
         grid_sub = world.grid[z_idx, min_y:max_y, min_x:max_x]
         grid_bytes = grid_sub.astype(np.uint8).tobytes()

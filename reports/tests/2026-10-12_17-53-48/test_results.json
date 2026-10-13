@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-10-12T17:54:34.665296",
+  "tests_run": 59,
+  "failures": 1,
+  "errors": 0,
+  "skipped": 0,
+  "passed": false,
+  "elapsed_seconds": 46.0803,
+  "failure_details": [
+    "test_max_load_stress_simulation (simulation.test_max_load_stress.TestMaxLoadStress.test_max_load_stress_simulation): Traceback (most recent call last):\n  File \"/app/tests/simulation/test_max_load_stress.py\", line 99, in test_max_load_stress_simulation\n    self.assertGreater(tps, 5.0, f\"TPS too low: {tps:.2f}\")\nAssertionError: 3.791675564721412 not greater than 5.0 : TPS too low: 3.79\n"
+  ],
+  "error_details": []
+}

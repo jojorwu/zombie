@@ -1,5 +1,6 @@
 from enum import Enum, auto
 from typing import Dict, Tuple, Optional, Any, List
+from src.entities.container_utility import ContainerUtility
 
 
 class FurnitureCondition(Enum):
@@ -10,6 +11,12 @@ class FurnitureCondition(Enum):
 
 
 class FurnitureState:
+    __slots__ = (
+        'x', 'y', 'z', 'tile_type', 'building_id', 'building_type',
+        'durability', 'max_durability', 'condition', 'is_searched',
+        'is_locked', 'is_pushed', 'contents'
+    )
+
     def __init__(self, x: int, y: int, z: int, tile_type: int, building_id: Optional[str] = None, building_type: Optional[str] = None, durability: float = 100.0) -> None:
         self.x: int = int(x)
         self.y: int = int(y)
@@ -28,28 +35,23 @@ class FurnitureState:
     @property
     def capacity(self) -> float:
         """Returns maximum container capacity in kg for this furniture item."""
-        from src.entities.container_utility import ContainerUtility
         return ContainerUtility.get_container_capacity(self)
 
     @property
     def contents_weight(self) -> float:
         """Calculates total weight in kg of items stored inside this furniture container."""
-        from src.entities.container_utility import ContainerUtility
         return ContainerUtility.get_container_weight(self)
 
     def can_fit_item(self, item_type: str, amount: int = 1) -> bool:
         """Checks if adding amount units of item_type exceeds container capacity."""
-        from src.entities.container_utility import ContainerUtility
         return ContainerUtility.can_fit_item(self, item_type, amount)
 
     def add_item(self, item_type: str, amount: int = 1) -> Tuple[bool, int]:
         """Adds item to container using ContainerUtility capacity rules."""
-        from src.entities.container_utility import ContainerUtility
         return ContainerUtility.add_item_to_container(self, item_type, amount)
 
     def remove_item(self, item_type: str, amount: int = 1) -> int:
         """Removes item from container using ContainerUtility."""
-        from src.entities.container_utility import ContainerUtility
         return ContainerUtility.remove_item_from_container(self, item_type, amount)
 
     def take_damage(self, amount: float) -> bool:
@@ -113,6 +115,16 @@ class FurnitureStateManager:
     def get_furniture_by_building(self, building_id: str) -> List[FurnitureState]:
         return [f for f in self.states.values() if f.building_id == building_id]
 
+    def purge_destroyed_and_stale(self) -> int:
+        """Purges DESTROYED furniture states to prevent memory leaks."""
+        to_remove = [pos for pos, state in self.states.items() if state.condition == FurnitureCondition.DESTROYED]
+        for pos in to_remove:
+            del self.states[pos]
+        return len(to_remove)
+
+    def clear(self) -> None:
+        self.states.clear()
+
 
 class ItemCondition(Enum):
     PRISTINE = auto()
@@ -122,6 +134,8 @@ class ItemCondition(Enum):
 
 
 class ExtendedItemState:
+    __slots__ = ('item_entity', 'building_id', 'building_type', 'durability', 'freshness', 'condition')
+
     def __init__(self, item_entity: Any, building_id: Optional[str] = None, building_type: Optional[str] = None) -> None:
         self.item_entity: Any = item_entity
         self.building_id: Optional[str] = building_id
@@ -151,12 +165,26 @@ class ItemStateManager:
     def remove_item(self, item_entity: Any) -> Optional[ExtendedItemState]:
         return self.states.pop(item_entity, None)
 
+    def purge_stale(self, active_item_entities: Optional[set] = None) -> int:
+        """Removes item states for destroyed or collected items."""
+        if active_item_entities is None:
+            return 0
+        to_remove = [item for item in self.states if item not in active_item_entities]
+        for item in to_remove:
+            del self.states[item]
+        return len(to_remove)
+
+    def clear(self) -> None:
+        self.states.clear()
+
 
 class LazyChunkStatePersistence:
     """
     Lazy State Inflation & Delta Change Log Persistence.
     Stores lightweight delta logs for unvisited/inactive chunks and inflates full states on demand.
     """
+    __slots__ = ('_delta_logs', '_inflated_chunks')
+
     def __init__(self) -> None:
         self._delta_logs: Dict[Tuple[int, int], List[Dict[str, Any]]] = {}
         self._inflated_chunks: Dict[Tuple[int, int], bool] = {}
@@ -180,3 +208,7 @@ class LazyChunkStatePersistence:
         """Deflates active objects into lightweight delta records when unloading a chunk."""
         key = (chunk_x, chunk_y)
         self._inflated_chunks[key] = False
+
+    def clear(self) -> None:
+        self._delta_logs.clear()
+        self._inflated_chunks.clear()

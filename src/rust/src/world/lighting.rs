@@ -3,6 +3,22 @@ use numpy::PyReadonlyArray3;
 use std::collections::HashSet;
 use crate::systems::perception::is_opaque_tile;
 
+// Precomputed 36 directional ray unit vectors (cos, sin)
+static RAY_DIRECTIONS: [(f32, f32); 36] = [
+    (1.000000, 0.000000), (0.984808, 0.173648), (0.939693, 0.342020),
+    (0.866025, 0.500000), (0.766044, 0.642788), (0.642788, 0.766044),
+    (0.500000, 0.866025), (0.342020, 0.939693), (0.173648, 0.984808),
+    (0.000000, 1.000000), (-0.173648, 0.984808), (-0.342020, 0.939693),
+    (-0.500000, 0.866025), (-0.642788, 0.766044), (-0.766044, 0.642788),
+    (-0.866025, 0.500000), (-0.939693, 0.342020), (-0.984808, 0.173648),
+    (-1.000000, 0.000000), (-0.984808, -0.173648), (-0.939693, -0.342020),
+    (-0.866025, -0.500000), (-0.766044, -0.642788), (-0.642788, -0.766044),
+    (-0.500000, -0.866025), (-0.342020, -0.939693), (-0.173648, -0.984808),
+    (0.000000, -1.000000), (0.173648, -0.984808), (0.342020, -0.939693),
+    (0.500000, -0.866025), (0.642788, -0.766044), (0.766044, -0.642788),
+    (0.866025, -0.500000), (0.939693, -0.342020), (0.984808, -0.173648),
+];
+
 /// Fast Rust raycasting line-of-sight check.
 #[pyfunction]
 pub fn check_line_of_sight_rust<'py>(
@@ -65,7 +81,7 @@ pub fn check_line_of_sight_rust<'py>(
     true
 }
 
-/// Fast Rust raycasted Fog-of-War tile visibilities.
+/// Fast Rust raycasted Fog-of-War tile visibilities with precomputed directional rays.
 #[pyfunction]
 #[pyo3(signature = (x, y, radius, z, grid_3d, z_min, facing_angle=None, fov_degrees=180.0))]
 pub fn compute_fog_of_war_rust<'py>(
@@ -92,17 +108,12 @@ pub fn compute_fog_of_war_rust<'py>(
     }
 
     let view = grid_3d.as_array();
-    let mut visible = HashSet::new();
+    let mut visible = HashSet::with_capacity(radius * radius);
     visible.insert((ix, iy));
 
-    let num_rays = 36usize;
     let half_fov = facing_angle.map(|_| (fov_degrees / 2.0).to_radians());
 
-    for i in 0..num_rays {
-        let angle = (i as f32) * (2.0 * std::f32::consts::PI / (num_rays as f32));
-        let r_dx = angle.cos();
-        let r_dy = angle.sin();
-
+    for &(r_dx, r_dy) in &RAY_DIRECTIONS {
         if let (Some(f_angle), Some(h_fov)) = (facing_angle, half_fov) {
             let ray_angle = r_dy.atan2(r_dx);
             let mut diff = (ray_angle - f_angle + std::f32::consts::PI) % (2.0 * std::f32::consts::PI) - std::f32::consts::PI;

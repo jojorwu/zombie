@@ -2,9 +2,18 @@
 
 import sys
 import os
+import platform
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
+
+machine = platform.machine().lower()
+if 'arm' in machine or 'aarch64' in machine:
+    target_arch = 'arm64'
+elif 'x86_64' in machine or 'amd64' in machine:
+    target_arch = 'x86_64'
+else:
+    target_arch = None
 
 datas = [
     ('config.json', '.'),
@@ -55,7 +64,7 @@ exe = EXE(
     runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
-    target_arch=None,
+    target_arch=target_arch,
     codesign_identity=None,
     entitlements_file=None,
 )

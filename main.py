@@ -38,6 +38,11 @@ def main():
                 "electricity_enabled": True,
                 "water_enabled": True,
                 "day_length_ticks": 3600
+            },
+            "evolution": {
+                "mutation_rate": 0.05,
+                "mutation_scale": 0.2,
+                "elite_fraction": 0.2
             }
         }
 

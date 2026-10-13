@@ -83,8 +83,8 @@ pub struct RustChunkManager {
 impl RustChunkManager {
     #[new]
     pub fn new(world_width: usize, world_height: usize, chunk_size: usize) -> Self {
-        let num_chunks_x = (world_width + chunk_size - 1) / chunk_size;
-        let num_chunks_y = (world_height + chunk_size - 1) / chunk_size;
+        let num_chunks_x = world_width.div_ceil(chunk_size);
+        let num_chunks_y = world_height.div_ceil(chunk_size);
         RustChunkManager {
             chunk_size,
             num_chunks_x,

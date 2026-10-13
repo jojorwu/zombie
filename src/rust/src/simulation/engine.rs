@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use numpy::{PyArray1, PyArray2, PyArray3, IntoPyArray, PyReadonlyArray1};
+use numpy::{PyArray1, PyArray2, PyArray3, IntoPyArray, PyReadonlyArray1, PyReadonlyArray2};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use crate::world::RustWorldGrid;
@@ -186,6 +186,98 @@ impl RustFullSimulationCore {
 
     pub fn get_zombies_count(&self) -> usize {
         self.zombies.len()
+    }
+
+    pub fn sync_zombies_batch(&mut self, data: PyReadonlyArray2<f32>) {
+        let array = data.as_array();
+        let rows = array.nrows();
+        for i in 0..rows {
+            let x = array[[i, 0]];
+            let y = array[[i, 1]];
+            let z = array[[i, 2]] as i32;
+            let hp = array[[i, 3]];
+            let speed = array[[i, 4]];
+            if i < self.zombies.len() {
+                let zomb = &mut self.zombies[i];
+                zomb.x = x;
+                zomb.y = y;
+                zomb.z = z;
+                zomb.hp = hp;
+                zomb.is_alive = hp > 0.0;
+            } else {
+                self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed));
+            }
+        }
+        self.zombies.truncate(rows);
+    }
+
+    pub fn get_zombies_batch<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
+        let n = self.zombies.len();
+        let py_array = PyArray2::<f32>::zeros(py, [n, 5], false);
+        let slice = unsafe { py_array.as_slice_mut().unwrap() };
+
+        let zombies_ref = &self.zombies;
+        slice.par_chunks_mut(5).enumerate().for_each(|(i, z_slice)| {
+            if i < zombies_ref.len() {
+                let z = &zombies_ref[i];
+                z_slice[0] = z.x;
+                z_slice[1] = z.y;
+                z_slice[2] = z.z as f32;
+                z_slice[3] = z.hp;
+                z_slice[4] = if z.is_alive { 1.0 } else { 0.0 };
+            }
+        });
+
+        py_array
+    }
+
+    pub fn sync_survivors_batch(&mut self, data: PyReadonlyArray2<f32>) {
+        let array = data.as_array();
+        let rows = array.nrows();
+        for i in 0..rows {
+            let x = array[[i, 0]];
+            let y = array[[i, 1]];
+            let z = array[[i, 2]] as i32;
+            let hp = array[[i, 3]];
+            let hunger = array[[i, 4]];
+            let thirst = array[[i, 5]];
+            if i < self.survivors.len() {
+                let surv = &mut self.survivors[i];
+                surv.x = x;
+                surv.y = y;
+                surv.z = z;
+                surv.hp = hp;
+                surv.hunger = hunger;
+                surv.thirst = thirst;
+                surv.is_alive = hp > 0.0;
+            } else {
+                let mut s = RustSurvivorEntity::new(i, x, y, z);
+                s.hp = hp;
+                s.hunger = hunger;
+                s.thirst = thirst;
+                self.survivors.push(s);
+            }
+        }
+        self.survivors.truncate(rows);
+    }
+
+    pub fn get_survivors_batch<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
+        let n = self.survivors.len();
+        let py_array = PyArray2::<f32>::zeros(py, [n, 4], false);
+        let slice = unsafe { py_array.as_slice_mut().unwrap() };
+
+        let survivors_ref = &self.survivors;
+        slice.par_chunks_mut(4).enumerate().for_each(|(i, s_slice)| {
+            if i < survivors_ref.len() {
+                let s = &survivors_ref[i];
+                s_slice[0] = s.x;
+                s_slice[1] = s.y;
+                s_slice[2] = s.z as f32;
+                s_slice[3] = if s.is_alive { 1.0 } else { 0.0 };
+            }
+        });
+
+        py_array
     }
 
     pub fn get_zombie_pos(&self, index: usize) -> (f32, f32, i32, f32, bool) {
@@ -413,49 +505,59 @@ impl RustFullSimulationCore {
 
     pub fn get_observations_matrix<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
         let num_survivors = self.survivors.len();
-        let mut obs_matrix = vec![0.0f32; num_survivors * 57];
+        let py_array = PyArray2::<f32>::zeros(py, [num_survivors, 57], false);
+        let slice = unsafe { py_array.as_slice_mut().unwrap() };
 
-        for (i, surv) in self.survivors.iter().enumerate() {
-            let row_offset = i * 57;
+        let survivors_ref = &self.survivors;
+        let zombies_ref = &self.zombies;
+        let ambient = self.ambient_light;
+        let width_f = self.width as f32;
+        let height_f = self.height as f32;
+        let cur_tick = self.current_tick;
+        let grid_ref = &self.world_grid;
 
-            // Status features (0..4)
-            obs_matrix[row_offset] = surv.hp / 100.0;
-            obs_matrix[row_offset + 1] = surv.hunger / 100.0;
-            obs_matrix[row_offset + 2] = surv.thirst / 100.0;
-            obs_matrix[row_offset + 3] = if surv.is_alive { 1.0 } else { 0.0 };
-            obs_matrix[row_offset + 4] = self.ambient_light;
+        slice.par_chunks_mut(57).enumerate().for_each(|(i, chunk_slice)| {
+            if i >= survivors_ref.len() {
+                return;
+            }
+            let surv = &survivors_ref[i];
 
-            // Closest zombie features (5..21) - Up to 3 closest zombies
+            chunk_slice[0] = surv.hp / 100.0;
+            chunk_slice[1] = surv.hunger / 100.0;
+            chunk_slice[2] = surv.thirst / 100.0;
+            chunk_slice[3] = if surv.is_alive { 1.0 } else { 0.0 };
+            chunk_slice[4] = ambient;
+
             let mut zombie_dists: Vec<(f32, f32, f32, f32, f32)> = Vec::new();
-            for z in &self.zombies {
+            for z in zombies_ref {
                 if z.is_alive && z.z == surv.z {
                     let dx = z.x - surv.x;
                     let dy = z.y - surv.y;
-                    let dist = (dx * dx + dy * dy).sqrt();
-                    zombie_dists.push((dist, dx, dy, z.hp, z.speed));
+                    let dist2 = dx * dx + dy * dy;
+                    if dist2 <= 2500.0 {
+                        zombie_dists.push((dist2.sqrt(), dx, dy, z.hp, z.speed));
+                    }
                 }
             }
             zombie_dists.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
             for z_idx in 0..3 {
-                let base = row_offset + 5 + (z_idx * 5);
+                let base = 5 + (z_idx * 5);
                 if z_idx < zombie_dists.len() {
                     let (dist, dx, dy, hp, speed) = zombie_dists[z_idx];
-                    obs_matrix[base] = (dx / 50.0).clamp(-1.0, 1.0);
-                    obs_matrix[base + 1] = (dy / 50.0).clamp(-1.0, 1.0);
-                    obs_matrix[base + 2] = (dist / 50.0).clamp(0.0, 1.0);
-                    obs_matrix[base + 3] = hp / 100.0;
-                    obs_matrix[base + 4] = speed;
+                    chunk_slice[base] = (dx / 50.0).clamp(-1.0, 1.0);
+                    chunk_slice[base + 1] = (dy / 50.0).clamp(-1.0, 1.0);
+                    chunk_slice[base + 2] = (dist / 50.0).clamp(0.0, 1.0);
+                    chunk_slice[base + 3] = hp / 100.0;
+                    chunk_slice[base + 4] = speed;
                 }
             }
 
-            // Position & Status metrics (20..31)
-            obs_matrix[row_offset + 20] = (surv.x / self.width as f32).clamp(0.0, 1.0);
-            obs_matrix[row_offset + 21] = (surv.y / self.height as f32).clamp(0.0, 1.0);
-            obs_matrix[row_offset + 22] = (surv.z as f32 / 20.0).clamp(-1.0, 1.0);
-            obs_matrix[row_offset + 23] = (self.current_tick % 3600) as f32 / 3600.0;
+            chunk_slice[20] = (surv.x / width_f).clamp(0.0, 1.0);
+            chunk_slice[21] = (surv.y / height_f).clamp(0.0, 1.0);
+            chunk_slice[22] = (surv.z as f32 / 20.0).clamp(-1.0, 1.0);
+            chunk_slice[23] = (cur_tick % 3600) as f32 / 3600.0;
 
-            // 5x5 Spatial Sensor Grid around survivor (32..57)
             let sx = surv.x as i32;
             let sy = surv.y as i32;
             let sz = surv.z;
@@ -466,20 +568,14 @@ impl RustFullSimulationCore {
                     if sensor_idx < 57 {
                         let tx = sx + dx;
                         let ty = sy + dy;
-                        let is_walk = if self.world_grid.is_walkable(tx as f32, ty as f32, sz) {
-                            1.0f32
-                        } else {
-                            0.0f32
-                        };
-                        obs_matrix[row_offset + sensor_idx] = is_walk;
+                        chunk_slice[sensor_idx] = if grid_ref.is_walkable(tx as f32, ty as f32, sz) { 1.0 } else { 0.0 };
                         sensor_idx += 1;
                     }
                 }
             }
-        }
+        });
 
-        let array2d = numpy::ndarray::Array2::from_shape_vec((num_survivors, 57), obs_matrix).unwrap();
-        array2d.into_pyarray(py)
+        py_array
     }
 
     pub fn get_current_tick(&self) -> u64 {

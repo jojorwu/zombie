@@ -1,7 +1,10 @@
 {
   "simulation": {
+    "architecture": "64-bit",
     "map_width": 1000,
     "map_height": 1000,
+    "max_map_width": 4000,
+    "max_map_height": 4000,
     "electricity_cutoff_day": 7,
     "water_cutoff_day": 7,
     "electricity_enabled": true,

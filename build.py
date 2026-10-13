@@ -9,9 +9,13 @@ import subprocess
 import os
 import struct
 
+import platform
+
 def build():
     bit_depth = struct.calcsize('P') * 8
-    print(f"Building Zombie Simulation 64-bit executable for {sys.platform} ({bit_depth}-bit target)...")
+    arch = platform.machine()
+    os_name = sys.platform
+    print(f"Building Zombie Simulation executable for OS: '{os_name}', Arch: '{arch}' ({bit_depth}-bit target)...")
     if bit_depth < 64:
         print("[WARNING] Python interpreter is not 64-bit! Building in 64-bit environment is recommended for full memory access.")
 

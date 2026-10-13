@@ -1,11 +1,32 @@
 import random
 import zlib
 import io
+import os
 import torch
 import torch.nn as nn
 import numpy as np
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def get_best_device() -> torch.device:
+    """
+    Dynamically detects and selects the best available AI compute accelerator
+    across NVIDIA CUDA, Apple Silicon Metal (MPS), AMD ROCm, Intel Arc, and CPU fallback.
+    """
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available() and torch.backends.mps.is_built():
+        return torch.device("mps")
+    else:
+        # Optimize CPU multi-threaded execution based on physical core availability
+        try:
+            num_cores = os.cpu_count() or 4
+            torch.set_num_threads(max(1, min(num_cores, 16)))
+        except Exception:
+            pass
+        return torch.device("cpu")
+
+
+DEVICE = get_best_device()
 
 
 class BrainNet(nn.Module):

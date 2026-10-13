@@ -3,6 +3,12 @@ use pyo3::prelude::*;
 #[pyclass]
 pub struct RustPlantUtility;
 
+impl Default for RustPlantUtility {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[pymethods]
 impl RustPlantUtility {
     #[new]
@@ -16,7 +22,7 @@ impl RustPlantUtility {
             return (current_stage, 0.0);
         }
 
-        let temp_mult = ((temperature_c - 10.0) / 15.0).max(0.2).min(1.5);
+        let temp_mult = ((temperature_c - 10.0) / 15.0).clamp(0.2, 1.5);
         let rain_bonus = if rained_today { 1.3 } else { 1.0 };
 
         let progress = 0.05 * temp_mult * rain_bonus;
@@ -32,6 +38,12 @@ impl RustPlantUtility {
 
 #[pyclass]
 pub struct RustAnimalUtility;
+
+impl Default for RustAnimalUtility {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[pymethods]
 impl RustAnimalUtility {

@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any
 import numpy as np
 import pygame
 from src.world import TileType, TILE_COLORS, BUILDING_COLORS
@@ -24,7 +24,21 @@ class VulkanBridge:
     def is_available(self) -> bool:
         return HAS_RUST_VULKAN
 
-    def render_viewport(self, world, cur_z: int, z_idx: int, min_x: int, max_x: int, min_y: int, max_y: int, map_draw_w: int, map_draw_h: int, light: float, visible_tiles: Optional[set], sim=None) -> Optional[pygame.Surface]:
+    def render_viewport(
+        self,
+        world: Any,
+        cur_z: int,
+        z_idx: int,
+        min_x: int,
+        max_x: int,
+        min_y: int,
+        max_y: int,
+        map_draw_w: int,
+        map_draw_h: int,
+        light: float,
+        visible_tiles: Optional[set],
+        sim: Any = None
+    ) -> Optional[pygame.Surface]:
         if not HAS_RUST_VULKAN:
             return None
 

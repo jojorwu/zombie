@@ -1,5 +1,6 @@
 import math
 import random
+from typing import Dict, List, Tuple, Any, Optional, Set, Union
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from src.world.tiles import TileType, BuildingType, TILE_COLORS, BUILDING_COLORS, TILE_WALKABLE, TILE_SPEED_MODIFIERS
@@ -15,11 +16,21 @@ WORLD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 class World:
     """
     World representation featuring Sparse Spatial Hashing:
-    - Ground level (Z=0) is stored in a dense 2D Flat-NumPy array.
+    - Ground level (Z=0) is stored in a dense 2D Flat-NumPy array for zero-copy high-performance access.
     - Vertical levels (Z > 0 and Z < 0) are stored in a sparse spatial hash map dictionary.
     """
-    def __init__(self, width=1000, height=1000, day_length_ticks=3600, z_min=0, z_max=2,
-                 electricity_cutoff_day=7, water_cutoff_day=14, electricity_enabled=True, water_enabled=True):
+    def __init__(
+        self,
+        width: int = 1000,
+        height: int = 1000,
+        day_length_ticks: int = 3600,
+        z_min: int = 0,
+        z_max: int = 2,
+        electricity_cutoff_day: int = 7,
+        water_cutoff_day: int = 14,
+        electricity_enabled: bool = True,
+        water_enabled: bool = True
+    ) -> None:
         self.width = max(30, width)
         self.height = max(30, height)
         self.z_min = z_min
@@ -52,11 +63,12 @@ class World:
         self.buildings = []
         self.generate_world()
 
-    def invalidate_grid_cache(self):
+    def invalidate_grid_cache(self) -> None:
+        """Invalidates the pre-cached 3D NumPy array view when grid tile changes occur."""
         self._grid_dirty = True
 
     @property
-    def grid(self):
+    def grid(self) -> Any:
         """Proxy array interface providing backwards-compatible [z_idx, y, x] array access."""
         class LayerProxy:
             def __init__(self, world, z_idx):
@@ -211,19 +223,21 @@ class World:
             self._grid_dirty = False
         return self._cached_3d_grid
 
-    def z_to_idx(self, z):
+    def z_to_idx(self, z: Union[int, float]) -> int:
+        """Converts vertical Z world coordinate to internal zero-indexed level array index."""
         return max(0, min(self.num_levels - 1, int(z) - self.z_min))
 
-    def idx_to_z(self, idx):
+    def idx_to_z(self, idx: int) -> int:
+        """Converts internal zero-indexed level array index to vertical Z world coordinate."""
         return idx + self.z_min
 
-    def build_chunk_building(self, bx, by, bw, bh, btype):
+    def build_chunk_building(self, bx: int, by: int, bw: int, bh: int, btype: str) -> None:
         self.generator.build_chunk_building(bx, by, bw, bh, btype)
 
-    def generate_world(self):
+    def generate_world(self) -> None:
         self.generator.generate()
 
-    def is_walkable(self, x, y, z=0):
+    def is_walkable(self, x: float, y: float, z: int = 0) -> bool:
         ix, iy = int(x), int(y)
         z_idx = self.z_to_idx(z)
         if 0 <= z_idx < self.num_levels and 0 <= ix < self.width and 0 <= iy < self.height:
@@ -231,7 +245,7 @@ class World:
             return TILE_WALKABLE.get(tile, False)
         return False
 
-    def get_tile_speed_modifier(self, x, y, z=0):
+    def get_tile_speed_modifier(self, x: float, y: float, z: int = 0) -> float:
         ix, iy = int(x), int(y)
         z_idx = self.z_to_idx(z)
         if 0 <= z_idx < self.num_levels and 0 <= ix < self.width and 0 <= iy < self.height:
@@ -239,7 +253,7 @@ class World:
             return TILE_SPEED_MODIFIERS.get(tile, 1.0)
         return 1.0
 
-    def update_day_night(self):
+    def update_day_night(self) -> None:
         self.current_tick += 1
         self.weather.update(self.current_tick)
 
@@ -253,7 +267,7 @@ class World:
             ly = rf["y"] + random.uniform(0, 100)
             self.dynamic_lights.append(DynamicLight(lx, ly, z=0, radius=25.0, color=(200, 220, 255), intensity=2.0, lifetime=2))
 
-    def get_time_components(self):
+    def get_time_components(self) -> Tuple[int, int, int, int, int]:
         total_mins = self.current_tick / 2.5
         minute = int(total_mins % 60)
         total_hours = total_mins / 60.0
@@ -265,26 +279,34 @@ class World:
         year = int(total_months / 12) + 1
         return year, month, day, hour, minute
 
-    def get_time_string(self):
+    def get_time_string(self) -> str:
         y, m, d, hh, mm = self.get_time_components()
         return f"Y{y}-M{m:02d}-D{d:02d} {hh:02d}:{mm:02d}"
 
-    def is_power_out(self):
+    def is_power_out(self) -> bool:
         if not self.electricity_enabled:
             return True
         y, m, d, hh, mm = self.get_time_components()
         current_day_total = (y - 1) * 360 + (m - 1) * 30 + d
         return current_day_total >= self.electricity_cutoff_day
 
-    def is_water_out(self):
+    def is_water_out(self) -> bool:
         if not self.water_enabled:
             return True
         y, m, d, hh, mm = self.get_time_components()
         current_day_total = (y - 1) * 360 + (m - 1) * 30 + d
         return current_day_total >= self.water_cutoff_day
 
-    def get_light_level(self, z=0):
+    def get_light_level(self, z: int = 0) -> float:
         return self.lighting_engine.get_light_level(z)
 
-    def compute_fog_of_war(self, x, y, radius=8, z=0, facing_angle=None, fov_degrees=180.0):
+    def compute_fog_of_war(
+        self,
+        x: float,
+        y: float,
+        radius: int = 8,
+        z: int = 0,
+        facing_angle: Optional[float] = None,
+        fov_degrees: float = 180.0
+    ) -> Set[Tuple[int, int]]:
         return self.lighting_engine.compute_fog_of_war(x, y, radius, z, facing_angle=facing_angle, fov_degrees=fov_degrees)

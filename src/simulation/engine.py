@@ -233,12 +233,30 @@ class SimulationEngine:
         entity_positions = [(s.x, s.y) for s in self.survivors if s.is_alive]
         if entity_positions:
             self.world.chunk_manager.update_active_chunks(entity_positions, view_distance_chunks=2)
-            rehydrated = self.world.chunk_manager.rehydrate_zombies_from_active_chunks()
-            if rehydrated:
-                for rz in rehydrated:
+
+            # Rehydrate zombies, vehicles, and floor items from newly activated chunks
+            rehydrated_z = self.world.chunk_manager.rehydrate_zombies_from_active_chunks()
+            if rehydrated_z:
+                for rz in rehydrated_z:
                     if rz not in self.zombies:
                         self.zombies.append(rz)
+
+            rehydrated_v = self.world.chunk_manager.rehydrate_vehicles_from_active_chunks()
+            if rehydrated_v:
+                for rv in rehydrated_v:
+                    if rv not in self.vehicles:
+                        self.vehicles.append(rv)
+
+            rehydrated_i = self.world.chunk_manager.rehydrate_items_from_active_chunks()
+            if rehydrated_i:
+                for ri in rehydrated_i:
+                    if ri not in self.items:
+                        self.items.append(ri)
+
+            # Freeze entities located inside inactive chunks into chunk persistence
             self.zombies = self.world.chunk_manager.store_zombies_in_chunks(self.zombies)
+            self.vehicles = self.world.chunk_manager.store_vehicles_in_chunks(self.vehicles)
+            self.items = self.world.chunk_manager.store_items_in_chunks(self.items)
 
         alive_indices = [i for i, s in enumerate(self.survivors) if s.is_alive]
         alive_count = len(alive_indices)

@@ -1,4 +1,5 @@
 import math
+from typing import List, Tuple, Dict, Any, Optional, Union
 import torch
 import numpy as np
 from src.ai.network import DEVICE
@@ -18,7 +19,7 @@ CUDA_STREAM = torch.cuda.Stream() if torch.cuda.is_available() else None
 _WEIGHT_CACHE = {}
 
 
-def get_cached_stacked_weights(brains: list):
+def get_cached_stacked_weights(brains: List[Any]) -> Tuple[torch.Tensor, ...]:
     """
     Caches stacked weight tensors for population brains to eliminate
     per-tick torch.stack GPU allocation overhead.
@@ -48,12 +49,16 @@ def get_cached_stacked_weights(brains: list):
     return weights
 
 
-def clear_weight_cache():
+def clear_weight_cache() -> None:
     """Clears cached population weight tensors on generation end / reset."""
     _WEIGHT_CACHE.clear()
 
 
-def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens: list) -> list:
+def batch_get_action_and_movement(
+    brains: List[Any],
+    inputs_list: List[np.ndarray],
+    prev_hiddens: List[Optional[torch.Tensor]]
+) -> List[Tuple[float, float, int, torch.Tensor, int]]:
     """
     High-performance batched PyTorch inference over active survivors.
     Executes batched tensor matrix multiplication (BMM) with weight caching,
@@ -135,7 +140,7 @@ def batch_get_action_and_movement(brains: list, inputs_list: list, prev_hiddens:
         return results
 
 
-def check_line_of_sight(world, x0: float, y0: float, x1: float, y1: float, z: int) -> bool:
+def check_line_of_sight(world: Any, x0: float, y0: float, x1: float, y1: float, z: int) -> bool:
     """Raycast check between two points on the same Z level to verify Line-of-Sight using fast Rust C-API."""
     if RUST_LOS_AVAILABLE:
         grid_3d = world.get_3d_grid_array() if hasattr(world, 'get_3d_grid_array') else world.grid.astype(np.int64)
@@ -165,7 +170,14 @@ def check_line_of_sight(world, x0: float, y0: float, x1: float, y1: float, z: in
     return True
 
 
-def extract_survivor_inputs(survivor, world, items, vehicles, zombies, animals) -> np.ndarray:
+def extract_survivor_inputs(
+    survivor: Any,
+    world: Any,
+    items: List[Any],
+    vehicles: List[Any],
+    zombies: List[Any],
+    animals: List[Any]
+) -> np.ndarray:
     """Extracts 57 numerical input features with fast bounding box perception masking and spatial memory."""
     inputs = np.zeros(57, dtype=np.float32)
     inputs[0] = survivor.health / 100.0

@@ -1,5 +1,6 @@
 import random
 import math
+from typing import List, Any, Optional
 from src.entities.item import ResourceItem, WEAPON_STATS
 from src.world.lighting import DynamicLight
 from src.entities.sensory import NoiseEvent
@@ -15,7 +16,14 @@ except ImportError:
 class SurvivorActions:
     """Handles combat attacks, ballistics, furniture manipulation, and movement for Survivor."""
     @staticmethod
-    def attack(survivor, world, zombies, animals, survivors, noise_events):
+    def attack(
+        survivor: Any,
+        world: Any,
+        zombies: List[Any],
+        animals: List[Any],
+        survivors: List[Any],
+        noise_events: Optional[List[NoiseEvent]]
+    ) -> None:
         from src.simulation.utility_facade import EngineUtilityFacade
         best_weapon = None
         is_firearm = False
@@ -154,7 +162,11 @@ class SurvivorActions:
                 return
 
     @staticmethod
-    def push_furniture(survivor, world, noise_events):
+    def push_furniture(
+        survivor: Any,
+        world: Any,
+        noise_events: Optional[List[NoiseEvent]]
+    ) -> None:
         from src.simulation.utility_facade import EngineUtilityFacade
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
@@ -165,7 +177,11 @@ class SurvivorActions:
                 break
 
     @staticmethod
-    def dismantle_furniture(survivor, world, noise_events):
+    def dismantle_furniture(
+        survivor: Any,
+        world: Any,
+        noise_events: Optional[List[NoiseEvent]]
+    ) -> None:
         from src.simulation.utility_facade import EngineUtilityFacade
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)

@@ -126,8 +126,7 @@ class ChunkManager:
     def update_active_chunks(self, entity_positions, view_distance_chunks: int = 2) -> set:
         """
         Loads / activates chunks around active entities and deactivates far chunks.
-        If any chunk containing a building is activated, all other chunks covering
-        that same building are also activated to prevent boundary clipping.
+        Optimized with delta updates (O(N_changed) instead of O(N_total)).
         """
         new_active = set()
         for x, y in entity_positions:
@@ -152,19 +151,26 @@ class ChunkManager:
 
         new_active.update(building_chunks_to_add)
 
-        # Update chunk states
-        for coords, chunk in self.chunks.items():
-            if coords in new_active:
-                chunk.state = ChunkState.ACTIVE
-            else:
+        # Delta chunk state updates: only modify newly activated or deactivated chunks
+        newly_deactivated = self.active_chunks - new_active
+        newly_activated = new_active - self.active_chunks
+
+        for coords in newly_deactivated:
+            chunk = self.chunks.get(coords)
+            if chunk:
                 chunk.state = ChunkState.INACTIVE
+
+        for coords in newly_activated:
+            chunk = self.chunks.get(coords)
+            if chunk:
+                chunk.state = ChunkState.ACTIVE
 
         self.active_chunks = new_active
         return self.active_chunks
 
     def store_zombies_in_chunks(self, zombies: list) -> list:
         """
-        Stores active zombies located in INACTIVE chunks into chunk persistence,
+        Stores active zombies located in INACTIVE chunks into chunk persistence without duplicates,
         returning only the zombies located inside ACTIVE chunks.
         """
         active_zombies = []
@@ -176,19 +182,22 @@ class ChunkManager:
             if chunk and chunk.state == ChunkState.ACTIVE:
                 active_zombies.append(z)
             elif chunk:
-                chunk.stored_zombies.append(z)
+                if z not in chunk.stored_zombies:
+                    chunk.stored_zombies.append(z)
         return active_zombies
 
     def rehydrate_zombies_from_active_chunks(self) -> list:
         """
-        Re-hydrates zombies stored in newly activated chunks back into the simulation.
+        Re-hydrates zombies stored in newly activated chunks back into the simulation without duplicates.
         """
         rehydrated = []
+        seen_ids = set()
         for coords in self.active_chunks:
             chunk = self.get_chunk(coords[0], coords[1])
             if chunk and chunk.stored_zombies:
                 for z in chunk.stored_zombies:
-                    if getattr(z, 'is_alive', True):
+                    if getattr(z, 'is_alive', True) and id(z) not in seen_ids:
+                        seen_ids.add(id(z))
                         rehydrated.append(z)
                 chunk.stored_zombies.clear()
         return rehydrated

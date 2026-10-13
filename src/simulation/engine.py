@@ -142,7 +142,14 @@ class SimulationEngine:
         if hasattr(self, 'world') and self.world:
             self.world.furniture_state_manager.clear()
             self.world.item_state_manager.clear()
-            self.world.chunk_manager.clear()
+            if hasattr(self.world, 'chunk_manager') and self.world.chunk_manager:
+                for chunk in self.world.chunk_manager.chunks.values():
+                    chunk.entities.clear()
+                    chunk.stored_zombies.clear()
+                    chunk.stored_vehicles.clear()
+                    chunk.stored_items.clear()
+                    chunk.furniture_states.clear()
+                    chunk.item_states.clear()
 
         self.chunk_persistence.clear()
         self.event_bus.clear()

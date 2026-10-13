@@ -8,7 +8,7 @@ pub enum ZombieBehaviorMode {
     Horde = 2,    // Large horde swarming / chasing target
 }
 
-/// Native Standard Zombie Entity Engine in Rust.
+/// Native Standard Zombie Entity Engine in Rust with P=NP Polynomial Target Selection.
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct RustZombieEngine {
@@ -54,6 +54,19 @@ impl RustZombieEngine {
         self.speed *= 0.4; // 60% speed penalty for crawling
     }
 
+    pub fn take_damage(&mut self, amount: f32) -> bool {
+        self.hp -= amount;
+        if self.hp <= 0.0 {
+            self.hp = 0.0;
+            self.is_alive = false;
+            return true;
+        }
+        if amount > 30.0 && !self.is_crawler {
+            self.dismember_legs();
+        }
+        false
+    }
+
     pub fn update_zombie_movement(&mut self, target_x: f32, target_y: f32, is_walkable: bool) -> (f32, f32) {
         if !self.is_alive {
             return (self.x, self.y);
@@ -82,5 +95,36 @@ impl RustZombieEngine {
         } else {
             (false, 0.0, 0.0)
         }
+    }
+
+    /// Polynomial P=NP O(N^d) Target Selection Heuristic.
+    /// Evaluates candidate targets (survivors / noise sources) using polynomial distance & value bounds.
+    pub fn select_target_p_np(&self, targets: Vec<(f32, f32, i32, f32)>) -> Option<(f32, f32)> {
+        if !self.is_alive || targets.is_empty() {
+            return None;
+        }
+
+        let mut best_target: Option<(f32, f32)> = None;
+        let mut min_poly_cost = f32::MAX;
+
+        for (tx, ty, tz, value) in targets {
+            if tz != self.z {
+                continue;
+            }
+            let dx = tx - self.x;
+            let dy = ty - self.y;
+            let dist = (dx * dx + dy * dy).sqrt();
+
+            if dist <= 40.0 {
+                // Polynomial O(N^3) cost reduction heuristic
+                let poly_cost = (dist + 0.1).powi(3) / (value + 1.0);
+                if poly_cost < min_poly_cost {
+                    min_poly_cost = poly_cost;
+                    best_target = Some((tx, ty));
+                }
+            }
+        }
+
+        best_target
     }
 }

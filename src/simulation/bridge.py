@@ -93,6 +93,8 @@ class PythonRustEngineBridge:
             for idx, s in enumerate(survivors):
                 if idx < s_arr.shape[0]:
                     s.x, s.y, s.z = float(s_arr[idx, 0]), float(s_arr[idx, 1]), int(s_arr[idx, 2])
+                    salive: bool = bool(s_arr[idx, 3] > 0.5)
+                    s.is_alive = salive
 
         if hasattr(self.full_sim_core, 'get_zombies_batch') and zombies:
             z_arr: np.ndarray = self.full_sim_core.get_zombies_batch()

@@ -14,6 +14,9 @@ _DIRECTIONS_8 = (
     (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414), (-1, -1, 1.414)
 )
 
+_PATH_CACHE = {}
+_MAX_CACHE_SIZE = 500
+
 
 class Node3D:
     def __init__(self, x, y, z, g=0.0, h=0.0, parent=None):
@@ -37,6 +40,10 @@ class AStar3D:
         self.world = world
 
     @staticmethod
+    def clear_cache():
+        _PATH_CACHE.clear()
+
+    @staticmethod
     def heuristic(x1, y1, z1, x2, y2, z2):
         dx = abs(x1 - x2)
         dy = abs(y1 - y2)
@@ -47,6 +54,14 @@ class AStar3D:
         sx, sy, sz = int(start_pos[0]), int(start_pos[1]), int(start_pos[2])
         gx, gy, gz = int(goal_pos[0]), int(goal_pos[1]), int(goal_pos[2])
 
+        if sx == gx and sy == gy and sz == gz:
+            return [(sx + 0.5, sy + 0.5, sz)]
+
+        current_tick_bin = getattr(self.world, 'current_tick', 0) // 10
+        cache_key = (sx, sy, sz, gx, gy, gz, current_tick_bin)
+        if cache_key in _PATH_CACHE:
+            return list(_PATH_CACHE[cache_key])
+
         if RUST_PATHFINDING_AVAILABLE:
             if hasattr(self.world, 'get_3d_grid_array'):
                 grid_3d = self.world.get_3d_grid_array()
@@ -54,7 +69,12 @@ class AStar3D:
                 grid_3d = self.world.grid.astype(np.int64)
 
             rust_path = compute_a_star_3d_path((sx, sy, sz), (gx, gy, gz), grid_3d, self.world.z_min, max_nodes)
-            return [(px + 0.5, py + 0.5, pz) for px, py, pz in rust_path]
+            path = [(px + 0.5, py + 0.5, pz) for px, py, pz in rust_path]
+
+            if len(_PATH_CACHE) > _MAX_CACHE_SIZE:
+                _PATH_CACHE.pop(next(iter(_PATH_CACHE)))
+            _PATH_CACHE[cache_key] = path
+            return list(path)
 
         if not self.world.is_walkable(sx, sy, sz) or not self.world.is_walkable(gx, gy, gz):
             return []
@@ -87,7 +107,11 @@ class AStar3D:
                     curr = parents[curr]
                 path.append((sx + 0.5, sy + 0.5, sz))
                 path.reverse()
-                return path
+
+                if len(_PATH_CACHE) > _MAX_CACHE_SIZE:
+                    _PATH_CACHE.pop(next(iter(_PATH_CACHE)))
+                _PATH_CACHE[cache_key] = path
+                return list(path)
 
             z_idx = self.world.z_to_idx(z)
 

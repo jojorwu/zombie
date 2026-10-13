@@ -151,9 +151,11 @@ class SimulationEngine:
                     chunk.furniture_states.clear()
                     chunk.item_states.clear()
 
+        from src.ai.pathfinding import AStar3D
         self.chunk_persistence.clear()
         self.event_bus.clear()
         clear_weight_cache()
+        AStar3D.clear_cache()
 
         gc.collect()
         if torch.cuda.is_available():

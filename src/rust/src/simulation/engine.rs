@@ -208,6 +208,7 @@ impl RustFullSimulationCore {
                 self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed));
             }
         }
+        self.zombies.truncate(rows);
     }
 
     pub fn get_zombies_batch<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
@@ -257,6 +258,7 @@ impl RustFullSimulationCore {
                 self.survivors.push(s);
             }
         }
+        self.survivors.truncate(rows);
     }
 
     pub fn get_survivors_batch<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {

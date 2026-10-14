@@ -143,7 +143,9 @@ class ChunkManager:
         # Full building footprint coverage check across chunk boundaries
         building_chunks_to_add = set()
         for cx, cy in new_active:
-            chunk = self.chunks[(cx, cy)]
+            chunk = self.chunks.get((cx, cy))
+            if not chunk:
+                continue
             for building in chunk.buildings:
                 bx = building.get("x", 0)
                 by = building.get("y", 0)

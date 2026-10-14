@@ -362,19 +362,6 @@ class SimulationEngine:
         ]
 
         if not (self.rust_bridge and self.rust_bridge.full_sim_core):
-            if RUST_STEERING_AVAILABLE and len(active_zombies) > 5:
-                z_coords = np.empty(len(active_zombies) * 3, dtype=np.float32)
-                for i, z in enumerate(active_zombies):
-                    z_coords[i * 3] = z.x
-                    z_coords[i * 3 + 1] = z.y
-                    z_coords[i * 3 + 2] = float(z.z)
-                steer_vecs = compute_zombie_flock_steering(z_coords, separation_dist=1.5)
-                for idx, z in enumerate(active_zombies):
-                    nx = z.x + steer_vecs[idx * 2] * 0.02
-                    ny = z.y + steer_vecs[idx * 2 + 1] * 0.02
-                    if self.world.is_walkable(nx, ny, z.z):
-                        z.x, z.y = nx, ny
-
             z_grid: Dict[Tuple[int, int, int], List[Any]] = {}
             for z in active_zombies:
                 cell = (int(z.x // 6.0), int(z.y // 6.0), z.z)
@@ -382,19 +369,8 @@ class SimulationEngine:
                     z_grid[cell] = []
                 z_grid[cell].append(z)
 
-            if len(active_zombies) > 8:
-                def _update_zombie_chunk(z_sublist: List[Any]) -> None:
-                    for z in z_sublist:
-                        z.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
-
-                c_size = max(1, len(active_zombies) // 4)
-                z_chunks = [active_zombies[i:i + c_size] for i in range(0, len(active_zombies), c_size)]
-                futures = [SIM_EXECUTOR.submit(_update_zombie_chunk, zc) for zc in z_chunks]
-                for f in futures:
-                    f.result()
-            else:
-                for zombie in active_zombies:
-                    zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
+            for zombie in active_zombies:
+                zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
         # Vehicle-Zombie Momentum Collision Processing
         for v in self.vehicles:

@@ -50,6 +50,36 @@ class TileInteractionUtility:
         return False, 0, 0
 
     @staticmethod
+    def interact_with_door(world, x: int, y: int, z: int) -> bool:
+        x = max(0, min(world.width - 1, x))
+        y = max(0, min(world.height - 1, y))
+        z_idx = world.z_to_idx(z)
+        tile = world.grid[z_idx, y, x]
+        if tile in (TileType.DOOR, TileType.DOOR_LOCKED):
+            world.grid[z_idx, y, x] = TileType.DOOR_OPEN
+            return True
+        elif tile == TileType.DOOR_OPEN:
+            world.grid[z_idx, y, x] = TileType.DOOR
+            return True
+        return False
+
+    @staticmethod
+    def barricade_window_or_door(world, x: int, y: int, z: int, inventory: dict) -> bool:
+        x = max(0, min(world.width - 1, x))
+        y = max(0, min(world.height - 1, y))
+        z_idx = world.z_to_idx(z)
+        tile = world.grid[z_idx, y, x]
+        if tile in (TileType.WINDOW, TileType.DOOR) and inventory.get("wood", 0) >= 2:
+            inventory["wood"] -= 2
+            world.grid[z_idx, y, x] = TileType.BARBED_WIRE
+            return True
+        return False
+
+    @staticmethod
+    def lockpick_door(world, x: int, y: int, z: int, inventory: dict) -> bool:
+        return TileInteractionUtility.lockpick_door_or_safe(world, x, y, z, inventory)
+
+    @staticmethod
     def lockpick_door_or_safe(world, x: int, y: int, z: int, inventory: dict) -> bool:
         x = max(0, min(world.width - 1, x))
         y = max(0, min(world.height - 1, y))

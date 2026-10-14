@@ -49,9 +49,45 @@ class Survivor:
         self.visited_tiles = set()
         self.discovered_tiles = set()
         self.spatial_memory = {}
+        # Short-term spatial memory: recent tile observations with TTL expiration (pos -> dict)
+        self.short_term_memory = {}
+        # Long-term spatial memory: persistent locations of interest (safehouses, containers, resource nodes, threats)
+        self.long_term_memory = {}
         self.visited_tiles.add((int(x), int(y), int(z)))
         self.discovered_tiles.add((int(x), int(y), int(z)))
 
+        self.inventory = {
+            ResourceItem.FOOD: 2,
+            ResourceItem.WATER: 2,
+            ResourceItem.WOOD: 0,
+            ResourceItem.METAL: 0,
+            ResourceItem.FUEL: 0,
+            ResourceItem.MEDKIT: 0,
+            ResourceItem.WEAPON: 0,
+        }
+        self.score = 0.0
+        self.time_survived = 0
+        self.kills = 0
+
+    def record_spatial_observation(self, pos: tuple[int, int, int], observation_data: dict, current_tick: int, is_important: bool = False) -> None:
+        """
+        Records a spatial memory observation with timestamp tracking.
+        Short-term memory stores recent local observations; important points of interest persist into long-term memory.
+        """
+        data = dict(observation_data)
+        data["last_seen_tick"] = current_tick
+        self.short_term_memory[pos] = data
+
+        if is_important or data.get("has_loot", False) or data.get("is_safehouse", False) or data.get("threat_level", 0) > 2:
+            self.long_term_memory[pos] = data
+
+    def update_spatial_memory_decay(self, current_tick: int, short_term_ttl_ticks: int = 600) -> None:
+        """Purges short-term memory records older than TTL while maintaining persistent long-term memory."""
+        expired = [pos for pos, data in self.short_term_memory.items() if current_tick - data.get("last_seen_tick", 0) > short_term_ttl_ticks]
+        for pos in expired:
+            del self.short_term_memory[pos]
+
+    def _init_inventory_and_stats(self) -> None:
         self.inventory = {
             ResourceItem.FOOD: 2,
             ResourceItem.WATER: 2,

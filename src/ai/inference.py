@@ -280,9 +280,10 @@ def extract_survivor_inputs(
     building = world.building_grid.get((sx_i, sy_i))
     inputs[30] = 1.0 if building is not None else 0.0
 
-    # Exploration coverage indicator
+    # Exploration coverage & Memory depth indicator
     visited_count = len(getattr(survivor, 'visited_tiles', set()))
-    inputs[31] = min(1.0, visited_count / 500.0)
+    lt_memory_count = len(getattr(survivor, 'long_term_memory', {}))
+    inputs[31] = min(1.0, (visited_count + lt_memory_count * 5.0) / 500.0)
 
     # 25 Local Spatial Grid Vision Inputs (5x5 matrix around survivor)
     idx_grid = 32

@@ -84,8 +84,11 @@ class LuaModManager:
                 print(f"[LuaModManager] Failed to load mod {mod_name}: {e}")
 
     def trigger_event(self, event_name, *args):
-        if self.rust_lua and args and isinstance(args[0], int):
-            self.rust_lua.trigger_event(event_name, args[0])
+        if self.rust_lua and args:
+            try:
+                self.rust_lua.trigger_event(event_name, int(args[0]))
+            except Exception as e:
+                print(f"[LuaModManager] Rust Lua error executing '{event_name}': {e}")
 
         if not HAS_LUPA or isinstance(self.lua, FallbackLuaRuntime):
             return None
@@ -93,6 +96,6 @@ class LuaModManager:
             fn = self.lua.eval(event_name)
             if fn is not None:
                 return fn(*args)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[LuaModManager] Error executing event '{event_name}': {e}")
         return None

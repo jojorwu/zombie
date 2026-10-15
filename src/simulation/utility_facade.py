@@ -4,7 +4,6 @@ from src.world.tile_interaction_utility import TileInteractionUtility
 from src.entities.sound_utility import SoundUtility
 from src.entities.ballistics_utility import BallisticsUtility
 from src.entities.vehicle_utility import VehiclePhysicsUtility
-from src.world.electricity_utility import ElectricityUtility
 from src.entities.sensory import NoiseEvent
 
 

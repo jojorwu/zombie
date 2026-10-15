@@ -1,5 +1,5 @@
 from typing import List
-from src.simulation.event_bus import EventBus, NoiseEmittedEvent, InfectionProgressEvent, DamageDealtEvent
+from src.simulation.event_bus import EventBus, NoiseEmittedEvent, InfectionProgressEvent
 
 try:
     from rust_engine import RustAcousticSystem, RustParticleSystem

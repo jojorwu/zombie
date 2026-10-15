@@ -1,10 +1,9 @@
 import os
-import sys
 import time
 import json
 import unittest
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Tuple
 
 
 class ReportManager:
@@ -43,7 +42,7 @@ class ReportManager:
 
         txt_file = os.path.join(report_path, "launch_summary.txt")
         with open(txt_file, "w", encoding="utf-8") as f:
-            f.write(f"=== ZOMBIE AI SIMULATION LAUNCH REPORT ===\n")
+            f.write("=== ZOMBIE AI SIMULATION LAUNCH REPORT ===\n")
             f.write(f"Timestamp   : {summary_data['timestamp']}\n")
             f.write(f"Launch Type : {launch_type}\n")
             f.write("-" * 45 + "\n")

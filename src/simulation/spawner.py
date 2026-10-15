@@ -2,7 +2,7 @@ import random
 import numpy as np
 from typing import List, Tuple
 from src.world import TileType, BuildingType, TILE_WALKABLE
-from src.entities import Vehicle, ResourceItem
+from src.entities import ResourceItem
 
 _WALKABLE_TILE_LIST = [t for t, w in TILE_WALKABLE.items() if w]
 

@@ -5,10 +5,8 @@ Benchmarking, route validation, and navigation testing tool.
 Usage: python -m src.ai.pathfinding_utility
 """
 
-import sys
-import os
 import time
-from src.world import World, TileType
+from src.world import World
 from src.ai.pathfinding import AStar3D
 
 class PathfindingUtility:

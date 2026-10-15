@@ -5,10 +5,8 @@ Runs math benchmarks, P=NP complexity scaling analysis, and codebase health chec
 Usage: python -m src.simulation.dev_utility [command]
 """
 
-import sys
 import os
 import time
-import numpy as np
 import torch
 from src.simulation.p_np_math import PNPComplexityEngine, PolynomialVerifier
 

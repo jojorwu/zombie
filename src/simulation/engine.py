@@ -1,7 +1,6 @@
 import random
 import time
-import numpy as np
-from typing import Dict, Any, List, Tuple, Optional, Set
+from typing import Dict, Any, List, Tuple, Set
 from concurrent.futures import ThreadPoolExecutor
 
 from src.world import World
@@ -19,7 +18,7 @@ from src.simulation.environment import EnvironmentManager
 from src.simulation.event_bus import EventBus, NoiseEmittedEvent, DamageDealtEvent
 from src.simulation.snapshot import DoubleBufferedStateExchanger
 from src.entities.state_manager import LazyChunkStatePersistence
-from src.simulation.bridge import PythonRustEngineBridge, RUST_ENGINE_AVAILABLE
+from src.simulation.bridge import PythonRustEngineBridge
 from src.simulation.memory_monitor_utility import MemoryMonitorUtility
 from src.world.electricity_utility import ElectricityUtility
 

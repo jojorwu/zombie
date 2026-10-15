@@ -1,6 +1,5 @@
 import os
 import glob
-import sys
 
 try:
     from rust_engine import RustContainerUtility as ContainerUtility, RustBallisticsUtility as BallisticsUtility, RustLuaModManager
@@ -8,7 +7,6 @@ try:
 except ImportError:
     HAS_RUST_LUA = False
     from src.entities.container_utility import ContainerUtility
-    from src.entities.ballistics_utility import BallisticsUtility
 
 try:
     import lupa
@@ -95,6 +93,6 @@ class LuaModManager:
             fn = self.lua.eval(event_name)
             if fn is not None:
                 return fn(*args)
-        except Exception as e:
+        except Exception:
             pass
         return None

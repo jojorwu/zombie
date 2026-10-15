@@ -1,9 +1,8 @@
-import math
 import random
-from typing import Dict, List, Tuple, Any, Optional, Set, Union
+from typing import Tuple, Any, Optional, Set, Union
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
-from src.world.tiles import TileType, BuildingType, TILE_COLORS, BUILDING_COLORS, TILE_WALKABLE, TILE_SPEED_MODIFIERS
+from src.world.tiles import TileType, TILE_WALKABLE, TILE_SPEED_MODIFIERS
 from src.world.chunk import ChunkManager
 from src.world.weather import WeatherManager
 from src.world.lighting import DynamicLight, LightingEngine

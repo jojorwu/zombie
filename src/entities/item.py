@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 class MetalQuality:
     SCRAP = "scrap_metal"

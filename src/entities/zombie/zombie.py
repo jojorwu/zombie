@@ -3,7 +3,7 @@ import random
 from src.world.tiles import TileType
 from src.entities.sensory import NoiseEvent
 from src.ai.pathfinding import AStar3D
-from src.entities import AnatomicalHealth, BodyPart
+from src.entities import AnatomicalHealth
 from src.ai.inference import check_line_of_sight
 
 try:

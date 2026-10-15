@@ -21,6 +21,8 @@ def get_best_device() -> torch.device:
         try:
             num_cores = os.cpu_count() or 4
             torch.set_num_threads(max(1, min(num_cores, 16)))
+            if hasattr(torch, "set_num_interop_threads"):
+                torch.set_num_interop_threads(max(1, min(num_cores // 2, 8)))
         except Exception:
             pass
         return torch.device("cpu")

@@ -1,8 +1,10 @@
 import collections
-from src.entities.zombie.zombie import Zombie, ZombieState
+
+from src.entities.animal import Animal
 from src.entities.item import ItemEntity
 from src.entities.sensory import NoiseEvent, ScentTrail
-from src.entities.animal import Animal
+from src.entities.zombie.zombie import Zombie, ZombieState
+
 
 class ObjectPool:
     """

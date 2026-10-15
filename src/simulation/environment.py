@@ -1,10 +1,11 @@
 import random
+
 from src.entities import ResourceItem
 
 
 class EnvironmentManager:
     """Handles environmental simulation updates including day-night time shifts, power generators, and dynamic item respawns."""
-    __slots__ = ("world", "electricity_utility")
+    __slots__ = ("electricity_utility", "world")
 
     def __init__(self, world, electricity_utility):
         self.world = world

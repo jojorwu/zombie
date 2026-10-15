@@ -1,10 +1,11 @@
-import random
 import math
-from typing import List, Any, Optional
-from src.entities.item import ResourceItem, WEAPON_STATS
-from src.world.lighting import DynamicLight
+import random
+from typing import Any
+
+from src.entities.item import WEAPON_STATS, ResourceItem
 from src.entities.sensory import NoiseEvent
 from src.entities.survivor.survivor import EmotionalState
+from src.world.lighting import DynamicLight
 from src.world.tile_interaction_utility import TileInteractionUtility
 
 try:
@@ -19,10 +20,10 @@ class SurvivorActions:
     def attack(
         survivor: Any,
         world: Any,
-        zombies: List[Any],
-        animals: List[Any],
-        survivors: List[Any],
-        noise_events: Optional[List[NoiseEvent]]
+        zombies: list[Any],
+        animals: list[Any],
+        survivors: list[Any],
+        noise_events: list[NoiseEvent] | None
     ) -> None:
         from src.simulation.utility_facade import EngineUtilityFacade
         best_weapon = None
@@ -165,7 +166,7 @@ class SurvivorActions:
     def push_furniture(
         survivor: Any,
         world: Any,
-        noise_events: Optional[List[NoiseEvent]]
+        noise_events: list[NoiseEvent] | None
     ) -> None:
         from src.simulation.utility_facade import EngineUtilityFacade
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
@@ -180,7 +181,7 @@ class SurvivorActions:
     def dismantle_furniture(
         survivor: Any,
         world: Any,
-        noise_events: Optional[List[NoiseEvent]]
+        noise_events: list[NoiseEvent] | None
     ) -> None:
         from src.simulation.utility_facade import EngineUtilityFacade
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:

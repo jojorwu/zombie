@@ -1,7 +1,9 @@
-from typing import Optional, List, Tuple, Any
+from typing import Any
+
 import numpy as np
 import pygame
-from src.world import TileType, TILE_COLORS, BUILDING_COLORS
+
+from src.world import BUILDING_COLORS, TILE_COLORS, TileType
 
 try:
     import rust_engine
@@ -12,9 +14,9 @@ except ImportError:
 
 class VulkanBridge:
     """Wrapper bridge for Rust Vulkan Crate hardware accelerated viewport tile rendering."""
-    __slots__ = ("tile_size", "palette", "rust_renderer", "rust_dimensions")
+    __slots__ = ("palette", "rust_dimensions", "rust_renderer", "tile_size")
 
-    def __init__(self, tile_size: int, palette: List[Tuple[int, int, int]]):
+    def __init__(self, tile_size: int, palette: list[tuple[int, int, int]]):
         self.tile_size = tile_size
         self.palette = palette
         self.rust_renderer = None
@@ -36,9 +38,9 @@ class VulkanBridge:
         map_draw_w: int,
         map_draw_h: int,
         light: float,
-        visible_tiles: Optional[set],
+        visible_tiles: set | None,
         sim: Any = None
-    ) -> Optional[pygame.Surface]:
+    ) -> pygame.Surface | None:
         if not HAS_RUST_VULKAN:
             return None
 

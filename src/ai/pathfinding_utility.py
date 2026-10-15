@@ -6,8 +6,10 @@ Usage: python -m src.ai.pathfinding_utility
 """
 
 import time
-from src.world import World
+
 from src.ai.pathfinding import AStar3D
+from src.world import World
+
 
 class PathfindingUtility:
     def __init__(self, width=60, height=40):

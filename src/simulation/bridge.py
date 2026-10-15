@@ -1,5 +1,6 @@
+from typing import Any
+
 import numpy as np
-from typing import Any, Tuple, Optional, List
 
 try:
     from rust_engine import RustEngineCore, RustFullSimulationCore
@@ -16,8 +17,8 @@ class PythonRustEngineBridge:
     """
     width: int
     height: int
-    native_core: Optional[Any]
-    full_sim_core: Optional[Any]
+    native_core: Any | None
+    full_sim_core: Any | None
     _surv_buf: np.ndarray
     _zomb_buf: np.ndarray
 
@@ -44,7 +45,7 @@ class PythonRustEngineBridge:
                 int(current_tick)
             )
 
-    def sync_entities_to_rust(self, survivors: List[Any], zombies: List[Any]) -> None:
+    def sync_entities_to_rust(self, survivors: list[Any], zombies: list[Any]) -> None:
         """Synchronizes Python survivors and zombies into RustFullSimulationCore using cached NumPy buffers."""
         if not self.full_sim_core:
             return
@@ -76,14 +77,14 @@ class PythonRustEngineBridge:
                 self._zomb_buf[i, 4] = float(getattr(z, 'speed', 0.08))
             self.full_sim_core.sync_zombies_batch(self._zomb_buf)
 
-    def step_full_simulation(self, actions: List[int], movements: List[Tuple[float, float]]) -> np.ndarray:
+    def step_full_simulation(self, actions: list[int], movements: list[tuple[float, float]]) -> np.ndarray:
         """Executes full simulation step in Rust and returns 2D observation tensor for PyTorch."""
         if self.full_sim_core:
             self.full_sim_core.step_simulation(actions, movements)
             return self.full_sim_core.get_observations_matrix()
         return np.zeros((len(actions), 57), dtype=np.float32)
 
-    def sync_rust_to_entities(self, survivors: List[Any], zombies: List[Any]) -> None:
+    def sync_rust_to_entities(self, survivors: list[Any], zombies: list[Any]) -> None:
         """Synchronizes updated positions and vitals back from Rust to Python entities in batch."""
         if not self.full_sim_core:
             return
@@ -107,7 +108,7 @@ class PythonRustEngineBridge:
                     z.health = zhp
                     z.is_alive = zalive
 
-    def step(self, dx: float = 0.0, dy: float = 0.0, action: int = 0) -> Tuple[np.ndarray, bool]:
+    def step(self, dx: float = 0.0, dy: float = 0.0, action: int = 0) -> tuple[np.ndarray, bool]:
         """Executes one simulation tick step in Rust and extracts zero-copy observations."""
         if self.native_core:
             self.native_core.step(dx, dy, action)
@@ -123,7 +124,7 @@ class PythonRustEngineBridge:
             return int(self.native_core.get_current_tick())
         return 0
 
-    def get_survivor_pos(self) -> Tuple[float, float, int]:
+    def get_survivor_pos(self) -> tuple[float, float, int]:
         if self.native_core:
             pos = self.native_core.get_survivor_pos()
             return (float(pos[0]), float(pos[1]), int(pos[2]))

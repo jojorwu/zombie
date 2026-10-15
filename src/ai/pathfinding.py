@@ -1,6 +1,8 @@
 import heapq
 import math
+
 import numpy as np
+
 from src.world import TileType
 
 try:

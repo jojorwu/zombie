@@ -1,9 +1,9 @@
+import json
 import os
 import time
-import json
 import unittest
 from datetime import datetime
-from typing import Dict, Any, Tuple
+from typing import Any
 
 
 class ReportManager:
@@ -24,7 +24,7 @@ class ReportManager:
     def get_timestamp_folder() -> str:
         return datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    def create_launch_report(self, launch_type: str, stats: Dict[str, Any]) -> str:
+    def create_launch_report(self, launch_type: str, stats: dict[str, Any]) -> str:
         """Creates a timestamped report folder under reports/launches/."""
         folder_name = self.get_timestamp_folder()
         report_path = os.path.join(self.launches_dir, folder_name)
@@ -46,13 +46,12 @@ class ReportManager:
             f.write(f"Timestamp   : {summary_data['timestamp']}\n")
             f.write(f"Launch Type : {launch_type}\n")
             f.write("-" * 45 + "\n")
-            for k, v in stats.items():
-                f.write(f"{k:20s}: {v}\n")
+            f.writelines(f"{k:20s}: {v}\n" for k, v in stats.items())
 
         print(f"[ReportManager] Launch report generated at: {report_path}")
         return report_path
 
-    def run_tests_and_report(self, start_dir: str = "tests") -> Tuple[bool, str]:
+    def run_tests_and_report(self, start_dir: str = "tests") -> tuple[bool, str]:
         """Executes unit tests and creates a timestamped report folder under reports/tests/."""
         folder_name = self.get_timestamp_folder()
         report_path = os.path.join(self.tests_dir, folder_name)

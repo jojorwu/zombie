@@ -1,21 +1,22 @@
 import random
+
 import numpy as np
-from typing import List, Tuple
-from src.world import TileType, BuildingType, TILE_WALKABLE
+
 from src.entities import ResourceItem
+from src.world import TILE_WALKABLE, BuildingType, TileType
 
 _WALKABLE_TILE_LIST = [t for t, w in TILE_WALKABLE.items() if w]
 
 
 class EntitySpawner:
     """Handles scanning walkable world coordinates and contextual spawner routines for entities and loot."""
-    __slots__ = ("world", "factory")
+    __slots__ = ("factory", "world")
 
     def __init__(self, world, factory):
         self.world = world
         self.factory = factory
 
-    def scan_walkable_coordinates(self) -> Tuple[List[Tuple[int, int, int]], List[Tuple[int, int, int]], List[Tuple[int, int, int]]]:
+    def scan_walkable_coordinates(self) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]], list[tuple[int, int, int]]]:
         """Scans grid for walkable coordinates, parking spots, and trash cans using fast NumPy lookups."""
         walkable_coords, parking_coords, trash_coords = [], [], []
 

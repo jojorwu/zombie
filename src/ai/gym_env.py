@@ -1,5 +1,7 @@
+from typing import Any
+
 import numpy as np
-from typing import Tuple, Dict, Any, Optional
+
 from src.ai.inference import extract_survivor_inputs
 
 
@@ -8,7 +10,7 @@ class SurvivorGymEnv:
     Gymnasium-compatible Environment Wrapper for SimulationEngine
     supporting vector observations, multi-channel spatial sensors, and PPO rewards.
     """
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         from src.simulation.engine import SimulationEngine
         if config is None:
             config = {
@@ -33,7 +35,7 @@ class SurvivorGymEnv:
         self.action_space_size = 13
         self.observation_space_size = 57
 
-    def reset(self) -> Tuple[np.ndarray, Dict[str, Any]]:
+    def reset(self) -> tuple[np.ndarray, dict[str, Any]]:
         """Resets the simulation environment and returns initial observation."""
         self.engine.reset_generation()
         if self.engine.rust_bridge and self.engine.rust_bridge.full_sim_core:
@@ -50,7 +52,7 @@ class SurvivorGymEnv:
                 obs = np.zeros(self.observation_space_size, dtype=np.float32)
         return obs, {}
 
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
+    def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
         """Executes one simulation tick step with discrete action choice and calculates PPO reward."""
         if not self.engine.survivors:
             return np.zeros(self.observation_space_size, dtype=np.float32), 0.0, True, False, {}

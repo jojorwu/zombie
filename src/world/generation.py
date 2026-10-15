@@ -1,9 +1,10 @@
 import math
 import random
 import uuid
-from typing import Dict, List
+
 import numpy as np
-from src.world.tiles import TileType, BuildingType, SettlementType
+
+from src.world.tiles import BuildingType, SettlementType, TileType
 
 try:
     from rust_engine import RustWorldGenerator
@@ -28,7 +29,7 @@ class GraphGrammarBuildingGenerator:
     }
 
     @classmethod
-    def generate_room_graph(cls) -> Dict[str, List[str]]:
+    def generate_room_graph(cls) -> dict[str, list[str]]:
         return dict(cls.ROOM_CONNECTIONS)
 
     @classmethod
@@ -49,7 +50,7 @@ class GraphGrammarBuildingGenerator:
 
 class WorldGenerator:
     """Handles terrain generation, settlement classification, winding rivers, dense forest biomes, and multi-floor buildings."""
-    __slots__ = ("world", "settlement_type")
+    __slots__ = ("settlement_type", "world")
 
     def __init__(self, world, settlement_type: str = SettlementType.STANDARD_CITY):
         self.world = world
@@ -75,9 +76,7 @@ class WorldGenerator:
         world.chunk_manager.register_building(building_info)
 
         has_basement = False
-        if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.35:
-            has_basement = True
-        elif btype in (BuildingType.WAREHOUSE, BuildingType.GUN_STORE) and random.random() < 0.50:
+        if btype in (BuildingType.RESIDENTIAL, BuildingType.POLICE_STATION) and random.random() < 0.35 or btype in (BuildingType.WAREHOUSE, BuildingType.GUN_STORE) and random.random() < 0.50:
             has_basement = True
 
         bottom_floor = -1 if (has_basement and world.z_min <= -1) else 0

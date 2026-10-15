@@ -1,6 +1,6 @@
 import math
-from enum import Enum, auto
 from concurrent.futures import ThreadPoolExecutor
+from enum import Enum, auto
 
 CHUNK_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
@@ -14,9 +14,17 @@ class ChunkState(Enum):
 
 class Chunk:
     __slots__ = (
-        'chunk_x', 'chunk_y', 'size', 'buildings', 'entities',
-        'stored_zombies', 'stored_vehicles', 'stored_items',
-        'furniture_states', 'item_states', 'state'
+        'buildings',
+        'chunk_x',
+        'chunk_y',
+        'entities',
+        'furniture_states',
+        'item_states',
+        'size',
+        'state',
+        'stored_items',
+        'stored_vehicles',
+        'stored_zombies'
     )
 
     def __init__(self, chunk_x: int, chunk_y: int, size: int = 16):

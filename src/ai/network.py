@@ -1,10 +1,11 @@
-import random
-import zlib
 import io
 import os
-import torch
-import torch.nn as nn
+import random
+import zlib
+
 import numpy as np
+import torch
+from torch import nn
 
 
 def get_best_device() -> torch.device:
@@ -36,10 +37,10 @@ class BrainNet(nn.Module):
     Compact Pulse Macro-Action GRU Neural Network for Survivor AI Decision Making.
     Includes Macro-Action decision holding (duration_ticks) and PPO State-Value Critic Head.
     """
-    __slots__ = ("input_size", "hidden_size", "output_size", "fc1", "relu", "gru", "fc_out", "fc_duration", "value_head")
+    __slots__ = ("fc1", "fc_duration", "fc_out", "gru", "hidden_size", "input_size", "output_size", "relu", "value_head")
 
     def __init__(self, input_size: int = 57, hidden_size: int = 64, output_size: int = 13):
-        super(BrainNet, self).__init__()
+        super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
@@ -107,7 +108,7 @@ class GeneticEvolutionManager:
     Advanced Neuroevolution Engine with Tournament Selection, Adaptive Mutation,
     and Speciation Diversity Preservation.
     """
-    __slots__ = ("population_size", "mutation_rate", "mutation_scale", "elite_fraction", "generation", "stagnation_counter", "best_fitness_history")
+    __slots__ = ("best_fitness_history", "elite_fraction", "generation", "mutation_rate", "mutation_scale", "population_size", "stagnation_counter")
 
     def __init__(self, population_size: int = 20, mutation_rate: float = 0.1, mutation_scale: float = 0.2, elite_fraction: float = 0.2):
         self.population_size = population_size

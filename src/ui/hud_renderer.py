@@ -1,11 +1,13 @@
 import math
+
 import pygame
+
 from src.ui.themes import THEME_COLORS
 
 
 class HUDRenderer:
     """Renders sidebar HUD, survivor stats, system performance, time/weather indicators, and hotkeys."""
-    __slots__ = ("screen", "font", "bold_font", "sidebar_x", "height")
+    __slots__ = ("bold_font", "font", "height", "screen", "sidebar_x")
 
     def __init__(self, screen: pygame.Surface, font: pygame.font.Font, bold_font: pygame.font.Font, sidebar_x: int, height: int):
         self.screen = screen

@@ -1,5 +1,6 @@
 import math
 from enum import Enum, auto
+
 from src.ai.inference import check_line_of_sight
 
 
@@ -24,7 +25,7 @@ class HierarchicalDecisionPlanner:
     Hierarchical AI Planner combining high-level goal selection with low-level
     Behaviour Tree execution to eliminate action jitter and ensure long-term goal coherence.
     """
-    __slots__ = ("goal_eval_interval", "last_eval_tick", "current_goal", "target_entity", "target_pos")
+    __slots__ = ("current_goal", "goal_eval_interval", "last_eval_tick", "target_entity", "target_pos")
 
     def __init__(self, goal_eval_interval: int = 15):
         self.goal_eval_interval = goal_eval_interval

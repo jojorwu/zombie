@@ -1,19 +1,20 @@
-from typing import Dict, Any, Tuple, Optional, List
-from src.entities.container_utility import ContainerUtility
-from src.world.tile_interaction_utility import TileInteractionUtility
-from src.entities.sound_utility import SoundUtility
+from typing import Any
+
 from src.entities.ballistics_utility import BallisticsUtility
-from src.entities.vehicle_utility import VehiclePhysicsUtility
+from src.entities.container_utility import ContainerUtility
 from src.entities.sensory import NoiseEvent
+from src.entities.sound_utility import SoundUtility
+from src.entities.vehicle_utility import VehiclePhysicsUtility
+from src.world.tile_interaction_utility import TileInteractionUtility
 
 try:
     from rust_engine import (
-        RustContainerUtility,
-        RustTileInteractionUtility,
-        RustBallisticsUtility,
         RustAcousticSystem,
-        RustVehiclePhysics,
+        RustBallisticsUtility,
+        RustContainerUtility,
         RustElectricityUtility,
+        RustTileInteractionUtility,
+        RustVehiclePhysics,
     )
     RUST_UTILITIES_AVAILABLE = True
 except ImportError:
@@ -46,7 +47,7 @@ class EngineUtilityFacade:
         return ContainerUtility.transfer_item(source, target, item_type, amount)
 
     @staticmethod
-    def batch_transfer_items(transfers: List[Tuple[Any, Any, str, int]]) -> List[int]:
+    def batch_transfer_items(transfers: list[tuple[Any, Any, str, int]]) -> list[int]:
         """Executes a list of (source, target, item_type, amount) transfers in batch."""
         results = []
         for src, tgt, itype, amt in transfers:
@@ -54,7 +55,7 @@ class EngineUtilityFacade:
         return results
 
     @staticmethod
-    def add_item_to_container(container: Any, item_type: str, amount: int = 1) -> Tuple[bool, int]:
+    def add_item_to_container(container: Any, item_type: str, amount: int = 1) -> tuple[bool, int]:
         return ContainerUtility.add_item_to_container(container, item_type, amount)
 
     @staticmethod
@@ -63,7 +64,7 @@ class EngineUtilityFacade:
 
     # --- World & Tile Interactions ---
     @staticmethod
-    def siphon_fuel_from_pump(world: Any, x: int, y: int, z: int, target_inventory: Dict[str, int]) -> Tuple[bool, int]:
+    def siphon_fuel_from_pump(world: Any, x: int, y: int, z: int, target_inventory: dict[str, int]) -> tuple[bool, int]:
         """Siphons fuel from gas pump tile into target inventory."""
         return TileInteractionUtility.siphon_fuel_from_pump(world, x, y, z, target_inventory)
 
@@ -73,18 +74,18 @@ class EngineUtilityFacade:
         return TileInteractionUtility.interact_with_door(world, x, y, z)
 
     @staticmethod
-    def barricade_tile(world: Any, x: int, y: int, z: int, inventory: Dict[str, int]) -> bool:
+    def barricade_tile(world: Any, x: int, y: int, z: int, inventory: dict[str, int]) -> bool:
         """Barricades door or window tile using wood/planks from inventory."""
         return TileInteractionUtility.barricade_window_or_door(world, x, y, z, inventory)
 
     @staticmethod
-    def lockpick_door(world: Any, x: int, y: int, z: int, inventory: Dict[str, int]) -> bool:
+    def lockpick_door(world: Any, x: int, y: int, z: int, inventory: dict[str, int]) -> bool:
         """Attempts to lockpick locked door tile using lockpicks from inventory."""
         return TileInteractionUtility.lockpick_door(world, x, y, z, inventory)
 
     # --- Acoustics & Ballistics ---
     @staticmethod
-    def create_noise_event(x: float, y: float, z: int, source_type: str = "general", volume: Optional[float] = None) -> NoiseEvent:
+    def create_noise_event(x: float, y: float, z: int, source_type: str = "general", volume: float | None = None) -> NoiseEvent:
         """Creates a NoiseEvent using SoundUtility / RustAcousticSystem sound profile SPL scaling."""
         if volume is None:
             if RUST_UTILITIES_AVAILABLE:
@@ -96,7 +97,7 @@ class EngineUtilityFacade:
         return NoiseEvent(x, y, z, volume=volume, source_type=source_type)
 
     @staticmethod
-    def batch_create_noises(noises_data: List[Tuple[float, float, int, str, Optional[float]]]) -> List[NoiseEvent]:
+    def batch_create_noises(noises_data: list[tuple[float, float, int, str, float | None]]) -> list[NoiseEvent]:
         """Batched creation of noise events."""
         return [
             EngineUtilityFacade.create_noise_event(x, y, z, source_type=stype, volume=vol)
@@ -104,7 +105,7 @@ class EngineUtilityFacade:
         ]
 
     @staticmethod
-    def calculate_ballistics(caliber: str, distance_m: float = 100.0) -> Dict[str, float]:
+    def calculate_ballistics(caliber: str, distance_m: float = 100.0) -> dict[str, float]:
         """Calculates ballistics trajectory drop, kinetic energy, and penetration via Rust Ballistics Utility."""
         if RUST_UTILITIES_AVAILABLE:
             v0 = BallisticsUtility.AMMO_PROFILES.get(caliber, {}).get("muzzle_velocity", 380.0)

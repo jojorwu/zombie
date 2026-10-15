@@ -1,8 +1,10 @@
-import os
 import glob
+import os
 
 try:
-    from rust_engine import RustContainerUtility as ContainerUtility, RustBallisticsUtility as BallisticsUtility, RustLuaModManager
+    from rust_engine import RustBallisticsUtility as BallisticsUtility
+    from rust_engine import RustContainerUtility as ContainerUtility
+    from rust_engine import RustLuaModManager
     HAS_RUST_LUA = True
 except ImportError:
     HAS_RUST_LUA = False

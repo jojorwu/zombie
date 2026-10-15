@@ -1,9 +1,10 @@
 import math
 import threading
+
+from src.entities import AnatomicalHealth, BodyPart
+from src.entities.crafting import CraftingSystem
 from src.entities.item import ResourceItem
 from src.entities.sensory import NoiseEvent
-from src.entities.crafting import CraftingSystem
-from src.entities import AnatomicalHealth, BodyPart
 from src.entities.survivor.looting import SurvivorLooting
 
 
@@ -15,8 +16,8 @@ class EmotionalState:
     ENRAGED = "ENRAGED"
 
 
-from src.entities.survivor.metabolism import MetabolicBalanceSimulator
 from src.entities.container_utility import ContainerUtility
+from src.entities.survivor.metabolism import MetabolicBalanceSimulator
 
 
 class Survivor:

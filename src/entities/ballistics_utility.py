@@ -1,5 +1,6 @@
 import math
 import random
+
 from src.world.tiles import TileType
 
 try:

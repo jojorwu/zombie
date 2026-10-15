@@ -1,4 +1,5 @@
-from typing import Dict, Any, Optional
+from typing import Any
+
 
 class MetalQuality:
     SCRAP = "scrap_metal"
@@ -130,7 +131,7 @@ class ResourceItem:
     SKILL_BOOK = "skill_book"
 
 
-ARMOR_STATS: Dict[str, Dict[str, Any]] = {
+ARMOR_STATS: dict[str, dict[str, Any]] = {
     ResourceItem.HELMET: {"slot": "head", "reduction": 0.50, "durability": 100.0},
     ResourceItem.BODY_ARMOR: {"slot": "torso", "reduction": 0.60, "durability": 150.0},
     ResourceItem.LEATHER_JACKET: {"slot": "torso", "reduction": 0.25, "durability": 80.0},
@@ -139,7 +140,7 @@ ARMOR_STATS: Dict[str, Dict[str, Any]] = {
 
 
 # Detailed Properties for Weapons & Tools
-WEAPON_STATS: Dict[str, Dict[str, Any]] = {
+WEAPON_STATS: dict[str, dict[str, Any]] = {
     # Melee
     ResourceItem.KNIFE: {"damage": 25.0, "range": 1.2, "noise": 3.0, "type": "melee"},
     ResourceItem.CHEF_KNIFE: {"damage": 22.0, "range": 1.2, "noise": 3.0, "type": "melee"},
@@ -174,11 +175,11 @@ WEAPON_STATS: Dict[str, Dict[str, Any]] = {
 
 class ItemEntity:
     """Represents an item or floor container entity spawned in the world grid."""
-    def __init__(self, x: float, y: float, item_type: str, amount: int = 1, z: int = 0, contents: Optional[Dict[str, int]] = None) -> None:
+    def __init__(self, x: float, y: float, item_type: str, amount: int = 1, z: int = 0, contents: dict[str, int] | None = None) -> None:
         self.x: float = float(x)
         self.y: float = float(y)
         self.z: int = int(z)
         self.item_type: str = item_type
         self.amount: int = amount
         self.collected: bool = False
-        self.contents: Dict[str, int] = contents if contents is not None else {}
+        self.contents: dict[str, int] = contents if contents is not None else {}

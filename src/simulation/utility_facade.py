@@ -6,6 +6,19 @@ from src.entities.ballistics_utility import BallisticsUtility
 from src.entities.vehicle_utility import VehiclePhysicsUtility
 from src.entities.sensory import NoiseEvent
 
+try:
+    from rust_engine import (
+        RustContainerUtility,
+        RustTileInteractionUtility,
+        RustBallisticsUtility,
+        RustAcousticSystem,
+        RustVehiclePhysics,
+        RustElectricityUtility,
+    )
+    RUST_UTILITIES_AVAILABLE = True
+except ImportError:
+    RUST_UTILITIES_AVAILABLE = False
+
 
 class EngineUtilityFacade:
     """
@@ -72,11 +85,14 @@ class EngineUtilityFacade:
     # --- Acoustics & Ballistics ---
     @staticmethod
     def create_noise_event(x: float, y: float, z: int, source_type: str = "general", volume: Optional[float] = None) -> NoiseEvent:
-        """Creates a NoiseEvent using SoundUtility sound profile SPL scaling."""
+        """Creates a NoiseEvent using SoundUtility / RustAcousticSystem sound profile SPL scaling."""
         if volume is None:
-            profile = SoundUtility.SOUND_PROFILES.get(source_type, {})
-            db = profile.get("db_spl", 50.0)
-            volume = db / 5.0
+            if RUST_UTILITIES_AVAILABLE:
+                db_spl = RustAcousticSystem.get_source_db_spl(source_type)
+            else:
+                profile = SoundUtility.SOUND_PROFILES.get(source_type, {})
+                db_spl = profile.get("db_spl", 50.0)
+            volume = db_spl / 5.0
         return NoiseEvent(x, y, z, volume=volume, source_type=source_type)
 
     @staticmethod
@@ -89,7 +105,16 @@ class EngineUtilityFacade:
 
     @staticmethod
     def calculate_ballistics(caliber: str, distance_m: float = 100.0) -> Dict[str, float]:
-        """Calculates ballistics trajectory drop, kinetic energy, and penetration."""
+        """Calculates ballistics trajectory drop, kinetic energy, and penetration via Rust Ballistics Utility."""
+        if RUST_UTILITIES_AVAILABLE:
+            v0 = BallisticsUtility.AMMO_PROFILES.get(caliber, {}).get("muzzle_velocity", 380.0)
+            drop, drift, final_v = RustBallisticsUtility.calculate_trajectory(v0, distance_m, 0.0)
+            return {
+                "drop_m": drop,
+                "wind_drift_m": drift,
+                "velocity_m_s": final_v,
+                "kinetic_energy_j": 0.5 * 0.008 * (final_v ** 2),
+            }
         return BallisticsUtility.calculate_trajectory(caliber, distance_m=distance_m)
 
     # --- Vehicle Physics & Power Grid ---

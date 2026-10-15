@@ -1,5 +1,6 @@
 import time
 import os
+from collections import deque
 import psutil
 import torch
 
@@ -11,17 +12,17 @@ class MemoryMonitorUtility:
     - Entity Object Pool statistics
     - Simulation Tick Latencies (ms) and Frames Per Second (FPS)
     """
+    __slots__ = ("process", "last_time", "frame_count", "fps", "tick_times")
+
     def __init__(self):
         self.process = psutil.Process(os.getpid())
         self.last_time = time.time()
         self.frame_count = 0
         self.fps = 0.0
-        self.tick_times = []
+        self.tick_times = deque(maxlen=100)
 
     def record_tick_time(self, elapsed_sec):
         self.tick_times.append(elapsed_sec)
-        if len(self.tick_times) > 100:
-            self.tick_times.pop(0)
 
     def update_fps(self):
         self.frame_count += 1

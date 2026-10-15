@@ -51,6 +51,36 @@ class EntitySpawner:
         random.shuffle(trash_coords)
         return walkable_coords, parking_coords, trash_coords
 
+    def generate_zombie_heatmap_coords(self, walkable_coords: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
+        """
+        Generates population density heatmap weights for smart zombie spawning:
+        - Urban areas (buildings, roads, sidewalks, parking lots) have high spawn density weights.
+        - Wilderness, rivers, and deep forests have low spawn weights.
+        """
+        if not walkable_coords:
+            return []
+
+        weights = []
+        for x, y, z in walkable_coords:
+            weight = 1.0
+            if z == 0 and 0 <= y < self.world.height and 0 <= x < self.world.width:
+                tile = self.world.ground_grid[y, x]
+                if tile in (TileType.BUILDING_FLOOR, TileType.ROAD, TileType.SIDEWALK, TileType.CROSSWALK, TileType.PARKING):
+                    weight = 8.0
+                elif tile in (TileType.FOREST, TileType.FOREST_DENSE, TileType.GRASS):
+                    weight = 0.5
+            elif z != 0:
+                weight = 10.0  # High spawn density inside multi-floor building interiors
+            weights.append(weight)
+
+        total_w = sum(weights)
+        if total_w <= 0.0:
+            return list(walkable_coords)
+
+        probs = [w / total_w for w in weights]
+        selected_indices = np.random.choice(len(walkable_coords), size=len(walkable_coords), replace=False, p=probs)
+        return [walkable_coords[idx] for idx in selected_indices]
+
     def spawn_street_corpses_and_loot(self, items_list: list, walkable_coords: list = None, num_corpses: int = 15) -> None:
         """Spawns lootable dead human corpses on streets and sidewalks containing random gear and ammo."""
         if walkable_coords is None:

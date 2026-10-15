@@ -219,9 +219,13 @@ class SimulationEngine:
             coord = vehicle_spawns.pop()
             self.vehicles.append(Vehicle(coord[0] + 0.5, coord[1] + 0.5, fuel=random.uniform(30.0, 80.0), z=coord[2]))
 
-        # 3. Spawn Zombies
-        for _ in range(min(self.sim_cfg["num_zombies"], len(walkable_coords))):
-            coord = walkable_coords.pop()
+        # 3. Spawn Zombies with urban density heatmap weights (scaled up to 40% map area density)
+        zombie_spawn_coords = self.spawner.generate_zombie_heatmap_coords(walkable_coords)
+        map_area = self.world.width * self.world.height
+        density_zombie_count = max(self.sim_cfg["num_zombies"], int(map_area * 0.003))
+
+        for _ in range(min(density_zombie_count, len(zombie_spawn_coords))):
+            coord = zombie_spawn_coords.pop()
             self.zombies.append(self.factory.create_zombie(coord[0] + 0.5, coord[1] + 0.5, z=coord[2]))
 
         # 4. Spawn Trash Can Loot

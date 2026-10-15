@@ -58,8 +58,8 @@ class Survivor:
         self.discovered_tiles.add((int(x), int(y), int(z)))
 
         self.inventory = {
-            ResourceItem.FOOD: 2,
-            ResourceItem.WATER: 2,
+            ResourceItem.FOOD: 0,
+            ResourceItem.WATER: 0,
             ResourceItem.WOOD: 0,
             ResourceItem.METAL: 0,
             ResourceItem.FUEL: 0,
@@ -185,9 +185,9 @@ class Survivor:
         if world is not None:
             self.metabolism.update(self, world)
 
-        self.hunger -= 0.025
-        self.thirst -= 0.035
-        self.sleep -= 0.025
+        self.hunger -= 0.08
+        self.thirst -= 0.12
+        self.sleep -= 0.05
 
         if self.grab_slowdown_timer > 0:
             self.grab_slowdown_timer -= 1

@@ -1,5 +1,57 @@
 use pyo3::prelude::*;
 
+/// Physical Projectile entity flying through 3D space with velocity, drag, and gravity.
+#[derive(Clone, Debug)]
+#[pyclass]
+pub struct PhysicalProjectile {
+    #[pyo3(get, set)]
+    pub x: f32,
+    #[pyo3(get, set)]
+    pub y: f32,
+    #[pyo3(get, set)]
+    pub z: i32,
+    #[pyo3(get, set)]
+    pub vx: f32,
+    #[pyo3(get, set)]
+    pub vy: f32,
+    #[pyo3(get, set)]
+    pub damage: f32,
+    #[pyo3(get, set)]
+    pub lifetime_ticks: u32,
+    #[pyo3(get, set)]
+    pub caliber: String,
+}
+
+#[pymethods]
+impl PhysicalProjectile {
+    #[new]
+    pub fn new(x: f32, y: f32, z: i32, vx: f32, vy: f32, damage: f32, caliber: String) -> Self {
+        PhysicalProjectile {
+            x,
+            y,
+            z,
+            vx,
+            vy,
+            damage,
+            lifetime_ticks: 60, // 60 ticks flight max
+            caliber,
+        }
+    }
+
+    pub fn update(&mut self) -> bool {
+        if self.lifetime_ticks == 0 {
+            return false;
+        }
+        self.x += self.vx;
+        self.y += self.vy;
+        // Apply slight air drag coefficient
+        self.vx *= 0.98;
+        self.vy *= 0.98;
+        self.lifetime_ticks -= 1;
+        self.lifetime_ticks > 0
+    }
+}
+
 /// Native Ballistics Projectile Flight Utility in Rust.
 #[pyclass]
 pub struct RustBallisticsUtility;

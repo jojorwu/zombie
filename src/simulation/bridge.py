@@ -84,12 +84,46 @@ class PythonRustEngineBridge:
             return self.full_sim_core.get_observations_matrix()
         return np.zeros((len(actions), 57), dtype=np.float32)
 
+    def get_fitness_scores(self) -> np.ndarray:
+        """Retrieves 1D NumPy array of survivor fitness scores computed purely in Rust."""
+        if self.full_sim_core and hasattr(self.full_sim_core, 'get_fitness_scores'):
+            return self.full_sim_core.get_fitness_scores()
+        return np.array([], dtype=np.float32)
+
+    def get_survivors_detailed(self) -> np.ndarray:
+        """Retrieves detailed survivor attributes matrix (N, 12) from Rust."""
+        if self.full_sim_core and hasattr(self.full_sim_core, 'get_survivors_detailed_batch'):
+            return self.full_sim_core.get_survivors_detailed_batch()
+        return np.zeros((0, 12), dtype=np.float32)
+
+    def get_items_batch(self) -> np.ndarray:
+        """Retrieves active ground items matrix (K, 5) [x, y, z, type, amount] from Rust."""
+        if self.full_sim_core and hasattr(self.full_sim_core, 'get_items_batch'):
+            return self.full_sim_core.get_items_batch()
+        return np.zeros((0, 5), dtype=np.float32)
+
+    def add_item_to_rust(self, x: float, y: float, z: int, item_type: int, amount: int = 1) -> None:
+        """Registers a world item directly in Rust simulation memory."""
+        if self.full_sim_core and hasattr(self.full_sim_core, 'add_item'):
+            self.full_sim_core.add_item(float(x), float(y), int(z), int(item_type), int(amount))
+
     def sync_rust_to_entities(self, survivors: list[Any], zombies: list[Any]) -> None:
         """Synchronizes updated positions and vitals back from Rust to Python entities in batch."""
         if not self.full_sim_core:
             return
 
-        if hasattr(self.full_sim_core, 'get_survivors_batch') and survivors:
+        if hasattr(self.full_sim_core, 'get_survivors_detailed_batch') and survivors:
+            s_arr: np.ndarray = self.full_sim_core.get_survivors_detailed_batch()
+            for idx, s in enumerate(survivors):
+                if idx < s_arr.shape[0]:
+                    s.x, s.y, s.z = float(s_arr[idx, 0]), float(s_arr[idx, 1]), int(s_arr[idx, 2])
+                    s.health = float(s_arr[idx, 3])
+                    s.hunger = float(s_arr[idx, 4])
+                    s.thirst = float(s_arr[idx, 5])
+                    s.is_alive = bool(s_arr[idx, 6] > 0.5)
+                    s.score = float(s_arr[idx, 7])
+                    s.kills = int(s_arr[idx, 8])
+        elif hasattr(self.full_sim_core, 'get_survivors_batch') and survivors:
             s_arr: np.ndarray = self.full_sim_core.get_survivors_batch()
             for idx, s in enumerate(survivors):
                 if idx < s_arr.shape[0]:

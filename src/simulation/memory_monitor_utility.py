@@ -2,7 +2,13 @@ import os
 import time
 from collections import deque
 
-import psutil
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    psutil = None
+    PSUTIL_AVAILABLE = False
+
 import torch
 
 
@@ -17,7 +23,7 @@ class MemoryMonitorUtility:
     __slots__ = ("fps", "frame_count", "last_time", "process", "tick_times")
 
     def __init__(self):
-        self.process = psutil.Process(os.getpid())
+        self.process = psutil.Process(os.getpid()) if PSUTIL_AVAILABLE else None
         self.last_time = time.time()
         self.frame_count = 0
         self.fps = 0.0
@@ -39,14 +45,20 @@ class MemoryMonitorUtility:
             self.last_time = now
 
     def get_memory_stats(self, entity_factory=None):
-        mem_info = self.process.memory_info()
-        rss_mb = mem_info.rss / (1024 * 1024)
-        vsz_mb = mem_info.vms / (1024 * 1024)
+        if self.process:
+            mem_info = self.process.memory_info()
+            rss_mb = mem_info.rss / (1024 * 1024)
+            vsz_mb = mem_info.vms / (1024 * 1024)
+            cpu_pct = self.process.cpu_percent()
+        else:
+            rss_mb = 0.0
+            vsz_mb = 0.0
+            cpu_pct = 0.0
 
         stats = {
             "ram_rss_mb": round(rss_mb, 2),
             "ram_vsz_mb": round(vsz_mb, 2),
-            "cpu_percent": round(self.process.cpu_percent(), 1),
+            "cpu_percent": round(cpu_pct, 1),
             "fps": round(self.fps, 1),
             "avg_tick_ms": round((sum(self.tick_times) / len(self.tick_times) * 1000) if self.tick_times else 0.0, 2),
         }

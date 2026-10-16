@@ -19,6 +19,22 @@ def build():
     if bit_depth < 64:
         print("[WARNING] Python interpreter is not 64-bit! Building in 64-bit environment is recommended for full memory access.")
 
+    # 1. Compile native Rust crate
+    print("\n[1/2] Compiling Rust engine crate (crates/rust_engine)...")
+    cargo_cmd = ["cargo", "build", "--release"]
+    cargo_res = subprocess.run(cargo_cmd)
+    if cargo_res.returncode != 0:
+        print("[ERROR] Cargo build failed!")
+        sys.exit(cargo_res.returncode)
+
+    # Copy binary to rust_engine.pyd / rust_engine.so
+    import shutil
+    if sys.platform == "win32":
+        shutil.copyfile("target/release/rust_engine.dll", "rust_engine.pyd")
+    else:
+        shutil.copyfile("target/release/librust_engine.so", "rust_engine.so")
+
+    print("[2/2] Packaging with PyInstaller...")
     cmd = [
         sys.executable,
         "-m",

@@ -250,6 +250,17 @@ class SimulationEngine:
             num_zombies=len(self.zombies)
         )
         self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies)
+        item_type_map = {
+            ResourceItem.CANNED_FOOD: 1, ResourceItem.FOOD: 1, ResourceItem.STEAK: 1, ResourceItem.CEREAL: 1,
+            ResourceItem.WATER: 2,
+            ResourceItem.MEDKIT: 3,
+            ResourceItem.PISTOL_AMMO: 4, ResourceItem.SHOTGUN_SHELLS: 4, ResourceItem.RIFLE_AMMO: 4,
+            ResourceItem.WOOD: 5, ResourceItem.METAL: 5,
+            ResourceItem.WEAPON: 6, ResourceItem.PISTOL: 6, ResourceItem.SHOTGUN: 6, ResourceItem.RIFLE: 6,
+        }
+        for item in self.items:
+            itype = item_type_map.get(getattr(item, 'item_type', ''), 1)
+            self.rust_bridge.add_item_to_rust(item.x, item.y, item.z, itype, getattr(item, 'amount', 1))
 
     def tick(self) -> None:
         t0: float = time.time()
@@ -308,42 +319,58 @@ class SimulationEngine:
         alive_count: int = len(alive_indices)
 
         if alive_count > 0:
-            active_brains = [self.brains[i] for i in alive_indices]
-            active_inputs = [extract_survivor_inputs(self.survivors[i], self.world, self.items, self.vehicles, self.zombies, self.animals) for i in alive_indices]
-            active_hiddens = [self.hidden_states[i] for i in alive_indices]
-
-            step_outputs = batch_get_action_and_movement(active_brains, active_inputs, active_hiddens)
-
-            movements: list[tuple[float, float]] = []
-            actions: list[int] = []
-
-            for idx, orig_i in enumerate(alive_indices):
-                survivor = self.survivors[orig_i]
-                planner = self.planners[orig_i]
-                survivor.update_needs(world=self.world)
-
-                raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx][:4]
-                self.hidden_states[orig_i] = new_hidden
-
-                if self.world.current_tick - planner.last_eval_tick >= planner.goal_eval_interval:
-                    planner.evaluate_goal(survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, action_idx=raw_action)
-                    planner.last_eval_tick = self.world.current_tick
-
-                dx, dy, action = planner.execute_low_level_behaviour(
-                    survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, raw_dx, raw_dy, raw_action
-                )
-
-                movements.append((dx, dy))
-                actions.append(action)
-
-                if not (self.rust_bridge and self.rust_bridge.full_sim_core):
-                    survivor.move(dx, dy, self.world, noise_events=self.noise_events)
-                survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors, noise_events=self.noise_events)
-
             if self.rust_bridge and self.rust_bridge.full_sim_core:
-                self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies)
-                self.rust_bridge.step_full_simulation(actions, movements)
+                # 1. Zero-Copy observation tensor from Rust (parallel Rayon, 57 features)
+                obs_matrix = self.rust_bridge.full_sim_core.get_observations_matrix()
+                active_brains = [self.brains[i] for i in alive_indices]
+                active_inputs = [obs_matrix[i] for i in alive_indices]
+                active_hiddens = [self.hidden_states[i] for i in alive_indices]
+
+                step_outputs = batch_get_action_and_movement(active_brains, active_inputs, active_hiddens)
+
+                actions: list[int] = [0] * len(self.survivors)
+                movements: list[tuple[float, float]] = [(0.0, 0.0)] * len(self.survivors)
+
+                for idx, orig_i in enumerate(alive_indices):
+                    raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx][:4]
+                    self.hidden_states[orig_i] = new_hidden
+                    movements[orig_i] = (raw_dx, raw_dy)
+                    actions[orig_i] = raw_action
+
+                # 2. Rust executes all simulation logic (vitals, movement, combat, flocking, noise)
+                self.rust_bridge.full_sim_core.step_simulation(actions, movements)
                 self.rust_bridge.sync_rust_to_entities(self.survivors, self.zombies)
+            else:
+                active_brains = [self.brains[i] for i in alive_indices]
+                active_inputs = [extract_survivor_inputs(self.survivors[i], self.world, self.items, self.vehicles, self.zombies, self.animals) for i in alive_indices]
+                active_hiddens = [self.hidden_states[i] for i in alive_indices]
+
+                step_outputs = batch_get_action_and_movement(active_brains, active_inputs, active_hiddens)
+
+                movements: list[tuple[float, float]] = []
+                actions: list[int] = []
+
+                for idx, orig_i in enumerate(alive_indices):
+                    survivor = self.survivors[orig_i]
+                    planner = self.planners[orig_i]
+                    survivor.update_needs(world=self.world)
+
+                    raw_dx, raw_dy, raw_action, new_hidden = step_outputs[idx][:4]
+                    self.hidden_states[orig_i] = new_hidden
+
+                    if self.world.current_tick - planner.last_eval_tick >= planner.goal_eval_interval:
+                        planner.evaluate_goal(survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, action_idx=raw_action)
+                        planner.last_eval_tick = self.world.current_tick
+
+                    dx, dy, action = planner.execute_low_level_behaviour(
+                        survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, raw_dx, raw_dy, raw_action
+                    )
+
+                    movements.append((dx, dy))
+                    actions.append(action)
+
+                    survivor.move(dx, dy, self.world, noise_events=self.noise_events)
+                    survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors, noise_events=self.noise_events)
 
         for s in self.survivors:
             if s.is_alive and not s.in_vehicle and self.world.current_tick % 5 == 0:
@@ -404,9 +431,13 @@ class SimulationEngine:
             self.end_generation()
 
     def end_generation(self) -> None:
+        fitness_scores = self.rust_bridge.get_fitness_scores() if self.rust_bridge else []
         brains_and_fitnesses: list[tuple[BrainNet, float]] = []
         for i, s in enumerate(self.survivors):
-            fitness: float = s.calculate_fitness()
+            if i < len(fitness_scores):
+                fitness = float(fitness_scores[i])
+            else:
+                fitness = s.calculate_fitness()
             brains_and_fitnesses.append((self.brains[i], fitness))
 
         self.brains, max_fit = self.evolution_manager.evolve_population(brains_and_fitnesses)

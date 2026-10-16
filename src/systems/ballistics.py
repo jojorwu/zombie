@@ -252,7 +252,7 @@ class BallisticsUtility:
                     })
 
                     if noise_events is not None:
-                        from src.entities.sensory import NoiseEvent
+                        from src.entities.sensory import NoiseEvent  # local import: avoids entities<->systems cycle
                         noise_events.append(NoiseEvent(cur_x, cur_y, cur_z, volume=25.0, source_type="ricochet"))
                     continue
 

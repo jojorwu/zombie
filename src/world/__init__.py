@@ -19,11 +19,11 @@ from src.world.tiles import (
     TileType,
 )
 from src.world.chunk import Chunk, ChunkManager, ChunkState
-from src.world.electricity_utility import ElectricityUtility
+from src.systems.electricity import ElectricityUtility
 from src.world.generation import WorldGenerator
 from src.world.grid import World
 from src.world.lighting import DynamicLight, LightingEngine
-from src.world.tile_interaction_utility import TileInteractionUtility
+from src.systems.tile_interaction import TileInteractionUtility
 from src.world.weather import WeatherManager
 
 __all__ = [

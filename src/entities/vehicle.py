@@ -228,11 +228,11 @@ class Vehicle:
 
     def store_in_trunk(self, item_type: str, amount: int = 1) -> bool:
         """Stores items in vehicle trunk using ContainerUtility capacity rules."""
-        from src.entities.container_utility import ContainerUtility
+        from src.systems.container import ContainerUtility
         ok, added = ContainerUtility.add_item_to_container(self, item_type, amount)
         return ok and added > 0
 
     def take_from_trunk(self, item_type: str, amount: int = 1) -> int:
         """Takes items from vehicle trunk using ContainerUtility."""
-        from src.entities.container_utility import ContainerUtility
+        from src.systems.container import ContainerUtility
         return ContainerUtility.remove_item_from_container(self, item_type, amount)

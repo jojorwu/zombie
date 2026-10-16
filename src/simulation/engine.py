@@ -19,8 +19,8 @@ from src.simulation.event_bus import DamageDealtEvent, EventBus, NoiseEmittedEve
 from src.simulation.memory_monitor_utility import MemoryMonitorUtility
 from src.simulation.snapshot import DoubleBufferedStateExchanger
 from src.simulation.spawner import EntitySpawner
-from src.world import World
-from src.world.electricity_utility import ElectricityUtility
+from src.world.grid import World
+from src.systems.electricity import ElectricityUtility
 
 try:
     from rust_engine import compute_zombie_flock_steering
@@ -393,7 +393,33 @@ class SimulationEngine:
             if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
         ]
 
-        if not (self.rust_bridge and self.rust_bridge.full_sim_core):
+        if self.rust_bridge and self.rust_bridge.full_sim_core:
+            # Rust owns zombie AI/flocking for the full roster. Chunks that are
+            # inactive were frozen into chunk storage above and removed from
+            # self.zombies, so re-append them to the Rust roster before stepping
+            # (otherwise positions would be overwritten by stale Rust state),
+            # and harvest their post-step positions back afterwards so they can
+            # be frozen again on the next tick.
+            frozen_zombies: list[Any] = []
+            for zs in self.world.chunk_manager.stored_zombies.values():
+                while zs:
+                    fz = zs.pop()
+                    if fz.is_alive:
+                        frozen_zombies.append(fz)
+            if frozen_zombies:
+                self.zombies.extend(frozen_zombies)
+                self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies)
+
+            self.rust_bridge.full_sim_core.step_simulation(
+                [0] * len(self.survivors), [(0.0, 0.0)] * len(self.survivors)
+            )
+
+            if frozen_zombies:
+                self.rust_bridge.sync_rust_to_entities(self.survivors, self.zombies)
+                self.zombies = [z for z in self.zombies if z not in frozen_zombies]
+                for fz in frozen_zombies:
+                    self.world.chunk_manager.store_entity_in_chunk(fz)
+        else:
             z_grid: dict[tuple[int, int, int], list[Any]] = {}
             for z in active_zombies:
                 cell = (int(z.x // 6.0), int(z.y // 6.0), z.z)

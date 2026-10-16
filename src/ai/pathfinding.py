@@ -3,7 +3,7 @@ import math
 
 import numpy as np
 
-from src.world import TileType
+from src.world.tiles import TileType
 
 try:
     from rust_engine import compute_a_star_3d_path

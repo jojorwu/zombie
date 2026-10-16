@@ -1,7 +1,7 @@
 import math
 import random
 
-from src.entities.container_utility import ContainerUtility
+from src.systems.container import ContainerUtility
 from src.entities.item import ResourceItem
 from src.entities.sensory import NoiseEvent
 from src.world.tiles import TileType

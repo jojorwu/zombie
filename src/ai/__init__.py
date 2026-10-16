@@ -7,7 +7,7 @@ from src.ai.hierarchical_ai import (
 from src.ai.inference import batch_get_action_and_movement, extract_survivor_inputs
 from src.ai.network import DEVICE, BrainNet, GeneticEvolutionManager
 from src.ai.pathfinding import AStar3D
-from src.ai.pathfinding_utility import PathfindingUtility
+from src.systems.pathfinding import PathfindingUtility
 from src.ai.ppo import PPOActorCritic, PPOAgent
 
 __all__ = [

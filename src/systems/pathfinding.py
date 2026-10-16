@@ -2,13 +2,13 @@
 """
 Utility 4: Pathfinding & Navigation Utility for 3D A* Shortest Paths.
 Benchmarking, route validation, and navigation testing tool.
-Usage: python -m src.ai.pathfinding_utility
+Usage: python -m src.systems.pathfinding
 """
 
 import time
 
 from src.ai.pathfinding import AStar3D
-from src.world import World
+from src.world.grid import World
 
 
 class PathfindingUtility:

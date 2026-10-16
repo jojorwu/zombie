@@ -8,7 +8,7 @@ try:
     HAS_RUST_LUA = True
 except ImportError:
     HAS_RUST_LUA = False
-    from src.entities.container_utility import ContainerUtility
+    from src.systems.container import ContainerUtility
 
 try:
     import lupa

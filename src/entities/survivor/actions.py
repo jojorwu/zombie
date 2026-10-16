@@ -1,17 +1,40 @@
+from __future__ import annotations
+
 import math
 import random
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.entities.item import WEAPON_STATS, ResourceItem
-from src.entities.sensory import NoiseEvent
-from src.entities.survivor.survivor import EmotionalState
+# Local (deferred) imports of src.systems.*: importing them at module level
+# creates a cycle (src.entities.__init__ -> ... -> src.systems.X -> src.systems.__init__
+# -> src.systems.Y -> src.entities.<leaf> -> partially initialized src.entities).
+# All uses below are inside methods, so lazy loading is safe and faster.
 from src.world.lighting import DynamicLight
-from src.world.tile_interaction_utility import TileInteractionUtility
 
-try:
-    from rust_engine import RustBallisticsUtility as BallisticsUtility
-except ImportError:
-    from src.entities.ballistics_utility import BallisticsUtility
+if TYPE_CHECKING:
+    from src.entities.sensory import NoiseEvent
+    from src.entities.survivor.survivor import EmotionalState
+
+
+def _tile_interaction():
+    from src.systems.tile_interaction import TileInteractionUtility
+    return TileInteractionUtility
+
+
+def _emotional_state():
+    # Leaf class living in survivor.py; imported lazily to avoid the
+    # actions <-> survivor circular dependency.
+    from src.entities.survivor.survivor import EmotionalState
+    return EmotionalState
+
+
+def _ballistics():
+    try:
+        from rust_engine import RustBallisticsUtility
+        return RustBallisticsUtility
+    except ImportError:
+        from src.systems.ballistics import BallisticsUtility
+        return BallisticsUtility
 
 
 class SurvivorActions:
@@ -91,6 +114,7 @@ class SurvivorActions:
 
             all_targets = [z for z in zombies if z.is_alive] + [a for a in animals if a.is_alive] + [s for s in survivors if s is not survivor and s.is_alive]
 
+            BallisticsUtility = _ballistics()
             if hasattr(BallisticsUtility, 'simulate_bullet_flight'):
                 sim_res = BallisticsUtility.simulate_bullet_flight(
                     world,
@@ -118,9 +142,9 @@ class SurvivorActions:
                 noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type=stype, volume=35.0))
             return
 
-        if survivor.emotional_state == EmotionalState.PANICKED and random.random() < 0.25:
+        if survivor.emotional_state == _emotional_state().PANICKED and random.random() < 0.25:
             damage *= 0.5
-        elif survivor.emotional_state == EmotionalState.TERRIFIED and random.random() < 0.50:
+        elif survivor.emotional_state == _emotional_state().TERRIFIED and random.random() < 0.50:
             damage = 0.0
 
         if survivor.in_vehicle and survivor.in_vehicle.fuel > 0:
@@ -169,6 +193,7 @@ class SurvivorActions:
         noise_events: list[NoiseEvent] | None
     ) -> None:
         from src.simulation.utility_facade import EngineUtilityFacade
+        TileInteractionUtility = _tile_interaction()
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
             if hasattr(TileInteractionUtility, 'push_furniture') and TileInteractionUtility.push_furniture(world, fx, fy, survivor.z, dx, dy):
@@ -184,6 +209,7 @@ class SurvivorActions:
         noise_events: list[NoiseEvent] | None
     ) -> None:
         from src.simulation.utility_facade import EngineUtilityFacade
+        TileInteractionUtility = _tile_interaction()
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
             if hasattr(TileInteractionUtility, 'dismantle_furniture'):

@@ -2,7 +2,7 @@ import math
 import random
 
 from src.entities.sensory import NoiseEvent
-from src.world import TileType
+from src.world.tiles import TileType
 
 
 class Animal:

@@ -1,5 +1,5 @@
 from src.simulation.bridge import PythonRustEngineBridge
-from src.simulation.dev_utility import DevUtility
+from src.systems.dev_utility import DevUtility
 from src.simulation.engine import SimulationEngine
 from src.simulation.environment import EnvironmentManager
 from src.simulation.event_bus import (

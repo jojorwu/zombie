@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 import pygame
 
-from src.world import BUILDING_COLORS, TILE_COLORS, TileType
+from src.world.tiles import BUILDING_COLORS, TILE_COLORS, TileType
 
 try:
     import rust_engine

@@ -1,8 +1,8 @@
 import math
 import random
 
-from src.ai.pathfinding import AStar3D
-from src.entities import AnatomicalHealth
+from src.ai.pathfinding import AStar3D  # leaf module
+from src.entities.anatomy import AnatomicalHealth
 from src.entities.sensory import NoiseEvent
 from src.world.tiles import TileType
 

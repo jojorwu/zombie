@@ -1,6 +1,6 @@
 import random
 
-from src.entities import ResourceItem
+from src.entities.item import ResourceItem
 
 
 class EnvironmentManager:

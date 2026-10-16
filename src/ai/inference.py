@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 from src.ai.network import DEVICE
-from src.world.tile_interaction_utility import TileInteractionUtility
+from src.systems.tile_interaction import TileInteractionUtility
 
 MOVABLE_FURNITURE_TILES = TileInteractionUtility.MOVABLE_FURNITURE_TILES
 

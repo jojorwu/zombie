@@ -24,7 +24,7 @@ except ImportError:
     compute_zombie_flock_steering = None
 
 # Light imports (no src.world dependency)
-from src.systems.acoustics import SoundUtility
+from src.systems.sound import SoundUtility
 from src.systems.ballistics import BallisticsUtility, MaterialResistance
 from src.systems.electricity import ElectricityUtility
 from src.systems.vehicle import VehicleType, VehicleData, VehiclePhysicsUtility, VehicleRegistry

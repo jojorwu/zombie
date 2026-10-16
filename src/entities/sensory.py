@@ -1,6 +1,6 @@
 import math
 
-from src.entities.sound_utility import SoundUtility
+from src.systems.sound import SoundUtility
 
 
 class NoiseEvent:

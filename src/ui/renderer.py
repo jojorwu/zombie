@@ -3,12 +3,12 @@ import sys
 
 import pygame
 
-from src.entities import ResourceItem
+from src.entities.item import ResourceItem
 from src.ui.camera import Camera
 from src.ui.hud_renderer import HUDRenderer
 from src.ui.themes import THEME_COLORS, UITheme
 from src.ui.vulkan_bridge import VulkanBridge
-from src.world import BUILDING_COLORS, TILE_COLORS, TileType
+from src.world.tiles import BUILDING_COLORS, TILE_COLORS, TileType
 
 
 class RendererUI:

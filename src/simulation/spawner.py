@@ -2,8 +2,8 @@ import random
 
 import numpy as np
 
-from src.entities import ResourceItem
-from src.world import TILE_WALKABLE, BuildingType, TileType
+from src.entities.item import ResourceItem
+from src.world.tiles import TILE_WALKABLE, BuildingType, TileType
 
 _WALKABLE_TILE_LIST = [t for t, w in TILE_WALKABLE.items() if w]
 

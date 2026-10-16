@@ -44,3 +44,13 @@ class ElectricityUtility:
                 self.active_generators[pos] = new_fuel
         for pos in depleted:
             self.active_generators[pos] = 0.0
+
+    def is_electricity_active(self, current_day: float) -> bool:
+        """Backwards-compatible alias used by EngineUtilityFacade.
+
+        Returns True while the city power grid is still online (before the
+        configured cutoff day) or when at least one generator has fuel left.
+        """
+        if self.grid_enabled and current_day < self.cutoff_day:
+            return True
+        return any(fuel > 0.0 for fuel in self.active_generators.values())

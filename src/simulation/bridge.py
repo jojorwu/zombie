@@ -45,8 +45,21 @@ class PythonRustEngineBridge:
                 int(current_tick)
             )
 
-    def sync_entities_to_rust(self, survivors: list[Any], zombies: list[Any]) -> None:
-        """Synchronizes Python survivors and zombies into RustFullSimulationCore using cached NumPy buffers."""
+    def sync_entities_to_rust(
+        self,
+        survivors: list[Any],
+        zombies: list[Any],
+        full_roster: bool = False,
+    ) -> None:
+        """Synchronizes Python survivors and zombies into RustFullSimulationCore.
+
+        Zombies are synced through a stable identity mapping: each row carries
+        `id(py_zombie)` as `entity_id`, so the Rust roster matches entities by
+        id instead of row position. This keeps chunk freeze/rehydrate and death
+        cleanup (which reorder or resize the Python active list) from ever
+        mapping wrong slots onto entities. Pass `full_roster=True` on world
+        reset/generation start to rebuild the Rust roster from scratch.
+        """
         if not self.full_sim_core:
             return
 
@@ -66,16 +79,18 @@ class PythonRustEngineBridge:
 
         if hasattr(self.full_sim_core, 'sync_zombies_batch') and zombies:
             n_z: int = len(zombies)
+            # Row layout: [entity_id, x, y, z_level, hp, speed] — 6 columns.
             if not hasattr(self, '_zomb_buf') or self._zomb_buf.shape[0] != n_z:
-                self._zomb_buf = np.empty((n_z, 5), dtype=np.float32)
+                self._zomb_buf = np.empty((n_z, 6), dtype=np.float32)
 
             for i, z in enumerate(zombies):
-                self._zomb_buf[i, 0] = float(z.x)
-                self._zomb_buf[i, 1] = float(z.y)
-                self._zomb_buf[i, 2] = float(z.z)
-                self._zomb_buf[i, 3] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
-                self._zomb_buf[i, 4] = float(getattr(z, 'speed', 0.08))
-            self.full_sim_core.sync_zombies_batch(self._zomb_buf)
+                self._zomb_buf[i, 0] = float(id(z))
+                self._zomb_buf[i, 1] = float(z.x)
+                self._zomb_buf[i, 2] = float(z.y)
+                self._zomb_buf[i, 3] = float(z.z)
+                self._zomb_buf[i, 4] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
+                self._zomb_buf[i, 5] = float(getattr(z, 'speed', 0.08))
+            self.full_sim_core.sync_zombies_batch(self._zomb_buf, full_roster)
 
     def step_full_simulation(self, actions: list[int], movements: list[tuple[float, float]]) -> np.ndarray:
         """Executes full simulation step in Rust and returns 2D observation tensor for PyTorch."""
@@ -132,15 +147,22 @@ class PythonRustEngineBridge:
                     s.is_alive = salive
 
         if hasattr(self.full_sim_core, 'get_zombies_batch') and zombies:
+            # Rust returns only the ACTIVE window; rows are keyed by entity_id.
+            # Match back to Python objects by id() so reordering on either side
+            # never misaligns state (stable mapping table, variant A).
             z_arr: np.ndarray = self.full_sim_core.get_zombies_batch()
-            for idx, z in enumerate(zombies):
-                if idx < z_arr.shape[0]:
-                    z.x, z.y, z.z = float(z_arr[idx, 0]), float(z_arr[idx, 1]), int(z_arr[idx, 2])
-                    zhp: float = float(z_arr[idx, 3])
-                    zalive: bool = bool(z_arr[idx, 4] > 0.5)
-                    z.hp = zhp
-                    z.health = zhp
-                    z.is_alive = zalive
+            by_id: dict[int, int] = {id(z): i for i, z in enumerate(zombies)}
+            for row in range(z_arr.shape[0]):
+                py_idx = by_id.get(int(z_arr[row, 0]))
+                if py_idx is None:
+                    continue
+                z = zombies[py_idx]
+                z.x, z.y, z.z = float(z_arr[row, 1]), float(z_arr[row, 2]), int(z_arr[row, 3])
+                zhp: float = float(z_arr[row, 4])
+                zalive: bool = bool(z_arr[row, 5] > 0.5)
+                z.hp = zhp
+                z.health = zhp
+                z.is_alive = zalive
 
     def step(self, dx: float = 0.0, dy: float = 0.0, action: int = 0) -> tuple[np.ndarray, bool]:
         """Executes one simulation tick step in Rust and extracts zero-copy observations."""

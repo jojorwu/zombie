@@ -88,6 +88,10 @@ pub struct RustFullSimulationCore {
     pub world_grid: RustWorldGrid,
     pub survivors: Vec<RustSurvivorEntity>,
     pub zombies: Vec<RustZombieEngine>,
+    /// Subset of `zombies` (indices) that Python currently simulates actively.
+    /// Zombies outside this window are frozen in inactive chunks and are not
+    /// stepped, observed, or harvested until rehydrated by the chunk manager.
+    pub active_zombie_indices: Vec<usize>,
     pub items: Vec<RustWorldItem>,
     pub ambient_light: f32,
     pub noise_events: Vec<(f32, f32, i32, f32)>, // (x, y, z, volume_db)
@@ -112,8 +116,10 @@ impl RustFullSimulationCore {
         for i in 0..num_zombies {
             let zx = (width / 4) as f32 + ((i % 10) as f32 * 3.0);
             let zy = (height / 4) as f32 + ((i / 10) as f32 * 3.0);
-            zombies.push(RustZombieEngine::new(zx, zy, 0, 50.0, 0.08));
+            zombies.push(RustZombieEngine::new(zx, zy, 0, 50.0, 0.08, -(i as i64) - 1));
         }
+
+        let active_zombie_indices: Vec<usize> = (0..zombies.len()).collect();
 
         RustFullSimulationCore {
             width,
@@ -122,6 +128,7 @@ impl RustFullSimulationCore {
             world_grid,
             survivors,
             zombies,
+            active_zombie_indices,
             items: Vec::new(),
             ambient_light: 1.0,
             noise_events: Vec::new(),
@@ -151,7 +158,8 @@ impl RustFullSimulationCore {
 
     pub fn add_zombie(&mut self, x: f32, y: f32, z: i32, hp: f32, speed: f32) -> usize {
         let id = self.zombies.len();
-        self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed));
+        self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed, -(id as i64) - 1));
+        self.active_zombie_indices.push(id);
         id
     }
 
@@ -176,6 +184,9 @@ impl RustFullSimulationCore {
             zomb.z = z;
             zomb.hp = hp;
             zomb.is_alive = hp > 0.0;
+            if !self.active_zombie_indices.contains(&index) {
+                self.active_zombie_indices.push(index);
+            }
         }
     }
 
@@ -196,45 +207,100 @@ impl RustFullSimulationCore {
         self.zombies.len()
     }
 
-    pub fn sync_zombies_batch(&mut self, data: PyReadonlyArray2<f32>) {
+    /// Idempotent, identity-keyed zombie roster sync (stable mapping table).
+    /// `data` rows are `[entity_id, x, y, z_level, hp, speed]`, where `entity_id`
+    /// is a stable Python-side id (`id(py_zombie)` cast to i64). Rust matches
+    /// incoming entities by id instead of row index, so chunk freeze/rehydrate
+    /// and death cleanup can reorder or resize the Python active list without
+    /// ever mapping wrong slots onto entities. Rows absent from `data` become
+    /// frozen (kept in the roster, excluded from the active window); ids not
+    /// seen before are appended as new zombies.
+    #[pyo3(signature = (data, full_roster = false))]
+    pub fn sync_zombies_batch(&mut self, data: PyReadonlyArray2<f32>, full_roster: bool) {
         let array = data.as_array();
         let rows = array.nrows();
+
+        if full_roster {
+            // Full-world snapshot (e.g. generation reset): rebuild the roster
+            // from scratch with every entity inside the active window.
+            self.zombies.clear();
+            self.active_zombie_indices.clear();
+            for i in 0..rows {
+                let eid = array[[i, 0]] as i64;
+                let x = array[[i, 1]];
+                let y = array[[i, 2]];
+                let z = array[[i, 3]] as i32;
+                let hp = array[[i, 4]];
+                let speed = array[[i, 5]];
+                let idx = self.zombies.len();
+                self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed, eid));
+                self.active_zombie_indices.push(idx);
+            }
+            return;
+        }
+
+        // Incremental active-window sync: update-by-id, append-new, freeze-missing.
+        let mut touched: Vec<bool> = vec![false; self.zombies.len()];
         for i in 0..rows {
-            let x = array[[i, 0]];
-            let y = array[[i, 1]];
-            let z = array[[i, 2]] as i32;
-            let hp = array[[i, 3]];
-            let speed = array[[i, 4]];
-            if i < self.zombies.len() {
-                let zomb = &mut self.zombies[i];
-                zomb.x = x;
-                zomb.y = y;
-                zomb.z = z;
-                zomb.hp = hp;
-                zomb.is_alive = hp > 0.0;
-            } else {
-                self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed));
+            let eid = array[[i, 0]] as i64;
+            let x = array[[i, 1]];
+            let y = array[[i, 2]];
+            let z = array[[i, 3]] as i32;
+            let hp = array[[i, 4]];
+            let speed = array[[i, 5]];
+
+            match self.zombies.iter().position(|zb| zb.entity_id == eid) {
+                Some(idx) => {
+                    let zomb = &mut self.zombies[idx];
+                    zomb.x = x;
+                    zomb.y = y;
+                    zomb.z = z;
+                    zomb.hp = hp;
+                    zomb.is_alive = hp > 0.0;
+                    if speed > 0.0 {
+                        zomb.speed = speed;
+                    }
+                    touched[idx] = true;
+                }
+                None => {
+                    let idx = self.zombies.len();
+                    self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed, eid));
+                    touched.push(true);
+                }
             }
         }
-        self.zombies.truncate(rows);
+
+        self.active_zombie_indices = touched
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| **t)
+            .map(|(i, _)| i)
+            .collect();
     }
 
+    /// Harvests only the ACTIVE-window zombies. Row order matches the last
+    /// `sync_zombies_batch(...)` call, so Python can zip it with its own list.
+    /// Columns: [entity_id, x, y, z_level, hp, is_alive].
     pub fn get_zombies_batch<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
-        let n = self.zombies.len();
-        let py_array = PyArray2::<f32>::zeros(py, [n, 5], false);
+        let active = &self.active_zombie_indices;
+        let n = active.len();
+        let py_array = PyArray2::<f32>::zeros(py, [n, 6], false);
         let slice = unsafe { py_array.as_slice_mut().unwrap() };
 
         let zombies_ref = &self.zombies;
-        slice.par_chunks_mut(5).enumerate().for_each(|(i, z_slice)| {
-            if i < zombies_ref.len() {
-                let z = &zombies_ref[i];
-                z_slice[0] = z.x;
-                z_slice[1] = z.y;
-                z_slice[2] = z.z as f32;
-                z_slice[3] = z.hp;
-                z_slice[4] = if z.is_alive { 1.0 } else { 0.0 };
+        for (row, &zi) in active.iter().enumerate() {
+            if zi >= zombies_ref.len() {
+                continue;
             }
-        });
+            let z = &zombies_ref[zi];
+            let r = &mut slice[row * 6..row * 6 + 6];
+            r[0] = z.entity_id as f32;
+            r[1] = z.x;
+            r[2] = z.y;
+            r[3] = z.z as f32;
+            r[4] = z.hp;
+            r[5] = if z.is_alive { 1.0 } else { 0.0 };
+        }
 
         py_array
     }
@@ -472,7 +538,11 @@ impl RustFullSimulationCore {
                         self.noise_events.push((surv_x, surv_y, surv_z, 80.0));
                         let mut target_idx: Option<usize> = None;
                         let mut min_d2 = 625.0f32; // 25^2
-                        for (zi, z) in self.zombies.iter().enumerate() {
+                        for &zi in &self.active_zombie_indices {
+                            if zi >= self.zombies.len() {
+                                continue;
+                            }
+                            let z = &self.zombies[zi];
                             if z.is_alive && z.z == surv_z {
                                 let d2 = (z.x - surv_x) * (z.x - surv_x) + (z.y - surv_y) * (z.y - surv_y);
                                 if d2 < min_d2 {
@@ -495,7 +565,12 @@ impl RustFullSimulationCore {
                         // Melee attack
                         self.noise_events.push((surv_x, surv_y, surv_z, 15.0));
                         let dmg = if surv.weapon_tier == 1 { 45.0 } else { 25.0 };
-                        for z in self.zombies.iter_mut() {
+                        let active_melee: Vec<usize> = self.active_zombie_indices.clone();
+                        for zi in active_melee {
+                            if zi >= self.zombies.len() {
+                                continue;
+                            }
+                            let z = &mut self.zombies[zi];
                             if z.is_alive && z.z == surv_z {
                                 let dz_x = z.x - surv_x;
                                 let dz_y = z.y - surv_y;
@@ -581,11 +656,20 @@ impl RustFullSimulationCore {
         let mut steerings = vec![(0.0f32, 0.0f32); num_zombies];
         let mut behavior_modes = vec![0u8; num_zombies];
 
+        // Active-window membership lookup: zombies frozen in inactive chunks
+        // keep their state but are not stepped by flocking/movement this tick.
+        let mut is_active = vec![false; num_zombies];
+        for &zi in &self.active_zombie_indices {
+            if zi < num_zombies {
+                is_active[zi] = true;
+            }
+        }
+
         // Parallelized Flocking separation and mode assessment using Rayon
         let zombies_ref = &self.zombies;
         steerings.par_iter_mut().zip(behavior_modes.par_iter_mut()).enumerate().for_each(|(i, (steer, mode))| {
             let z1 = &zombies_ref[i];
-            if !z1.is_alive {
+            if !z1.is_alive || !is_active[i] {
                 return;
             }
             let mut sep_x = 0.0f32;
@@ -615,9 +699,9 @@ impl RustFullSimulationCore {
         // Track zombie pressure against door/barricade tiles
         let mut tile_pressure: HashMap<(i32, i32, i32), usize> = HashMap::new();
 
-        // Move zombies and check bite attacks
+        // Move zombies and check bite attacks (active window only)
         for (i, zombie) in self.zombies.iter_mut().enumerate() {
-            if !zombie.is_alive {
+            if !zombie.is_alive || !is_active[i] {
                 continue;
             }
 
@@ -734,6 +818,7 @@ impl RustFullSimulationCore {
 
         let survivors_ref = &self.survivors;
         let zombies_ref = &self.zombies;
+        let active_zombie_indices_ref = &self.active_zombie_indices;
         let items_ref = &self.items;
         let ambient = self.ambient_light;
         let width_f = self.width as f32;
@@ -764,7 +849,11 @@ impl RustFullSimulationCore {
             let mut z_dx = 0.0f32;
             let mut z_dy = 0.0f32;
             let mut z_dz = 0.0f32;
-            for z in zombies_ref {
+            for &zi in active_zombie_indices_ref {
+                if zi >= zombies_ref.len() {
+                    continue;
+                }
+                let z = &zombies_ref[zi];
                 if z.is_alive && z.z == surv.z {
                     let dx = z.x - surv.x;
                     let dy = z.y - surv.y;

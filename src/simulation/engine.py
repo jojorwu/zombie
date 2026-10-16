@@ -8,7 +8,7 @@ from src.ai.inference import batch_get_action_and_movement, extract_survivor_inp
 from src.ai.network import BrainNet, GeneticEvolutionManager
 from src.entities.factory import EntityFactory
 from src.entities.item import ResourceItem
-from src.entities.sensory import NoiseEvent, ScentTrail
+from src.entities.events import NoiseEvent, ScentTrail
 from src.entities.state_manager import LazyChunkStatePersistence
 from src.entities.survivor import Survivor
 from src.entities.vehicle import Vehicle
@@ -249,7 +249,7 @@ class SimulationEngine:
             num_survivors=len(self.survivors),
             num_zombies=len(self.zombies)
         )
-        self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies)
+        self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies, full_roster=True)
         item_type_map = {
             ResourceItem.CANNED_FOOD: 1, ResourceItem.FOOD: 1, ResourceItem.STEAK: 1, ResourceItem.CEREAL: 1,
             ResourceItem.WATER: 2,
@@ -394,31 +394,19 @@ class SimulationEngine:
         ]
 
         if self.rust_bridge and self.rust_bridge.full_sim_core:
-            # Rust owns zombie AI/flocking for the full roster. Chunks that are
-            # inactive were frozen into chunk storage above and removed from
-            # self.zombies, so re-append them to the Rust roster before stepping
-            # (otherwise positions would be overwritten by stale Rust state),
-            # and harvest their post-step positions back afterwards so they can
-            # be frozen again on the next tick.
-            frozen_zombies: list[Any] = []
-            for zs in self.world.chunk_manager.stored_zombies.values():
-                while zs:
-                    fz = zs.pop()
-                    if fz.is_alive:
-                        frozen_zombies.append(fz)
-            if frozen_zombies:
-                self.zombies.extend(frozen_zombies)
-                self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies)
+            # Rust owns zombie AI/flocking for the ACTIVE window only. The
+            # bridge sync uses a stable identity mapping (entity_id = id(py_z))
+            # instead of index alignment, so freeze/rehydrate/death-cleanup can
+            # freely reorder or resize the Python roster without misaligning
+            # slots. Sync every tick: rows present in the buffer become active,
+            # missing rows stay frozen in the Rust roster (not stepped/harvested).
+            self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies)
 
             self.rust_bridge.full_sim_core.step_simulation(
                 [0] * len(self.survivors), [(0.0, 0.0)] * len(self.survivors)
             )
-
-            if frozen_zombies:
-                self.rust_bridge.sync_rust_to_entities(self.survivors, self.zombies)
-                self.zombies = [z for z in self.zombies if z not in frozen_zombies]
-                for fz in frozen_zombies:
-                    self.world.chunk_manager.store_entity_in_chunk(fz)
+            # Harvest updated positions/vitals for the live roster only.
+            self.rust_bridge.sync_rust_to_entities(self.survivors, self.zombies)
         else:
             z_grid: dict[tuple[int, int, int], list[Any]] = {}
             for z in active_zombies:

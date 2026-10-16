@@ -2,7 +2,7 @@ from typing import Any
 
 from src.systems.ballistics import BallisticsUtility
 from src.systems.container import ContainerUtility
-from src.entities.sensory import NoiseEvent
+from src.entities.events import NoiseEvent
 from src.systems.sound import SoundUtility
 from src.systems.vehicle import VehiclePhysicsUtility
 from src.systems.tile_interaction import TileInteractionUtility
@@ -84,6 +84,24 @@ class EngineUtilityFacade:
         return TileInteractionUtility.lockpick_door(world, x, y, z, inventory)
 
     # --- Acoustics & Ballistics ---
+    @staticmethod
+    def get_ballistics_utility():
+        """Returns the native Rust ballistics engine when available, else the Python fallback."""
+        if RUST_UTILITIES_AVAILABLE:
+            return RustBallisticsUtility
+        return BallisticsUtility
+
+    @staticmethod
+    def get_tile_interaction_utility():
+        """Returns the native Rust tile-interaction engine when available, else the Python fallback.
+
+        Callers must feature-detect (``hasattr``) because the two backends expose
+        overlapping but not identical method sets.
+        """
+        if RUST_UTILITIES_AVAILABLE and RustTileInteractionUtility is not None:
+            return RustTileInteractionUtility
+        return TileInteractionUtility
+
     @staticmethod
     def create_noise_event(x: float, y: float, z: int, source_type: str = "general", volume: float | None = None) -> NoiseEvent:
         """Creates a NoiseEvent using SoundUtility / RustAcousticSystem sound profile SPL scaling."""

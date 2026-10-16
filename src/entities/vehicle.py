@@ -1,5 +1,8 @@
 import math
 
+from src.entities.events import NoiseEvent
+from src.systems.container import ContainerUtility
+
 try:
     from rust_engine import RustVehiclePhysics
     RUST_VEHICLE_AVAILABLE = True
@@ -189,7 +192,6 @@ class Vehicle:
             self.fuel = max(0.0, self.fuel - 0.03 * abs(throttle))
 
             if noise_events is not None:
-                from src.entities.sensory import NoiseEvent
                 noise_events.append(NoiseEvent(self.x, self.y, self.z, volume=self.noise_level, source_type="vehicle_engine"))
 
         wheel_avg = sum(self.parts[w].condition_percent for w in ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"] if w in self.parts) / 400.0 if self.parts else 1.0
@@ -228,11 +230,9 @@ class Vehicle:
 
     def store_in_trunk(self, item_type: str, amount: int = 1) -> bool:
         """Stores items in vehicle trunk using ContainerUtility capacity rules."""
-        from src.systems.container import ContainerUtility
         ok, added = ContainerUtility.add_item_to_container(self, item_type, amount)
         return ok and added > 0
 
     def take_from_trunk(self, item_type: str, amount: int = 1) -> int:
         """Takes items from vehicle trunk using ContainerUtility."""
-        from src.systems.container import ContainerUtility
         return ContainerUtility.remove_item_from_container(self, item_type, amount)

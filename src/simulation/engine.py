@@ -8,7 +8,7 @@ from src.ai.inference import batch_get_action_and_movement, extract_survivor_inp
 from src.ai.network import BrainNet, GeneticEvolutionManager
 from src.entities.factory import EntityFactory
 from src.entities.item import ResourceItem
-from src.entities.sensory import NoiseEvent, ScentTrail
+from src.entities.events import NoiseEvent, ScentTrail
 from src.entities.state_manager import LazyChunkStatePersistence
 from src.entities.survivor import Survivor
 from src.entities.vehicle import Vehicle
@@ -21,12 +21,6 @@ from src.simulation.snapshot import DoubleBufferedStateExchanger
 from src.simulation.spawner import EntitySpawner
 from src.world.grid import World
 from src.systems.electricity import ElectricityUtility
-
-try:
-    from rust_engine import compute_zombie_flock_steering
-    RUST_STEERING_AVAILABLE: bool = True
-except ImportError:
-    RUST_STEERING_AVAILABLE: bool = False
 
 SIM_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=4)
 
@@ -144,8 +138,7 @@ class SimulationEngine:
         ne: NoiseEvent = EngineUtilityFacade.create_noise_event(event.x, event.y, event.z, source_type=event.source_type, volume=event.volume)
         self.noise_events.append(ne)
 
-        if self.rust_bridge and self.rust_bridge.full_sim_core:
-            self.rust_bridge.full_sim_core.emit_noise(float(event.x), float(event.y), int(event.z), float(event.volume))
+        self.rust_bridge.emit_noise(event.x, event.y, event.z, event.volume)
 
     def _handle_damage_dealt(self, event: DamageDealtEvent) -> None:
         """Processes published damage events across entities."""
@@ -249,18 +242,8 @@ class SimulationEngine:
             num_survivors=len(self.survivors),
             num_zombies=len(self.zombies)
         )
-        self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies)
-        item_type_map = {
-            ResourceItem.CANNED_FOOD: 1, ResourceItem.FOOD: 1, ResourceItem.STEAK: 1, ResourceItem.CEREAL: 1,
-            ResourceItem.WATER: 2,
-            ResourceItem.MEDKIT: 3,
-            ResourceItem.PISTOL_AMMO: 4, ResourceItem.SHOTGUN_SHELLS: 4, ResourceItem.RIFLE_AMMO: 4,
-            ResourceItem.WOOD: 5, ResourceItem.METAL: 5,
-            ResourceItem.WEAPON: 6, ResourceItem.PISTOL: 6, ResourceItem.SHOTGUN: 6, ResourceItem.RIFLE: 6,
-        }
-        for item in self.items:
-            itype = item_type_map.get(getattr(item, 'item_type', ''), 1)
-            self.rust_bridge.add_item_to_rust(item.x, item.y, item.z, itype, getattr(item, 'amount', 1))
+        self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies, full_roster=True)
+        self.rust_bridge.add_world_items(self.items)
 
     def tick(self) -> None:
         t0: float = time.time()
@@ -318,15 +301,20 @@ class SimulationEngine:
         alive_indices: list[int] = [i for i, s in enumerate(self.survivors) if s.is_alive]
         alive_count: int = len(alive_indices)
 
+        # --- Survivor decision phase --------------------------------------
+        # Rust owns ALL game logic; Python only runs the neural network.
+        # When the native core is present we feed the brain the zero-copy
+        # (N, 57) observation matrix computed by Rust and hand back
+        # (actions, movements). The legacy pure-Python branch below is a
+        # fallback for environments without the compiled rust_engine module.
         if alive_count > 0:
-            if self.rust_bridge and self.rust_bridge.full_sim_core:
-                # 1. Zero-Copy observation tensor from Rust (parallel Rayon, 57 features)
-                obs_matrix = self.rust_bridge.full_sim_core.get_observations_matrix()
-                active_brains = [self.brains[i] for i in alive_indices]
-                active_inputs = [obs_matrix[i] for i in alive_indices]
-                active_hiddens = [self.hidden_states[i] for i in alive_indices]
-
-                step_outputs = batch_get_action_and_movement(active_brains, active_inputs, active_hiddens)
+            if self.rust_bridge.rust_active:
+                obs_matrix = self.rust_bridge.get_observations()
+                step_outputs = batch_get_action_and_movement(
+                    [self.brains[i] for i in alive_indices],
+                    [obs_matrix[i] for i in alive_indices],
+                    [self.hidden_states[i] for i in alive_indices],
+                )
 
                 actions: list[int] = [0] * len(self.survivors)
                 movements: list[tuple[float, float]] = [(0.0, 0.0)] * len(self.survivors)
@@ -337,9 +325,11 @@ class SimulationEngine:
                     movements[orig_i] = (raw_dx, raw_dy)
                     actions[orig_i] = raw_action
 
-                # 2. Rust executes all simulation logic (vitals, movement, combat, flocking, noise)
-                self.rust_bridge.full_sim_core.step_simulation(actions, movements)
-                self.rust_bridge.sync_rust_to_entities(self.survivors, self.zombies)
+                # Rust executes every action/movement (vitals, looting,
+                # crafting, combat, flocking, noise) and harvests state back.
+                self.rust_bridge.step_survivor_tick(
+                    self.survivors, self.zombies, actions, movements
+                )
             else:
                 active_brains = [self.brains[i] for i in alive_indices]
                 active_inputs = [extract_survivor_inputs(self.survivors[i], self.world, self.items, self.vehicles, self.zombies, self.animals) for i in alive_indices]
@@ -347,8 +337,8 @@ class SimulationEngine:
 
                 step_outputs = batch_get_action_and_movement(active_brains, active_inputs, active_hiddens)
 
-                movements: list[tuple[float, float]] = []
-                actions: list[int] = []
+                movements_py: list[tuple[float, float]] = []
+                actions_py: list[int] = []
 
                 for idx, orig_i in enumerate(alive_indices):
                     survivor = self.survivors[orig_i]
@@ -366,8 +356,8 @@ class SimulationEngine:
                         survivor, self.world, self.items, self.vehicles, self.zombies, self.animals, raw_dx, raw_dy, raw_action
                     )
 
-                    movements.append((dx, dy))
-                    actions.append(action)
+                    movements_py.append((dx, dy))
+                    actions_py.append(action)
 
                     survivor.move(dx, dy, self.world, noise_events=self.noise_events)
                     survivor.perform_action(action, self.world, self.items, self.vehicles, self.zombies, self.animals, self.survivors, noise_events=self.noise_events)
@@ -385,40 +375,26 @@ class SimulationEngine:
                 active_scents.append(st)
         self.scent_trails = active_scents
 
+        # --- Zombie AI / flocking phase -----------------------------------
         active_chunk_coords: set[tuple[int, int]] = self.world.chunk_manager.active_chunks
         chunk_size: int = self.world.chunk_manager.chunk_size
 
-        active_zombies = [
+        # Active window used both by the legacy Python zombie-AI fallback and
+        # by the vehicle-collision pass below (Rust steps its own internal
+        # active window; this mirrors it on the Python view side).
+        active_zombies: list[Any] = [
             z for z in self.zombies
             if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
         ]
 
-        if self.rust_bridge and self.rust_bridge.full_sim_core:
-            # Rust owns zombie AI/flocking for the full roster. Chunks that are
-            # inactive were frozen into chunk storage above and removed from
-            # self.zombies, so re-append them to the Rust roster before stepping
-            # (otherwise positions would be overwritten by stale Rust state),
-            # and harvest their post-step positions back afterwards so they can
-            # be frozen again on the next tick.
-            frozen_zombies: list[Any] = []
-            for zs in self.world.chunk_manager.stored_zombies.values():
-                while zs:
-                    fz = zs.pop()
-                    if fz.is_alive:
-                        frozen_zombies.append(fz)
-            if frozen_zombies:
-                self.zombies.extend(frozen_zombies)
-                self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies)
-
-            self.rust_bridge.full_sim_core.step_simulation(
-                [0] * len(self.survivors), [(0.0, 0.0)] * len(self.survivors)
-            )
-
-            if frozen_zombies:
-                self.rust_bridge.sync_rust_to_entities(self.survivors, self.zombies)
-                self.zombies = [z for z in self.zombies if z not in frozen_zombies]
-                for fz in frozen_zombies:
-                    self.world.chunk_manager.store_entity_in_chunk(fz)
+        if self.rust_bridge.rust_active:
+            # Rust owns zombie AI/flocking for the ACTIVE window only. The
+            # bridge sync uses a stable identity mapping (entity_id = id(py_z))
+            # instead of index alignment, so chunk freeze/rehydrate and death
+            # cleanup can freely reorder or resize the Python roster without
+            # misaligning slots. Sync every tick: rows present in the buffer
+            # become active, missing rows stay frozen in the Rust roster.
+            self.rust_bridge.step_zombie_phase_tick(self.survivors, self.zombies)
         else:
             z_grid: dict[tuple[int, int, int], list[Any]] = {}
             for z in active_zombies:

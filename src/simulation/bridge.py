@@ -9,11 +9,57 @@ except ImportError:
     RUST_ENGINE_AVAILABLE: bool = False
 
 
+# Ground item type ids understood by the Rust world-item registry.
+# Kept here (bridge layer) so the engine never touches raw ints.
+ITEM_TYPE_FOOD = 1
+ITEM_TYPE_WATER = 2
+ITEM_TYPE_MEDKIT = 3
+ITEM_TYPE_AMMO = 4
+ITEM_TYPE_MATERIAL = 5
+ITEM_TYPE_WEAPON = 6
+
+
+def map_item_type_to_rust(item_type_name: str) -> int:
+    """Maps a Python ``ResourceItem`` type name to the Rust numeric item kind.
+
+    Unknown types fall back to FOOD so stray spawns still land in the Rust
+    loot registry instead of being silently dropped.
+    """
+    mapping: dict[str, int] = {
+        "canned_food": ITEM_TYPE_FOOD,
+        "food": ITEM_TYPE_FOOD,
+        "steak": ITEM_TYPE_FOOD,
+        "cereal": ITEM_TYPE_FOOD,
+        "water": ITEM_TYPE_WATER,
+        "medkit": ITEM_TYPE_MEDKIT,
+        "pistol_ammo": ITEM_TYPE_AMMO,
+        "shotgun_shells": ITEM_TYPE_AMMO,
+        "rifle_ammo": ITEM_TYPE_AMMO,
+        "wood": ITEM_TYPE_MATERIAL,
+        "metal": ITEM_TYPE_MATERIAL,
+        "weapon": ITEM_TYPE_WEAPON,
+        "pistol": ITEM_TYPE_WEAPON,
+        "shotgun": ITEM_TYPE_WEAPON,
+        "rifle": ITEM_TYPE_WEAPON,
+    }
+    return mapping.get(item_type_name, ITEM_TYPE_FOOD)
+
+
 class PythonRustEngineBridge:
     """
-    Python-Rust Engine Bridge interface with strict type annotations.
-    Delegates world, entity, physics, and pathfinding logic execution to Rust,
-    providing zero-copy flat observation arrays for Python neural networks.
+    Single Python↔Rust boundary for the simulation ("Rust owns logic,
+    Python owns UI + neural nets" architecture).
+
+    Responsibilities:
+      * push survivor/zombie rosters into the Rust core using a stable
+        identity mapping (entity_id = id(py_entity)), never index alignment;
+      * run the full simulation step inside Rust;
+      * hand the neural network a zero-copy (N, 57) observation matrix;
+      * harvest updated state back onto Python view entities (UI only);
+      * own fitness-score retrieval and ground-item registration.
+
+    The engine should call these high-level methods instead of reaching into
+    ``full_sim_core`` directly — keeps the spaghetti out of both sides.
     """
     width: int
     height: int
@@ -32,6 +78,66 @@ class PythonRustEngineBridge:
             self.native_core = None
             self.full_sim_core = None
 
+    @property
+    def rust_active(self) -> bool:
+        """True when the native Rust simulation core is loaded and usable."""
+        return self.full_sim_core is not None
+
+    # ------------------------------------------------------------------ #
+    # High-level tick API used by SimulationEngine                        #
+    # ------------------------------------------------------------------ #
+
+    def get_observations(self) -> np.ndarray:
+        """Zero-copy (N, 57) observation matrix computed in Rust (Rayon-parallel)."""
+        return self.full_sim_core.get_observations_matrix()
+
+    def emit_noise(self, x: float, y: float, z: int, volume: float) -> None:
+        """Registers an acoustic noise event inside the Rust simulation memory."""
+        if self.rust_active:
+            self.full_sim_core.emit_noise(float(x), float(y), int(z), float(volume))
+
+    def add_world_items(self, items: list[Any]) -> None:
+        """Registers Python-spawned ground items into the Rust loot registry."""
+        if not self.rust_active:
+            return
+        for item in items:
+            itype = map_item_type_to_rust(getattr(item, "item_type", ""))
+            self.add_item_to_rust(
+                item.x, item.y, item.z, itype, getattr(item, "amount", 1)
+            )
+
+    def step_survivor_tick(
+        self,
+        survivors: list[Any],
+        zombies: list[Any],
+        actions: list[int],
+        movements: list[tuple[float, float]],
+    ) -> np.ndarray:
+        """One Rust-owned tick for the survivor phase.
+
+        Syncs rosters (identity-mapped), executes all game logic in Rust
+        (vitals, movement, looting, crafting, combat, flocking, noise),
+        harvests state back onto the Python view entities, and returns the
+        fresh observation matrix for the next neural-network pass.
+        """
+        self.sync_entities_to_rust(survivors, zombies)
+        self.full_sim_core.step_simulation(actions, movements)
+        self.sync_rust_to_entities(survivors, zombies)
+        return self.full_sim_core.get_observations_matrix()
+
+    def step_zombie_phase_tick(self, survivors: list[Any], zombies: list[Any]) -> None:
+        """Rust zombie-AI/flocking tick with idle survivor actions.
+
+        Called after the survivor phase: sync pushes the current active
+        zombie window (chunk freeze/rehydrate may have changed it), Rust
+        steps flocking/combat with no-op survivor input, then live state is
+        harvested back onto the Python view objects.
+        """
+        n_s: int = len(survivors)
+        self.sync_entities_to_rust(survivors, zombies)
+        self.full_sim_core.step_simulation([0] * n_s, [(0.0, 0.0)] * n_s)
+        self.sync_rust_to_entities(survivors, zombies)
+
     def sync_survivor_state(self, survivor: Any, current_tick: int = 0) -> None:
         """Synchronize Python survivor entity state into RustEngineCore."""
         if self.native_core and survivor:
@@ -45,8 +151,21 @@ class PythonRustEngineBridge:
                 int(current_tick)
             )
 
-    def sync_entities_to_rust(self, survivors: list[Any], zombies: list[Any]) -> None:
-        """Synchronizes Python survivors and zombies into RustFullSimulationCore using cached NumPy buffers."""
+    def sync_entities_to_rust(
+        self,
+        survivors: list[Any],
+        zombies: list[Any],
+        full_roster: bool = False,
+    ) -> None:
+        """Synchronizes Python survivors and zombies into RustFullSimulationCore.
+
+        Zombies are synced through a stable identity mapping: each row carries
+        `id(py_zombie)` as `entity_id`, so the Rust roster matches entities by
+        id instead of row position. This keeps chunk freeze/rehydrate and death
+        cleanup (which reorder or resize the Python active list) from ever
+        mapping wrong slots onto entities. Pass `full_roster=True` on world
+        reset/generation start to rebuild the Rust roster from scratch.
+        """
         if not self.full_sim_core:
             return
 
@@ -66,16 +185,18 @@ class PythonRustEngineBridge:
 
         if hasattr(self.full_sim_core, 'sync_zombies_batch') and zombies:
             n_z: int = len(zombies)
+            # Row layout: [entity_id, x, y, z_level, hp, speed] — 6 columns.
             if not hasattr(self, '_zomb_buf') or self._zomb_buf.shape[0] != n_z:
-                self._zomb_buf = np.empty((n_z, 5), dtype=np.float32)
+                self._zomb_buf = np.empty((n_z, 6), dtype=np.float32)
 
             for i, z in enumerate(zombies):
-                self._zomb_buf[i, 0] = float(z.x)
-                self._zomb_buf[i, 1] = float(z.y)
-                self._zomb_buf[i, 2] = float(z.z)
-                self._zomb_buf[i, 3] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
-                self._zomb_buf[i, 4] = float(getattr(z, 'speed', 0.08))
-            self.full_sim_core.sync_zombies_batch(self._zomb_buf)
+                self._zomb_buf[i, 0] = float(id(z))
+                self._zomb_buf[i, 1] = float(z.x)
+                self._zomb_buf[i, 2] = float(z.y)
+                self._zomb_buf[i, 3] = float(z.z)
+                self._zomb_buf[i, 4] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
+                self._zomb_buf[i, 5] = float(getattr(z, 'speed', 0.08))
+            self.full_sim_core.sync_zombies_batch(self._zomb_buf, full_roster)
 
     def step_full_simulation(self, actions: list[int], movements: list[tuple[float, float]]) -> np.ndarray:
         """Executes full simulation step in Rust and returns 2D observation tensor for PyTorch."""
@@ -132,15 +253,22 @@ class PythonRustEngineBridge:
                     s.is_alive = salive
 
         if hasattr(self.full_sim_core, 'get_zombies_batch') and zombies:
+            # Rust returns only the ACTIVE window; rows are keyed by entity_id.
+            # Match back to Python objects by id() so reordering on either side
+            # never misaligns state (stable mapping table, variant A).
             z_arr: np.ndarray = self.full_sim_core.get_zombies_batch()
-            for idx, z in enumerate(zombies):
-                if idx < z_arr.shape[0]:
-                    z.x, z.y, z.z = float(z_arr[idx, 0]), float(z_arr[idx, 1]), int(z_arr[idx, 2])
-                    zhp: float = float(z_arr[idx, 3])
-                    zalive: bool = bool(z_arr[idx, 4] > 0.5)
-                    z.hp = zhp
-                    z.health = zhp
-                    z.is_alive = zalive
+            by_id: dict[int, int] = {id(z): i for i, z in enumerate(zombies)}
+            for row in range(z_arr.shape[0]):
+                py_idx = by_id.get(int(z_arr[row, 0]))
+                if py_idx is None:
+                    continue
+                z = zombies[py_idx]
+                z.x, z.y, z.z = float(z_arr[row, 1]), float(z_arr[row, 2]), int(z_arr[row, 3])
+                zhp: float = float(z_arr[row, 4])
+                zalive: bool = bool(z_arr[row, 5] > 0.5)
+                z.hp = zhp
+                z.health = zhp
+                z.is_alive = zalive
 
     def step(self, dx: float = 0.0, dy: float = 0.0, action: int = 0) -> tuple[np.ndarray, bool]:
         """Executes one simulation tick step in Rust and extracts zero-copy observations."""

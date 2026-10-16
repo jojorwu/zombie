@@ -5,7 +5,6 @@ from typing import Any
 import numpy as np
 
 # Direct leaf-module imports (bypass the src.entities barrel to avoid cycles).
-from src.entities.sensory import NoiseEvent, ScentTrail
 from src.entities.state_manager import FurnitureStateManager, ItemStateManager
 from src.world.chunk import ChunkManager
 from src.world.generation import WorldGenerator

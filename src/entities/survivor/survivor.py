@@ -3,20 +3,12 @@ import threading
 
 from src.entities.anatomy import AnatomicalHealth, BodyPart
 from src.entities.crafting import CraftingSystem
+from src.entities.emotion import EmotionalState  # noqa: F401 (re-export for back-compat)
+from src.entities.events import NoiseEvent
 from src.entities.item import ResourceItem
-from src.entities.sensory import NoiseEvent
 from src.entities.survivor.looting import SurvivorLooting
 from src.entities.survivor.metabolism import MetabolicBalanceSimulator
 from src.systems.container import ContainerUtility
-
-
-class EmotionalState:
-    """Survivor emotional state machine levels (leaf definition)."""
-    CALM = "CALM"
-    CONFIDENT = "CONFIDENT"
-    PANICKED = "PANICKED"
-    TERRIFIED = "TERRIFIED"
-    ENRAGED = "ENRAGED"
 
 
 class Survivor:

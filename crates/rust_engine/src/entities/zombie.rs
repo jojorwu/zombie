@@ -12,6 +12,11 @@ pub enum ZombieBehaviorMode {
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct RustZombieEngine {
+    /// Stable entity id assigned by the Python owner (e.g. `id(py_zombie)`).
+    /// Used by the bridge to keep the Rust zombie roster index-aligned with
+    /// the Python active list across chunk freeze/rehydrate/death cleanup.
+    #[pyo3(get, set)]
+    pub entity_id: i64,
     #[pyo3(get, set)]
     pub x: f32,
     #[pyo3(get, set)]
@@ -35,8 +40,10 @@ pub struct RustZombieEngine {
 #[pymethods]
 impl RustZombieEngine {
     #[new]
-    pub fn new(x: f32, y: f32, z: i32, hp: f32, speed: f32) -> Self {
+    #[pyo3(signature = (x, y, z, hp, speed, entity_id = 0))]
+    pub fn new(x: f32, y: f32, z: i32, hp: f32, speed: f32, entity_id: i64) -> Self {
         RustZombieEngine {
+            entity_id,
             x,
             y,
             z,

@@ -13,7 +13,7 @@ from src.entities.animal import Animal, Rat
 from src.entities.crafting import CraftingSystem
 from src.entities.factory import EntityFactory, ObjectPool
 from src.entities.item import ARMOR_STATS, WEAPON_STATS, ItemEntity, ResourceItem
-from src.entities.sensory import NoiseEvent, ScentTrail
+from src.entities.events import NoiseEvent, ScentTrail
 from src.entities.state_manager import (
     ExtendedItemState,
     FurnitureCondition,

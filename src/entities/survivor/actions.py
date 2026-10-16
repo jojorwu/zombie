@@ -4,37 +4,42 @@ import math
 import random
 from typing import TYPE_CHECKING, Any
 
+from src.entities.emotion import EmotionalState
+from src.entities.events import NoiseEvent
 from src.entities.item import WEAPON_STATS, ResourceItem
-# Local (deferred) imports of src.systems.*: importing them at module level
-# creates a cycle (src.entities.__init__ -> ... -> src.systems.X -> src.systems.__init__
-# -> src.systems.Y -> src.entities.<leaf> -> partially initialized src.entities).
-# All uses below are inside methods, so lazy loading is safe and faster.
+from src.systems.sound import SoundUtility
 from src.world.lighting import DynamicLight
 
-if TYPE_CHECKING:
-    from src.entities.sensory import NoiseEvent
-    from src.entities.survivor.survivor import EmotionalState
+# Rust-first backend selection: prefer native rust_engine utilities, fall back
+# to the pure-Python leaves. Imported from concrete leaf modules only (never
+# via src.simulation / barrels) so this file stays free of circular imports.
+try:
+    from rust_engine import RustAcousticSystem as _Acoustics
+    RUST_BACKEND_AVAILABLE = True
+except ImportError:
+    from src.systems.ballistics import BallisticsUtility as _Acoustics  # placeholder, unused for dB lookup
+    RUST_BACKEND_AVAILABLE = False
+
+if RUST_BACKEND_AVAILABLE:
+    from rust_engine import RustBallisticsUtility as _BallisticsBackend
+else:
+    from src.systems.ballistics import BallisticsUtility as _BallisticsBackend
+
+try:
+    from rust_engine import RustTileInteractionUtility as _TileBackend
+except ImportError:
+    from src.systems.tile_interaction import TileInteractionUtility as _TileBackend
 
 
-def _tile_interaction():
-    from src.systems.tile_interaction import TileInteractionUtility
-    return TileInteractionUtility
-
-
-def _emotional_state():
-    # Leaf class living in survivor.py; imported lazily to avoid the
-    # actions <-> survivor circular dependency.
-    from src.entities.survivor.survivor import EmotionalState
-    return EmotionalState
-
-
-def _ballistics():
-    try:
-        from rust_engine import RustBallisticsUtility
-        return RustBallisticsUtility
-    except ImportError:
-        from src.systems.ballistics import BallisticsUtility
-        return BallisticsUtility
+def _create_noise_event(x, y, z, source_type="general", volume=None):
+    """Create a NoiseEvent with dB-SPL profile scaling (Rust-first, Python fallback)."""
+    if volume is None:
+        if RUST_BACKEND_AVAILABLE:
+            db_spl = _Acoustics.get_source_db_spl(source_type)
+        else:
+            db_spl = SoundUtility.SOUND_PROFILES.get(source_type, {}).get("db_spl", 50.0)
+        volume = db_spl / 5.0
+    return NoiseEvent(x, y, z, volume=volume, source_type=source_type)
 
 
 class SurvivorActions:
@@ -48,7 +53,6 @@ class SurvivorActions:
         survivors: list[Any],
         noise_events: list[NoiseEvent] | None
     ) -> None:
-        from src.simulation.utility_facade import EngineUtilityFacade
         best_weapon = None
         is_firearm = False
         ammo_type = None
@@ -114,7 +118,7 @@ class SurvivorActions:
 
             all_targets = [z for z in zombies if z.is_alive] + [a for a in animals if a.is_alive] + [s for s in survivors if s is not survivor and s.is_alive]
 
-            BallisticsUtility = _ballistics()
+            BallisticsUtility = _BallisticsBackend
             if hasattr(BallisticsUtility, 'simulate_bullet_flight'):
                 sim_res = BallisticsUtility.simulate_bullet_flight(
                     world,
@@ -139,12 +143,12 @@ class SurvivorActions:
                         survivor.morale = min(100.0, survivor.morale + 10.0)
 
             if noise_events is not None:
-                noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type=stype, volume=35.0))
+                noise_events.append(_create_noise_event(survivor.x, survivor.y, survivor.z, source_type=stype, volume=35.0))
             return
 
-        if survivor.emotional_state == _emotional_state().PANICKED and random.random() < 0.25:
+        if survivor.emotional_state == EmotionalState.PANICKED and random.random() < 0.25:
             damage *= 0.5
-        elif survivor.emotional_state == _emotional_state().TERRIFIED and random.random() < 0.50:
+        elif survivor.emotional_state == EmotionalState.TERRIFIED and random.random() < 0.50:
             damage = 0.0
 
         if survivor.in_vehicle and survivor.in_vehicle.fuel > 0:
@@ -162,7 +166,7 @@ class SurvivorActions:
                     survivor.panic = max(0.0, survivor.panic - 20.0)
                     survivor.morale = min(100.0, survivor.morale + 10.0)
                 if noise_events is not None:
-                    noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type="sledgehammer", volume=12.0))
+                    noise_events.append(_create_noise_event(survivor.x, survivor.y, survivor.z, source_type="sledgehammer", volume=12.0))
                 return
 
         for a in animals:
@@ -173,7 +177,7 @@ class SurvivorActions:
                     survivor.inventory[ResourceItem.MEAT] = survivor.inventory.get(ResourceItem.MEAT, 0) + 2
                     survivor.score += 15.0
                 if noise_events is not None:
-                    noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type="sledgehammer", volume=12.0))
+                    noise_events.append(_create_noise_event(survivor.x, survivor.y, survivor.z, source_type="sledgehammer", volume=12.0))
                 return
 
         for other in survivors:
@@ -183,7 +187,7 @@ class SurvivorActions:
                     survivor.kills += 1
                     survivor.score += 30.0
                 if noise_events is not None:
-                    noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type="sledgehammer", volume=12.0))
+                    noise_events.append(_create_noise_event(survivor.x, survivor.y, survivor.z, source_type="sledgehammer", volume=12.0))
                 return
 
     @staticmethod
@@ -192,14 +196,13 @@ class SurvivorActions:
         world: Any,
         noise_events: list[NoiseEvent] | None
     ) -> None:
-        from src.simulation.utility_facade import EngineUtilityFacade
-        TileInteractionUtility = _tile_interaction()
+        
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
             if hasattr(TileInteractionUtility, 'push_furniture') and TileInteractionUtility.push_furniture(world, fx, fy, survivor.z, dx, dy):
                 survivor.score += 8.0
                 if noise_events is not None:
-                    noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type="furniture_push", volume=14.0))
+                    noise_events.append(_create_noise_event(survivor.x, survivor.y, survivor.z, source_type="furniture_push", volume=14.0))
                 break
 
     @staticmethod
@@ -208,8 +211,7 @@ class SurvivorActions:
         world: Any,
         noise_events: list[NoiseEvent] | None
     ) -> None:
-        from src.simulation.utility_facade import EngineUtilityFacade
-        TileInteractionUtility = _tile_interaction()
+        
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
             if hasattr(TileInteractionUtility, 'dismantle_furniture'):
@@ -217,5 +219,5 @@ class SurvivorActions:
                 if success:
                     survivor.score += 12.0
                     if noise_events is not None:
-                        noise_events.append(EngineUtilityFacade.create_noise_event(survivor.x, survivor.y, survivor.z, source_type="dismantling", volume=15.0))
+                        noise_events.append(_create_noise_event(survivor.x, survivor.y, survivor.z, source_type="dismantling", volume=15.0))
                     break

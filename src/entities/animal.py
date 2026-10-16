@@ -1,7 +1,7 @@
 import math
 import random
 
-from src.entities.sensory import NoiseEvent
+from src.entities.events import NoiseEvent
 from src.world.tiles import TileType
 
 

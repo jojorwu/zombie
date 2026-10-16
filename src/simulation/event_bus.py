@@ -1,7 +1,7 @@
 import threading
-from typing import Callable, Dict, List, Type
-from dataclasses import dataclass, field
 import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
 
 
 @dataclass(slots=True)
@@ -43,10 +43,10 @@ class EventBus:
     """Thread-safe, high-throughput event bus for decoupled Event-Driven Engine Architecture."""
     def __init__(self):
         self._lock = threading.Lock()
-        self._subscribers: Dict[Type[GameEvent], List[Callable]] = {}
-        self._queue: List[GameEvent] = []
+        self._subscribers: dict[type[GameEvent], list[Callable]] = {}
+        self._queue: list[GameEvent] = []
 
-    def subscribe(self, event_type: Type[GameEvent], handler: Callable[[GameEvent], None]):
+    def subscribe(self, event_type: type[GameEvent], handler: Callable[[GameEvent], None]):
         """Registers an event handler callback for a specific GameEvent type."""
         with self._lock:
             if event_type not in self._subscribers:

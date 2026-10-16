@@ -1,10 +1,10 @@
 import math
 import random
-from src.world.tiles import TileType
-from src.entities.sensory import NoiseEvent
+
 from src.ai.pathfinding import AStar3D
-from src.entities import AnatomicalHealth, BodyPart
-from src.ai.inference import check_line_of_sight
+from src.entities import AnatomicalHealth
+from src.entities.sensory import NoiseEvent
+from src.world.tiles import TileType
 
 try:
     from rust_engine import RustZombieEngine
@@ -88,6 +88,7 @@ class Zombie:
     def has_line_of_sight(self, tx, ty, tz, world):
         if self.z != tz:
             return False
+        from src.ai.inference import check_line_of_sight
         return check_line_of_sight(world, self.x, self.y, tx, ty, int(self.z))
 
     def check_vision(self, world, survivors):

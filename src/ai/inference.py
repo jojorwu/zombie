@@ -1,14 +1,16 @@
 import math
-from typing import List, Tuple, Dict, Any, Optional, Union
-import torch
+from typing import Any
+
 import numpy as np
+import torch
+
 from src.ai.network import DEVICE
 from src.world.tile_interaction_utility import TileInteractionUtility
 
 MOVABLE_FURNITURE_TILES = TileInteractionUtility.MOVABLE_FURNITURE_TILES
 
 try:
-    from rust_engine import check_line_of_sight_rust, RustBrainInference
+    from rust_engine import RustBrainInference, check_line_of_sight_rust
     RUST_LOS_AVAILABLE = True
     RUST_BRAIN_AVAILABLE = True
 except ImportError:
@@ -19,7 +21,7 @@ CUDA_STREAM = torch.cuda.Stream() if torch.cuda.is_available() else None
 _WEIGHT_CACHE = {}
 
 
-def get_cached_stacked_weights(brains: List[Any]) -> Tuple[torch.Tensor, ...]:
+def get_cached_stacked_weights(brains: list[Any]) -> tuple[torch.Tensor, ...]:
     """
     Caches stacked weight tensors for population brains to eliminate
     per-tick torch.stack GPU allocation overhead.
@@ -55,10 +57,10 @@ def clear_weight_cache() -> None:
 
 
 def batch_get_action_and_movement(
-    brains: List[Any],
-    inputs_list: List[np.ndarray],
-    prev_hiddens: List[Optional[torch.Tensor]]
-) -> List[Tuple[float, float, int, torch.Tensor, int]]:
+    brains: list[Any],
+    inputs_list: list[np.ndarray],
+    prev_hiddens: list[torch.Tensor | None]
+) -> list[tuple[float, float, int, torch.Tensor, int]]:
     """
     High-performance batched PyTorch inference over active survivors.
     Executes batched tensor matrix multiplication (BMM) with weight caching,
@@ -173,10 +175,10 @@ def check_line_of_sight(world: Any, x0: float, y0: float, x1: float, y1: float, 
 def extract_survivor_inputs(
     survivor: Any,
     world: Any,
-    items: List[Any],
-    vehicles: List[Any],
-    zombies: List[Any],
-    animals: List[Any]
+    items: list[Any],
+    vehicles: list[Any],
+    zombies: list[Any],
+    animals: list[Any]
 ) -> np.ndarray:
     """Extracts 57 numerical input features with fast bounding box perception masking and spatial memory."""
     inputs = np.zeros(57, dtype=np.float32)
@@ -280,9 +282,10 @@ def extract_survivor_inputs(
     building = world.building_grid.get((sx_i, sy_i))
     inputs[30] = 1.0 if building is not None else 0.0
 
-    # Exploration coverage indicator
+    # Exploration coverage & Memory depth indicator
     visited_count = len(getattr(survivor, 'visited_tiles', set()))
-    inputs[31] = min(1.0, visited_count / 500.0)
+    lt_memory_count = len(getattr(survivor, 'long_term_memory', {}))
+    inputs[31] = min(1.0, (visited_count + lt_memory_count * 5.0) / 500.0)
 
     # 25 Local Spatial Grid Vision Inputs (5x5 matrix around survivor)
     idx_grid = 32

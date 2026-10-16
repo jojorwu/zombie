@@ -1,11 +1,13 @@
 import math
+
 import pygame
+
 from src.ui.themes import THEME_COLORS
 
 
 class HUDRenderer:
     """Renders sidebar HUD, survivor stats, system performance, time/weather indicators, and hotkeys."""
-    __slots__ = ("screen", "font", "bold_font", "sidebar_x", "height")
+    __slots__ = ("bold_font", "font", "height", "screen", "sidebar_x")
 
     def __init__(self, screen: pygame.Surface, font: pygame.font.Font, bold_font: pygame.font.Font, sidebar_x: int, height: int):
         self.screen = screen
@@ -71,7 +73,7 @@ class HUDRenderer:
         sel_survivor = sim.survivors[sim.selected_survivor_idx]
         s = sel_survivor
         if s.is_alive:
-            floor_name = f"Basement B{abs(view_z)}" if view_z < 0 else (f"Ground Floor" if view_z == 0 else f"Floor {view_z + 1}")
+            floor_name = f"Basement B{abs(view_z)}" if view_z < 0 else ("Ground Floor" if view_z == 0 else f"Floor {view_z + 1}")
             draw_text(f"View Floor: {floor_name} (Z={view_z})")
             draw_stat_bar("Health", s.health, 100.0, (220, 50, 50))
             draw_stat_bar("Hunger", s.hunger, 100.0, (220, 160, 40))

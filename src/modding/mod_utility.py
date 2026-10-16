@@ -5,10 +5,12 @@ Supports Lua modding, mod validation, template creation, and Lua math execution.
 Usage: python -m src.modding.mod_utility [command]
 """
 
-import sys
 import os
+import sys
 import zipfile
+
 from src.modding import LuaModManager
+
 
 class ModUtility:
     def __init__(self, mods_dir="mods"):

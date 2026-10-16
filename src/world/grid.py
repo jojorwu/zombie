@@ -1,14 +1,15 @@
-import math
 import random
-from typing import Dict, List, Tuple, Any, Optional, Set, Union
-import numpy as np
 from concurrent.futures import ThreadPoolExecutor
-from src.world.tiles import TileType, BuildingType, TILE_COLORS, BUILDING_COLORS, TILE_WALKABLE, TILE_SPEED_MODIFIERS
-from src.world.chunk import ChunkManager
-from src.world.weather import WeatherManager
-from src.world.lighting import DynamicLight, LightingEngine
-from src.world.generation import WorldGenerator
+from typing import Any
+
+import numpy as np
+
 from src.entities.state_manager import FurnitureStateManager, ItemStateManager
+from src.world.chunk import ChunkManager
+from src.world.generation import WorldGenerator
+from src.world.lighting import DynamicLight, LightingEngine
+from src.world.tiles import TILE_SPEED_MODIFIERS, TILE_WALKABLE, TileType
+from src.world.weather import WeatherManager
 
 WORLD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
@@ -223,7 +224,7 @@ class World:
             self._grid_dirty = False
         return self._cached_3d_grid
 
-    def z_to_idx(self, z: Union[int, float]) -> int:
+    def z_to_idx(self, z: float) -> int:
         """Converts vertical Z world coordinate to internal zero-indexed level array index."""
         return max(0, min(self.num_levels - 1, int(z) - self.z_min))
 
@@ -267,7 +268,7 @@ class World:
             ly = rf["y"] + random.uniform(0, 100)
             self.dynamic_lights.append(DynamicLight(lx, ly, z=0, radius=25.0, color=(200, 220, 255), intensity=2.0, lifetime=2))
 
-    def get_time_components(self) -> Tuple[int, int, int, int, int]:
+    def get_time_components(self) -> tuple[int, int, int, int, int]:
         total_mins = self.current_tick / 2.5
         minute = int(total_mins % 60)
         total_hours = total_mins / 60.0
@@ -306,7 +307,7 @@ class World:
         y: float,
         radius: int = 8,
         z: int = 0,
-        facing_angle: Optional[float] = None,
+        facing_angle: float | None = None,
         fov_degrees: float = 180.0
-    ) -> Set[Tuple[int, int]]:
+    ) -> set[tuple[int, int]]:
         return self.lighting_engine.compute_fog_of_war(x, y, radius, z, facing_angle=facing_angle, fov_degrees=fov_degrees)

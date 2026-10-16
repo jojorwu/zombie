@@ -1,21 +1,22 @@
 import random
+
 import numpy as np
-from typing import List, Tuple
-from src.world import TileType, BuildingType, TILE_WALKABLE
-from src.entities import Vehicle, ResourceItem
+
+from src.entities import ResourceItem
+from src.world import TILE_WALKABLE, BuildingType, TileType
 
 _WALKABLE_TILE_LIST = [t for t, w in TILE_WALKABLE.items() if w]
 
 
 class EntitySpawner:
     """Handles scanning walkable world coordinates and contextual spawner routines for entities and loot."""
-    __slots__ = ("world", "factory")
+    __slots__ = ("factory", "world")
 
     def __init__(self, world, factory):
         self.world = world
         self.factory = factory
 
-    def scan_walkable_coordinates(self) -> Tuple[List[Tuple[int, int, int]], List[Tuple[int, int, int]], List[Tuple[int, int, int]]]:
+    def scan_walkable_coordinates(self) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]], list[tuple[int, int, int]]]:
         """Scans grid for walkable coordinates, parking spots, and trash cans using fast NumPy lookups."""
         walkable_coords, parking_coords, trash_coords = [], [], []
 
@@ -49,6 +50,36 @@ class EntitySpawner:
         random.shuffle(parking_coords)
         random.shuffle(trash_coords)
         return walkable_coords, parking_coords, trash_coords
+
+    def generate_zombie_heatmap_coords(self, walkable_coords: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
+        """
+        Generates population density heatmap weights for smart zombie spawning:
+        - Urban areas (buildings, roads, sidewalks, parking lots) have high spawn density weights.
+        - Wilderness, rivers, and deep forests have low spawn weights.
+        """
+        if not walkable_coords:
+            return []
+
+        weights = []
+        for x, y, z in walkable_coords:
+            weight = 1.0
+            if z == 0 and 0 <= y < self.world.height and 0 <= x < self.world.width:
+                tile = self.world.ground_grid[y, x]
+                if tile in (TileType.BUILDING_FLOOR, TileType.ROAD, TileType.SIDEWALK, TileType.CROSSWALK, TileType.PARKING):
+                    weight = 8.0
+                elif tile in (TileType.FOREST, TileType.FOREST_DENSE, TileType.GRASS):
+                    weight = 0.5
+            elif z != 0:
+                weight = 10.0  # High spawn density inside multi-floor building interiors
+            weights.append(weight)
+
+        total_w = sum(weights)
+        if total_w <= 0.0:
+            return list(walkable_coords)
+
+        probs = [w / total_w for w in weights]
+        selected_indices = np.random.choice(len(walkable_coords), size=len(walkable_coords), replace=False, p=probs)
+        return [walkable_coords[idx] for idx in selected_indices]
 
     def spawn_street_corpses_and_loot(self, items_list: list, walkable_coords: list = None, num_corpses: int = 15) -> None:
         """Spawns lootable dead human corpses on streets and sidewalks containing random gear and ammo."""

@@ -1,8 +1,7 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.distributions import Categorical
 import numpy as np
+import torch
+from torch import nn, optim
+from torch.distributions import Categorical
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -10,7 +9,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class PPOActorCritic(nn.Module):
     """Actor-Critic Neural Network architecture for PPO policy training."""
     def __init__(self, input_dim: int = 57, hidden_dim: int = 64, action_dim: int = 13):
-        super(PPOActorCritic, self).__init__()
+        super().__init__()
         self.actor = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),

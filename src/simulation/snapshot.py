@@ -1,7 +1,6 @@
-import threading
 import copy
+import threading
 from dataclasses import dataclass, field
-from typing import List, Tuple, Dict
 
 
 @dataclass
@@ -22,10 +21,10 @@ class WorldStateSnapshot:
     """Decoupled double-buffered world state snapshot."""
     tick: int = 0
     timestamp: float = 0.0
-    survivors: List[EntityStateSnapshot] = field(default_factory=list)
-    zombies: List[EntityStateSnapshot] = field(default_factory=list)
-    vehicles: List[EntityStateSnapshot] = field(default_factory=list)
-    items: List[EntityStateSnapshot] = field(default_factory=list)
+    survivors: list[EntityStateSnapshot] = field(default_factory=list)
+    zombies: list[EntityStateSnapshot] = field(default_factory=list)
+    vehicles: list[EntityStateSnapshot] = field(default_factory=list)
+    items: list[EntityStateSnapshot] = field(default_factory=list)
 
 
 class DoubleBufferedStateExchanger:

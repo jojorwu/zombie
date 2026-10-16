@@ -1,5 +1,7 @@
 import math
+
 import numpy as np
+
 from src.world.tiles import TileType
 
 try:
@@ -46,7 +48,7 @@ _OPAQUE_FOW_TILES = frozenset({
 
 class DynamicLight:
     """Represents a localized dynamic point/cone light source (muzzle flash, flashlight, headlight, lightning)."""
-    __slots__ = ("x", "y", "z", "radius", "color", "intensity", "lifetime")
+    __slots__ = ("color", "intensity", "lifetime", "radius", "x", "y", "z")
 
     def __init__(self, x: float, y: float, z: int, radius: float = 8.0, color=(255, 255, 200), intensity: float = 1.0, lifetime: int = 1):
         self.x = float(x)

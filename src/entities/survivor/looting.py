@@ -1,9 +1,10 @@
-import random
 import math
-from src.entities.item import ResourceItem
-from src.world.tiles import TileType
-from src.entities.sensory import NoiseEvent
+import random
+
 from src.entities.container_utility import ContainerUtility
+from src.entities.item import ResourceItem
+from src.entities.sensory import NoiseEvent
+from src.world.tiles import TileType
 
 try:
     from rust_engine import RustPNPComplexityEngine as PolynomialKnapsackSolver

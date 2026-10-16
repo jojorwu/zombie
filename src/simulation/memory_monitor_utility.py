@@ -1,7 +1,10 @@
-import time
 import os
+import time
+from collections import deque
+
 import psutil
 import torch
+
 
 class MemoryMonitorUtility:
     """
@@ -11,17 +14,20 @@ class MemoryMonitorUtility:
     - Entity Object Pool statistics
     - Simulation Tick Latencies (ms) and Frames Per Second (FPS)
     """
+    __slots__ = ("fps", "frame_count", "last_time", "process", "tick_times")
+
     def __init__(self):
         self.process = psutil.Process(os.getpid())
         self.last_time = time.time()
         self.frame_count = 0
         self.fps = 0.0
-        self.tick_times = []
+        self.tick_times = deque(maxlen=100)
 
     def record_tick_time(self, elapsed_sec):
         self.tick_times.append(elapsed_sec)
-        if len(self.tick_times) > 100:
-            self.tick_times.pop(0)
+        # Automatic VRAM / RAM garbage collection when thresholds are exceeded
+        if torch.cuda.is_available() and torch.cuda.memory_allocated() > 500 * 1024 * 1024:
+            torch.cuda.empty_cache()
 
     def update_fps(self):
         self.frame_count += 1

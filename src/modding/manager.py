@@ -1,14 +1,14 @@
-import os
 import glob
-import sys
+import os
 
 try:
-    from rust_engine import RustContainerUtility as ContainerUtility, RustBallisticsUtility as BallisticsUtility, RustLuaModManager
+    from rust_engine import RustBallisticsUtility as BallisticsUtility
+    from rust_engine import RustContainerUtility as ContainerUtility
+    from rust_engine import RustLuaModManager
     HAS_RUST_LUA = True
 except ImportError:
     HAS_RUST_LUA = False
     from src.entities.container_utility import ContainerUtility
-    from src.entities.ballistics_utility import BallisticsUtility
 
 try:
     import lupa
@@ -86,8 +86,11 @@ class LuaModManager:
                 print(f"[LuaModManager] Failed to load mod {mod_name}: {e}")
 
     def trigger_event(self, event_name, *args):
-        if self.rust_lua and args and isinstance(args[0], int):
-            self.rust_lua.trigger_event(event_name, args[0])
+        if self.rust_lua and args:
+            try:
+                self.rust_lua.trigger_event(event_name, int(args[0]))
+            except Exception as e:
+                print(f"[LuaModManager] Rust Lua error executing '{event_name}': {e}")
 
         if not HAS_LUPA or isinstance(self.lua, FallbackLuaRuntime):
             return None
@@ -96,5 +99,5 @@ class LuaModManager:
             if fn is not None:
                 return fn(*args)
         except Exception as e:
-            pass
+            print(f"[LuaModManager] Error executing event '{event_name}': {e}")
         return None

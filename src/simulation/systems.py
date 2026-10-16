@@ -1,5 +1,5 @@
-from typing import List
-from src.simulation.event_bus import EventBus, NoiseEmittedEvent, InfectionProgressEvent, DamageDealtEvent
+
+from src.simulation.event_bus import EventBus, InfectionProgressEvent, NoiseEmittedEvent
 
 try:
     from rust_engine import RustAcousticSystem, RustParticleSystem
@@ -14,7 +14,7 @@ class AcousticSystem:
     """ECS Acoustic System processing published noise propagation events."""
     def __init__(self, event_bus: EventBus):
         self.event_bus = event_bus
-        self.active_noises: List[dict] = []
+        self.active_noises: list[dict] = []
         self.rust_acoustics = RustAcousticSystem() if RUST_ACOUSTIC_AVAILABLE else None
         self.event_bus.subscribe(NoiseEmittedEvent, self.handle_noise)
 
@@ -50,7 +50,7 @@ class ParticleSystem:
     """ECS Particle System handling environmental window shatter and dust particles."""
     def __init__(self, event_bus: EventBus):
         self.event_bus = event_bus
-        self.particles: List[dict] = []
+        self.particles: list[dict] = []
         self.rust_particles = RustParticleSystem() if RUST_PARTICLES_AVAILABLE else None
 
     def spawn_shatter_particles(self, x: float, y: float, z: int):

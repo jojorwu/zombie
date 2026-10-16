@@ -39,6 +39,9 @@ class WeatherManager:
         self.next_rain_tick = 3600 * 3
         self.season = Season.SPRING
         self.temperature = 15.0
+        # Dynamic rain intensity (0.0 to 1.0) and target wind speed for progressive ramp-up
+        self.rain_intensity = 0.0
+        self.target_wind_speed = 20.0
         self.rust_env = RustEnvironmentManager() if RUST_ENV_AVAILABLE else None
 
     def update_season(self, current_tick):
@@ -87,8 +90,28 @@ class WeatherManager:
             self.rain_front["x"] = max(0.0, min(self.world_width - 100, self.rain_front["x"] + self.rain_front["vx"]))
             self.rain_front["y"] = max(0.0, min(self.world_height - 100, self.rain_front["y"] + self.rain_front["vy"]))
             self.rain_front["lifetime"] -= 1
+
+            # Gradual rain intensity ramp-up at start and ramp-down near end of storm
+            total_life = self.rain_front.get("max_lifetime", 1200)
+            elapsed = total_life - self.rain_front["lifetime"]
+            if elapsed < 200:
+                self.rain_intensity = min(1.0, elapsed / 200.0)
+            elif self.rain_front["lifetime"] < 200:
+                self.rain_intensity = max(0.0, self.rain_front["lifetime"] / 200.0)
+            else:
+                self.rain_intensity = 1.0
+
+            # Smooth wind speed transition towards storm peak velocity
+            self.target_wind_speed = 60.0 + self.rain_intensity * 30.0
+            self.wind_speed += (self.target_wind_speed - self.wind_speed) * 0.02
+
             if self.rain_front["lifetime"] <= 0:
                 self.rain_front = None
+                self.rain_intensity = 0.0
+        else:
+            self.rain_intensity = max(0.0, self.rain_intensity - 0.01)
+            base_wind = 40.0 if self.season == Season.AUTUMN else 20.0
+            self.wind_speed += (base_wind - self.wind_speed) * 0.02
 
     def is_in_rain(self, x, y):
         if not self.rain_front:

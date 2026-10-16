@@ -1,8 +1,10 @@
 import collections
-from src.entities.zombie.zombie import Zombie, ZombieState
+
+from src.entities.animal import Animal
 from src.entities.item import ItemEntity
 from src.entities.sensory import NoiseEvent, ScentTrail
-from src.entities.animal import Animal
+from src.entities.zombie.zombie import Zombie, ZombieState
+
 
 class ObjectPool:
     """
@@ -31,6 +33,20 @@ class ObjectPool:
             self.pooled_ids.add(obj_id)
 
 
+class DynamicEntityRegistry:
+    """Extensible Entity Specs Registry enabling dynamic registration of new items, animals, and vehicles."""
+    _registered_animals: dict[str, type] = {}
+    _registered_items: dict[str, dict] = {}
+
+    @classmethod
+    def register_animal_type(cls, name: str, animal_class: type) -> None:
+        cls._registered_animals[name.lower()] = animal_class
+
+    @classmethod
+    def register_item_type(cls, name: str, weight_kg: float, category: str = "general") -> None:
+        cls._registered_items[name] = {"weight_kg": weight_kg, "category": category}
+
+
 class EntityFactory:
     """
     Factory with object pooling for efficient entity allocation/deallocation,
@@ -38,6 +54,7 @@ class EntityFactory:
     """
     def __init__(self, config=None):
         self.config = config
+        self.registry = DynamicEntityRegistry()
         self._zombie_pool = ObjectPool(lambda x=0, y=0, hp=50.0, z=0: Zombie(x, y, hp, z, config=self.config))
         self._scent_pool = ObjectPool(lambda x=0, y=0, z=0, intensity=100.0: ScentTrail(x, y, z, intensity))
         self._noise_pool = ObjectPool(lambda x=0, y=0, z=0, volume=10.0, lifetime=5, source_type="general": NoiseEvent(x, y, z, volume, lifetime, source_type))

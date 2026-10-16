@@ -1,5 +1,6 @@
 from enum import Enum, auto
-from typing import Dict, Tuple, Optional, Any, List
+from typing import Any
+
 from src.entities.container_utility import ContainerUtility
 
 
@@ -12,25 +13,35 @@ class FurnitureCondition(Enum):
 
 class FurnitureState:
     __slots__ = (
-        'x', 'y', 'z', 'tile_type', 'building_id', 'building_type',
-        'durability', 'max_durability', 'condition', 'is_searched',
-        'is_locked', 'is_pushed', 'contents'
+        'building_id',
+        'building_type',
+        'condition',
+        'contents',
+        'durability',
+        'is_locked',
+        'is_pushed',
+        'is_searched',
+        'max_durability',
+        'tile_type',
+        'x',
+        'y',
+        'z'
     )
 
-    def __init__(self, x: int, y: int, z: int, tile_type: int, building_id: Optional[str] = None, building_type: Optional[str] = None, durability: float = 100.0) -> None:
+    def __init__(self, x: int, y: int, z: int, tile_type: int, building_id: str | None = None, building_type: str | None = None, durability: float = 100.0) -> None:
         self.x: int = int(x)
         self.y: int = int(y)
         self.z: int = int(z)
         self.tile_type: int = tile_type
-        self.building_id: Optional[str] = building_id
-        self.building_type: Optional[str] = building_type
+        self.building_id: str | None = building_id
+        self.building_type: str | None = building_type
         self.durability: float = durability
         self.max_durability: float = durability
         self.condition: FurnitureCondition = FurnitureCondition.INTACT
         self.is_searched: bool = False
         self.is_locked: bool = False
         self.is_pushed: bool = False
-        self.contents: Dict[str, int] = {}
+        self.contents: dict[str, int] = {}
 
     @property
     def capacity(self) -> float:
@@ -46,7 +57,7 @@ class FurnitureState:
         """Checks if adding amount units of item_type exceeds container capacity."""
         return ContainerUtility.can_fit_item(self, item_type, amount)
 
-    def add_item(self, item_type: str, amount: int = 1) -> Tuple[bool, int]:
+    def add_item(self, item_type: str, amount: int = 1) -> tuple[bool, int]:
         """Adds item to container using ContainerUtility capacity rules."""
         return ContainerUtility.add_item_to_container(self, item_type, amount)
 
@@ -67,7 +78,7 @@ class FurnitureState:
     def mark_searched(self) -> None:
         self.is_searched = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "pos": (self.x, self.y, self.z),
             "tile_type": self.tile_type,
@@ -87,21 +98,21 @@ class FurnitureState:
 
 class FurnitureStateManager:
     def __init__(self) -> None:
-        self.states: Dict[Tuple[int, int, int], FurnitureState] = {}
+        self.states: dict[tuple[int, int, int], FurnitureState] = {}
 
-    def register_furniture(self, x: int, y: int, z: int, tile_type: int, building_id: Optional[str] = None, building_type: Optional[str] = None, durability: float = 100.0) -> FurnitureState:
+    def register_furniture(self, x: int, y: int, z: int, tile_type: int, building_id: str | None = None, building_type: str | None = None, durability: float = 100.0) -> FurnitureState:
         pos = (int(x), int(y), int(z))
         state = FurnitureState(x, y, z, tile_type, building_id, building_type, durability)
         self.states[pos] = state
         return state
 
-    def get_state(self, x: int, y: int, z: int) -> Optional[FurnitureState]:
+    def get_state(self, x: int, y: int, z: int) -> FurnitureState | None:
         return self.states.get((int(x), int(y), int(z)))
 
-    def remove_state(self, x: int, y: int, z: int) -> Optional[FurnitureState]:
+    def remove_state(self, x: int, y: int, z: int) -> FurnitureState | None:
         return self.states.pop((int(x), int(y), int(z)), None)
 
-    def move_state(self, old_x: int, old_y: int, new_x: int, new_y: int, z: int) -> Optional[FurnitureState]:
+    def move_state(self, old_x: int, old_y: int, new_x: int, new_y: int, z: int) -> FurnitureState | None:
         old_pos = (int(old_x), int(old_y), int(z))
         new_pos = (int(new_x), int(new_y), int(z))
         state = self.states.pop(old_pos, None)
@@ -112,7 +123,7 @@ class FurnitureStateManager:
             self.states[new_pos] = state
         return state
 
-    def get_furniture_by_building(self, building_id: str) -> List[FurnitureState]:
+    def get_furniture_by_building(self, building_id: str) -> list[FurnitureState]:
         return [f for f in self.states.values() if f.building_id == building_id]
 
     def purge_destroyed_and_stale(self) -> int:
@@ -134,12 +145,12 @@ class ItemCondition(Enum):
 
 
 class ExtendedItemState:
-    __slots__ = ('item_entity', 'building_id', 'building_type', 'durability', 'freshness', 'condition')
+    __slots__ = ('building_id', 'building_type', 'condition', 'durability', 'freshness', 'item_entity')
 
-    def __init__(self, item_entity: Any, building_id: Optional[str] = None, building_type: Optional[str] = None) -> None:
+    def __init__(self, item_entity: Any, building_id: str | None = None, building_type: str | None = None) -> None:
         self.item_entity: Any = item_entity
-        self.building_id: Optional[str] = building_id
-        self.building_type: Optional[str] = building_type
+        self.building_id: str | None = building_id
+        self.building_type: str | None = building_type
         self.durability: float = 100.0
         self.freshness: float = 100.0
         self.condition: ItemCondition = ItemCondition.PRISTINE
@@ -152,20 +163,20 @@ class ExtendedItemState:
 
 class ItemStateManager:
     def __init__(self) -> None:
-        self.states: Dict[Any, ExtendedItemState] = {}
+        self.states: dict[Any, ExtendedItemState] = {}
 
-    def register_item(self, item_entity: Any, building_id: Optional[str] = None, building_type: Optional[str] = None) -> ExtendedItemState:
+    def register_item(self, item_entity: Any, building_id: str | None = None, building_type: str | None = None) -> ExtendedItemState:
         state = ExtendedItemState(item_entity, building_id, building_type)
         self.states[item_entity] = state
         return state
 
-    def get_state(self, item_entity: Any) -> Optional[ExtendedItemState]:
+    def get_state(self, item_entity: Any) -> ExtendedItemState | None:
         return self.states.get(item_entity)
 
-    def remove_item(self, item_entity: Any) -> Optional[ExtendedItemState]:
+    def remove_item(self, item_entity: Any) -> ExtendedItemState | None:
         return self.states.pop(item_entity, None)
 
-    def purge_stale(self, active_item_entities: Optional[set] = None) -> int:
+    def purge_stale(self, active_item_entities: set | None = None) -> int:
         """Removes item states for destroyed or collected items."""
         if active_item_entities is None:
             return 0
@@ -186,19 +197,19 @@ class LazyChunkStatePersistence:
     __slots__ = ('_delta_logs', '_inflated_chunks')
 
     def __init__(self) -> None:
-        self._delta_logs: Dict[Tuple[int, int], List[Dict[str, Any]]] = {}
-        self._inflated_chunks: Dict[Tuple[int, int], bool] = {}
+        self._delta_logs: dict[tuple[int, int], list[dict[str, Any]]] = {}
+        self._inflated_chunks: dict[tuple[int, int], bool] = {}
 
     def is_inflated(self, chunk_x: int, chunk_y: int) -> bool:
         return self._inflated_chunks.get((chunk_x, chunk_y), False)
 
-    def log_delta_change(self, chunk_x: int, chunk_y: int, delta_type: str, data: Dict[str, Any]) -> None:
+    def log_delta_change(self, chunk_x: int, chunk_y: int, delta_type: str, data: dict[str, Any]) -> None:
         key = (chunk_x, chunk_y)
         if key not in self._delta_logs:
             self._delta_logs[key] = []
         self._delta_logs[key].append({"type": delta_type, "data": data})
 
-    def inflate_chunk_states(self, chunk_x: int, chunk_y: int) -> List[Dict[str, Any]]:
+    def inflate_chunk_states(self, chunk_x: int, chunk_y: int) -> list[dict[str, Any]]:
         """Inflates full objects for a chunk from its delta log on demand."""
         key = (chunk_x, chunk_y)
         self._inflated_chunks[key] = True

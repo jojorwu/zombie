@@ -11,7 +11,7 @@ pub mod pnp_math;
 pub mod tile_interaction;
 
 pub use acoustics::RustAcousticSystem;
-pub use ballistics::{RustBallisticsUtility, RustParticleSystem};
+pub use ballistics::{PhysicalProjectile, RustBallisticsUtility, RustParticleSystem};
 pub use electricity::RustElectricityUtility;
 pub use environment::RustEnvironmentManager;
 pub use flock::compute_zombie_flock_steering;

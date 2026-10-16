@@ -9,11 +9,57 @@ except ImportError:
     RUST_ENGINE_AVAILABLE: bool = False
 
 
+# Ground item type ids understood by the Rust world-item registry.
+# Kept here (bridge layer) so the engine never touches raw ints.
+ITEM_TYPE_FOOD = 1
+ITEM_TYPE_WATER = 2
+ITEM_TYPE_MEDKIT = 3
+ITEM_TYPE_AMMO = 4
+ITEM_TYPE_MATERIAL = 5
+ITEM_TYPE_WEAPON = 6
+
+
+def map_item_type_to_rust(item_type_name: str) -> int:
+    """Maps a Python ``ResourceItem`` type name to the Rust numeric item kind.
+
+    Unknown types fall back to FOOD so stray spawns still land in the Rust
+    loot registry instead of being silently dropped.
+    """
+    mapping: dict[str, int] = {
+        "canned_food": ITEM_TYPE_FOOD,
+        "food": ITEM_TYPE_FOOD,
+        "steak": ITEM_TYPE_FOOD,
+        "cereal": ITEM_TYPE_FOOD,
+        "water": ITEM_TYPE_WATER,
+        "medkit": ITEM_TYPE_MEDKIT,
+        "pistol_ammo": ITEM_TYPE_AMMO,
+        "shotgun_shells": ITEM_TYPE_AMMO,
+        "rifle_ammo": ITEM_TYPE_AMMO,
+        "wood": ITEM_TYPE_MATERIAL,
+        "metal": ITEM_TYPE_MATERIAL,
+        "weapon": ITEM_TYPE_WEAPON,
+        "pistol": ITEM_TYPE_WEAPON,
+        "shotgun": ITEM_TYPE_WEAPON,
+        "rifle": ITEM_TYPE_WEAPON,
+    }
+    return mapping.get(item_type_name, ITEM_TYPE_FOOD)
+
+
 class PythonRustEngineBridge:
     """
-    Python-Rust Engine Bridge interface with strict type annotations.
-    Delegates world, entity, physics, and pathfinding logic execution to Rust,
-    providing zero-copy flat observation arrays for Python neural networks.
+    Single Python↔Rust boundary for the simulation ("Rust owns logic,
+    Python owns UI + neural nets" architecture).
+
+    Responsibilities:
+      * push survivor/zombie rosters into the Rust core using a stable
+        identity mapping (entity_id = id(py_entity)), never index alignment;
+      * run the full simulation step inside Rust;
+      * hand the neural network a zero-copy (N, 57) observation matrix;
+      * harvest updated state back onto Python view entities (UI only);
+      * own fitness-score retrieval and ground-item registration.
+
+    The engine should call these high-level methods instead of reaching into
+    ``full_sim_core`` directly — keeps the spaghetti out of both sides.
     """
     width: int
     height: int
@@ -31,6 +77,66 @@ class PythonRustEngineBridge:
         else:
             self.native_core = None
             self.full_sim_core = None
+
+    @property
+    def rust_active(self) -> bool:
+        """True when the native Rust simulation core is loaded and usable."""
+        return self.full_sim_core is not None
+
+    # ------------------------------------------------------------------ #
+    # High-level tick API used by SimulationEngine                        #
+    # ------------------------------------------------------------------ #
+
+    def get_observations(self) -> np.ndarray:
+        """Zero-copy (N, 57) observation matrix computed in Rust (Rayon-parallel)."""
+        return self.full_sim_core.get_observations_matrix()
+
+    def emit_noise(self, x: float, y: float, z: int, volume: float) -> None:
+        """Registers an acoustic noise event inside the Rust simulation memory."""
+        if self.rust_active:
+            self.full_sim_core.emit_noise(float(x), float(y), int(z), float(volume))
+
+    def add_world_items(self, items: list[Any]) -> None:
+        """Registers Python-spawned ground items into the Rust loot registry."""
+        if not self.rust_active:
+            return
+        for item in items:
+            itype = map_item_type_to_rust(getattr(item, "item_type", ""))
+            self.add_item_to_rust(
+                item.x, item.y, item.z, itype, getattr(item, "amount", 1)
+            )
+
+    def step_survivor_tick(
+        self,
+        survivors: list[Any],
+        zombies: list[Any],
+        actions: list[int],
+        movements: list[tuple[float, float]],
+    ) -> np.ndarray:
+        """One Rust-owned tick for the survivor phase.
+
+        Syncs rosters (identity-mapped), executes all game logic in Rust
+        (vitals, movement, looting, crafting, combat, flocking, noise),
+        harvests state back onto the Python view entities, and returns the
+        fresh observation matrix for the next neural-network pass.
+        """
+        self.sync_entities_to_rust(survivors, zombies)
+        self.full_sim_core.step_simulation(actions, movements)
+        self.sync_rust_to_entities(survivors, zombies)
+        return self.full_sim_core.get_observations_matrix()
+
+    def step_zombie_phase_tick(self, survivors: list[Any], zombies: list[Any]) -> None:
+        """Rust zombie-AI/flocking tick with idle survivor actions.
+
+        Called after the survivor phase: sync pushes the current active
+        zombie window (chunk freeze/rehydrate may have changed it), Rust
+        steps flocking/combat with no-op survivor input, then live state is
+        harvested back onto the Python view objects.
+        """
+        n_s: int = len(survivors)
+        self.sync_entities_to_rust(survivors, zombies)
+        self.full_sim_core.step_simulation([0] * n_s, [(0.0, 0.0)] * n_s)
+        self.sync_rust_to_entities(survivors, zombies)
 
     def sync_survivor_state(self, survivor: Any, current_tick: int = 0) -> None:
         """Synchronize Python survivor entity state into RustEngineCore."""

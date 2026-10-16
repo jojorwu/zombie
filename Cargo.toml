@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "crates/rust_engine",
+]
+resolver = "2"

@@ -9,3 +9,20 @@ dist/
 target/
 rust_vulkan_render/target/
 .pytest_cache/
+
+# Compiled Python extension (Rust bridge)
+*.pyd
+*.pyd.*
+
+# Generated reports & checkpoints
+reports/
+models/checkpoints/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/

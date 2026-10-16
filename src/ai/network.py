@@ -1,4 +1,5 @@
 import io
+import math
 import os
 import random
 import zlib
@@ -81,7 +82,10 @@ class BrainNet(nn.Module):
 
         with torch.inference_mode():
             if isinstance(inputs, np.ndarray):
-                inp_tensor = torch.from_numpy(inputs).float().to(DEVICE)
+                try:
+                    inp_tensor = torch.from_numpy(inputs).float().to(DEVICE)
+                except Exception:
+                    inp_tensor = torch.tensor(inputs.tolist(), dtype=torch.float32, device=DEVICE)
             else:
                 inp_tensor = torch.tensor(inputs, dtype=torch.float32, device=DEVICE)
             if inp_tensor.dim() == 1:
@@ -92,14 +96,14 @@ class BrainNet(nn.Module):
                 prev_hidden = prev_hidden.to(DEVICE)
 
             actions_out, duration_out, value_out, new_hidden = self.forward(inp_tensor, prev_hidden)
-            out_arr = actions_out.squeeze(0).cpu().numpy()
-            dur_val = duration_out.squeeze(0).cpu().numpy()[0]
+            act_vec = actions_out.squeeze(0).cpu()
+            dur_val = float(duration_out.squeeze(0).cpu().item())
 
-        dx = float(np.tanh(out_arr[0]))
-        dy = float(np.tanh(out_arr[1]))
-        action_idx = int(np.argmax(out_arr[2:]))
+        dx = float(torch.tanh(act_vec[0]).item())
+        dy = float(torch.tanh(act_vec[1]).item())
+        action_idx = int(torch.argmax(act_vec[2:]).item())
         # Map duration_out sigmoid/tanh to 1..8 ticks decision hold duration
-        duration_ticks = int(np.clip(round(4.0 + float(np.tanh(dur_val)) * 3.0), 1, 8))
+        duration_ticks = max(1, min(8, int(round(4.0 + math.tanh(dur_val) * 3.0))))
 
         return dx, dy, action_idx, new_hidden, duration_ticks
 

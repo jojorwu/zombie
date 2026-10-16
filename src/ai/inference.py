@@ -78,11 +78,13 @@ def batch_get_action_and_movement(
 
     inp_np = np.ascontiguousarray(np.array(inputs_list, dtype=np.float32))
 
-    # Pinned memory transfer for CUDA non-blocking speedup if GPU is available
-    if DEVICE.type == "cuda":
-        inp_tensor = torch.from_numpy(inp_np).pin_memory().to(DEVICE, non_blocking=True).unsqueeze(1)
-    else:
-        inp_tensor = torch.from_numpy(inp_np).to(DEVICE).unsqueeze(1)
+    try:
+        if DEVICE.type == "cuda":
+            inp_tensor = torch.from_numpy(inp_np).pin_memory().to(DEVICE, non_blocking=True).unsqueeze(1)
+        else:
+            inp_tensor = torch.from_numpy(inp_np).to(DEVICE).unsqueeze(1)
+    except Exception:
+        inp_tensor = torch.tensor(inp_np.tolist(), dtype=torch.float32, device=DEVICE).unsqueeze(1)
 
     valid_hiddens = []
     for h in prev_hiddens:
@@ -124,18 +126,16 @@ def batch_get_action_and_movement(
         else:
             out_final, h_next = _forward_pass()
 
-        out_arr = out_final.cpu().numpy()
-
-        dxs = np.tanh(out_arr[:, 0])
-        dys = np.tanh(out_arr[:, 1])
-        actions = np.argmax(out_arr[:, 2:], axis=1)
+        dxs = torch.tanh(out_final[:, 0]).cpu()
+        dys = torch.tanh(out_final[:, 1]).cpu()
+        actions = torch.argmax(out_final[:, 2:], dim=1).cpu()
 
         results = []
         for i in range(num_survivors):
             results.append((
-                float(dxs[i]),
-                float(dys[i]),
-                int(actions[i]),
+                float(dxs[i].item()),
+                float(dys[i].item()),
+                int(actions[i].item()),
                 h_next[i:i + 1],
                 4
             ))

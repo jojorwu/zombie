@@ -20,20 +20,22 @@ datas = [
     ('mods', 'mods'),
 ]
 
+binaries = [
+    ('rust_engine.pyd', '.'),
+] if os.path.exists('rust_engine.pyd') else []
+
 hiddenimports = [
     'pygame',
     'torch',
     'numpy',
     'lupa',
-    'utils.p_np_math',
-    'utils.mod_utility',
-    'utils.dev_utility',
-] + collect_submodules('src') + collect_submodules('utils')
+    'rust_engine',
+] + collect_submodules('src')
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

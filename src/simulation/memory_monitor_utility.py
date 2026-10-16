@@ -25,6 +25,9 @@ class MemoryMonitorUtility:
 
     def record_tick_time(self, elapsed_sec):
         self.tick_times.append(elapsed_sec)
+        # Automatic VRAM / RAM garbage collection when thresholds are exceeded
+        if torch.cuda.is_available() and torch.cuda.memory_allocated() > 500 * 1024 * 1024:
+            torch.cuda.empty_cache()
 
     def update_fps(self):
         self.frame_count += 1

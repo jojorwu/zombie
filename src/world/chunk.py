@@ -2,7 +2,10 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum, auto
 
+from src.core.executors import register_executor
+
 CHUNK_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+register_executor('CHUNK_EXECUTOR', CHUNK_EXECUTOR)
 
 
 class ChunkState(Enum):

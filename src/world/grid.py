@@ -12,7 +12,10 @@ from src.world.lighting import DynamicLight, LightingEngine
 from src.world.tiles import TILE_SPEED_MODIFIERS, TILE_WALKABLE, TileType
 from src.world.weather import WeatherManager
 
+from src.core.executors import register_executor
+
 WORLD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+register_executor('WORLD_EXECUTOR', WORLD_EXECUTOR)
 
 
 class World:

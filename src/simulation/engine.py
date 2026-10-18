@@ -14,6 +14,7 @@ from src.entities.survivor import Survivor
 from src.entities.vehicle import Vehicle
 from src.modding.manager import LuaModManager
 from src.simulation.bridge import PythonRustEngineBridge
+from src.core.executors import register_executor
 from src.simulation.environment import EnvironmentManager
 from src.simulation.event_bus import DamageDealtEvent, EventBus, NoiseEmittedEvent
 from src.simulation.memory_monitor_utility import MemoryMonitorUtility
@@ -23,6 +24,7 @@ from src.world.grid import World
 from src.systems.electricity import ElectricityUtility
 
 SIM_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=4)
+register_executor('SIM_EXECUTOR', SIM_EXECUTOR)
 
 
 class SimulationEngine:

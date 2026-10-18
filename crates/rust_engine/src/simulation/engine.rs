@@ -209,7 +209,7 @@ impl RustFullSimulationCore {
 
     /// Idempotent, identity-keyed zombie roster sync (stable mapping table).
     /// `data` rows are `[entity_id, x, y, z_level, hp, speed]`, where `entity_id`
-    /// is a stable Python-side id (`id(py_zombie)` cast to i64). Rust matches
+    /// is the entity's stable monotonic uid (`py_zombie.uid`). Rust matches
     /// incoming entities by id instead of row index, so chunk freeze/rehydrate
     /// and death cleanup can reorder or resize the Python active list without
     /// ever mapping wrong slots onto entities. Rows absent from `data` become

@@ -4,6 +4,7 @@ import random
 from src.ai.pathfinding import AStar3D  # leaf module
 from src.entities.anatomy import AnatomicalHealth
 from src.entities.events import NoiseEvent
+from src.entities.identifiers import next_uid
 from src.world.tiles import TileType
 
 try:
@@ -27,6 +28,9 @@ class ZombieState:
 
 class Zombie:
     def __init__(self, x, y, hp=50.0, z=0, config=None, zombie_type: str = ZombieType.STANDARD):
+        # Stable monotonic identity (see src.entities.identifiers); used by the
+        # Python↔Rust bridge / snapshots instead of the recycled id() address.
+        self.uid = next_uid()
         self.x = float(x)
         self.y = float(y)
         self.z = int(z)
@@ -60,7 +64,7 @@ class Zombie:
         self.pnp_engine = PNPComplexityEngine(degree=3)
 
         if RUST_ZOMBIE_AVAILABLE:
-            self.rust_zombie = RustZombieEngine(self.x, self.y, self.z, self.hp, self.speed)
+            self.rust_zombie = RustZombieEngine(self.x, self.y, self.z, self.hp, self.speed, self.uid)
         else:
             self.rust_zombie = None
 

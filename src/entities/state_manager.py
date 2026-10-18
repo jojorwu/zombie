@@ -1,9 +1,16 @@
 from enum import Enum, auto
 from typing import Any
 
-# Leaf import (concrete module, not the src.systems barrel): src.systems.container
-# only depends on src.world.tiles (a stdlib-only leaf), so no cycle is created.
-from src.systems.container import ContainerUtility
+
+def _container_utility():
+    """Resolve ContainerUtility lazily (inside methods only).
+
+    src.systems.container imports src.entities.item, which triggers the
+    src.entities package barrel; a module-level import here would close the
+    cycle entities -> state_manager -> systems.container -> entities (partial).
+    """
+    from src.systems.container import ContainerUtility
+    return ContainerUtility
 
 
 class FurnitureCondition(Enum):
@@ -48,24 +55,24 @@ class FurnitureState:
     @property
     def capacity(self) -> float:
         """Returns maximum container capacity in kg for this furniture item."""
-        return ContainerUtility.get_container_capacity(self)
+        return _container_utility().get_container_capacity(self)
 
     @property
     def contents_weight(self) -> float:
         """Calculates total weight in kg of items stored inside this furniture container."""
-        return ContainerUtility.get_container_weight(self)
+        return _container_utility().get_container_weight(self)
 
     def can_fit_item(self, item_type: str, amount: int = 1) -> bool:
         """Checks if adding amount units of item_type exceeds container capacity."""
-        return ContainerUtility.can_fit_item(self, item_type, amount)
+        return _container_utility().can_fit_item(self, item_type, amount)
 
     def add_item(self, item_type: str, amount: int = 1) -> tuple[bool, int]:
         """Adds item to container using ContainerUtility capacity rules."""
-        return ContainerUtility.add_item_to_container(self, item_type, amount)
+        return _container_utility().add_item_to_container(self, item_type, amount)
 
     def remove_item(self, item_type: str, amount: int = 1) -> int:
-        """Removes item from container using ContainerUtility."""
-        return ContainerUtility.remove_item_from_container(self, item_type, amount)
+        """Removes item from container using _container_utility()."""
+        return _container_utility().remove_item_from_container(self, item_type, amount)
 
     def take_damage(self, amount: float) -> bool:
         """Applies damage to furniture. Returns True if destroyed."""

@@ -5,6 +5,7 @@ from src.entities.anatomy import AnatomicalHealth, BodyPart
 from src.entities.crafting import CraftingSystem
 from src.entities.emotion import EmotionalState  # noqa: F401 (re-export for back-compat)
 from src.entities.events import NoiseEvent
+from src.entities.identifiers import next_uid
 from src.entities.item import ResourceItem
 from src.entities.survivor.looting import SurvivorLooting
 from src.entities.survivor.metabolism import MetabolicBalanceSimulator
@@ -14,6 +15,8 @@ from src.systems.container import ContainerUtility
 class Survivor:
     def __init__(self, x, y, z=0):
         self._lock = threading.Lock()
+        # Stable monotonic identity used by snapshots/bridge instead of id().
+        self.uid = next_uid()
         self.x = float(x)
         self.y = float(y)
         self.z = int(z)

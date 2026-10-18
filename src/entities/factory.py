@@ -1,5 +1,6 @@
 import collections
 
+from src.entities.identifiers import next_uid
 from src.entities.animal import Animal
 from src.entities.item import ItemEntity
 from src.entities.events import NoiseEvent, ScentTrail
@@ -8,8 +9,12 @@ from src.entities.zombie.zombie import Zombie, ZombieState
 
 class ObjectPool:
     """
-    High-performance O(1) object pool using set-based ID tracking to eliminate
-    deque linear scan overhead during entity recycling.
+    High-performance O(1) object pool keyed on the entity's monotonic ``uid``
+    (see src.entities.identifiers).  ``id()`` is deliberately avoided: CPython
+    recycles addresses after GC and with pooling they are reused almost
+    immediately, so id-based keys can alias two different entity lifetimes.
+    Objects without a ``uid`` fall back to ``id()`` (safe here because the pool
+    holds a strong reference while the object is pooled).
     """
     def __init__(self, create_fn, max_size=1000):
         self.create_fn = create_fn
@@ -17,20 +22,28 @@ class ObjectPool:
         self.pool = collections.deque()
         self.pooled_ids = set()
 
+    @staticmethod
+    def _key(obj):
+        return getattr(obj, "uid", None) or id(obj)
+
     def get(self, *args, **kwargs):
         if self.pool:
             obj = self.pool.pop()
-            self.pooled_ids.discard(id(obj))
+            self.pooled_ids.discard(self._key(obj))
             if hasattr(obj, "reset"):
                 obj.reset(*args, **kwargs)
+            elif hasattr(obj, "uid"):
+                # No reset hook: recycle the identity so pooled objects never
+                # share a uid with an entity still referenced elsewhere.
+                obj.uid = next_uid()
             return obj
         return self.create_fn(*args, **kwargs)
 
     def release(self, obj):
-        obj_id = id(obj)
-        if len(self.pool) < self.max_size and obj_id not in self.pooled_ids:
+        key = self._key(obj)
+        if len(self.pool) < self.max_size and key not in self.pooled_ids:
             self.pool.append(obj)
-            self.pooled_ids.add(obj_id)
+            self.pooled_ids.add(key)
 
 
 class DynamicEntityRegistry:

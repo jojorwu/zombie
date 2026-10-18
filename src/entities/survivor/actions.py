@@ -7,37 +7,56 @@ from typing import TYPE_CHECKING, Any
 from src.entities.emotion import EmotionalState
 from src.entities.events import NoiseEvent
 from src.entities.item import WEAPON_STATS, ResourceItem
-from src.systems.sound import SoundUtility
 from src.world.lighting import DynamicLight
 
 # Rust-first backend selection: prefer native rust_engine utilities, fall back
-# to the pure-Python leaves. Imported from concrete leaf modules only (never
-# via src.simulation / barrels) so this file stays free of circular imports.
+# to the pure-Python implementations. All heavy backend modules are resolved
+# lazily inside functions/properties: this module is imported from the
+# src.entities barrel during package startup, and eager imports of
+# src.systems.* / rust_engine here would recreate circular-import chains
+# (src.entities -> src.systems.X -> src.world -> src.entities partial).
+RUST_BACKEND_AVAILABLE = True
 try:
-    from rust_engine import RustAcousticSystem as _Acoustics
-    RUST_BACKEND_AVAILABLE = True
+    import rust_engine as _rust
+    if not hasattr(_rust, "RustBallisticsUtility"):
+        RUST_BACKEND_AVAILABLE = False
 except ImportError:
-    from src.systems.ballistics import BallisticsUtility as _Acoustics  # placeholder, unused for dB lookup
+    _rust = None
     RUST_BACKEND_AVAILABLE = False
 
-if RUST_BACKEND_AVAILABLE:
-    from rust_engine import RustBallisticsUtility as _BallisticsBackend
-else:
-    from src.systems.ballistics import BallisticsUtility as _BallisticsBackend
 
-try:
-    from rust_engine import RustTileInteractionUtility as _TileBackend
-except ImportError:
-    from src.systems.tile_interaction import TileInteractionUtility as _TileBackend
+def _sound_backend():
+    """Resolve the acoustic backend (Rust first, Python leaf fallback)."""
+    if RUST_BACKEND_AVAILABLE:
+        return _rust.RustAcousticSystem
+    from src.systems.sound import SoundUtility
+    return SoundUtility
+
+
+def _ballistics_backend():
+    """Resolve the ballistics backend (Rust first, Python leaf fallback)."""
+    if RUST_BACKEND_AVAILABLE:
+        return _rust.RustBallisticsUtility
+    from src.systems.ballistics import BallisticsUtility
+    return BallisticsUtility
+
+
+def _tile_backend():
+    """Resolve the tile-interaction backend (Rust first, Python leaf fallback)."""
+    if RUST_BACKEND_AVAILABLE:
+        return _rust.RustTileInteractionUtility
+    from src.systems.tile_interaction import TileInteractionUtility
+    return TileInteractionUtility
 
 
 def _create_noise_event(x, y, z, source_type="general", volume=None):
     """Create a NoiseEvent with dB-SPL profile scaling (Rust-first, Python fallback)."""
     if volume is None:
+        acoustics = _sound_backend()
         if RUST_BACKEND_AVAILABLE:
-            db_spl = _Acoustics.get_source_db_spl(source_type)
+            db_spl = acoustics.get_source_db_spl(source_type)
         else:
-            db_spl = SoundUtility.SOUND_PROFILES.get(source_type, {}).get("db_spl", 50.0)
+            db_spl = acoustics.SOUND_PROFILES.get(source_type, {}).get("db_spl", 50.0)
         volume = db_spl / 5.0
     return NoiseEvent(x, y, z, volume=volume, source_type=source_type)
 
@@ -118,7 +137,7 @@ class SurvivorActions:
 
             all_targets = [z for z in zombies if z.is_alive] + [a for a in animals if a.is_alive] + [s for s in survivors if s is not survivor and s.is_alive]
 
-            BallisticsUtility = _BallisticsBackend
+            BallisticsUtility = _ballistics_backend()
             if hasattr(BallisticsUtility, 'simulate_bullet_flight'):
                 sim_res = BallisticsUtility.simulate_bullet_flight(
                     world,
@@ -196,10 +215,11 @@ class SurvivorActions:
         world: Any,
         noise_events: list[NoiseEvent] | None
     ) -> None:
-        
+        tile_backend = _tile_backend()
+
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
-            if hasattr(TileInteractionUtility, 'push_furniture') and TileInteractionUtility.push_furniture(world, fx, fy, survivor.z, dx, dy):
+            if hasattr(tile_backend, 'push_furniture') and tile_backend.push_furniture(world, fx, fy, survivor.z, dx, dy):
                 survivor.score += 8.0
                 if noise_events is not None:
                     noise_events.append(_create_noise_event(survivor.x, survivor.y, survivor.z, source_type="furniture_push", volume=14.0))
@@ -211,11 +231,12 @@ class SurvivorActions:
         world: Any,
         noise_events: list[NoiseEvent] | None
     ) -> None:
-        
+        tile_backend = _tile_backend()
+
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
-            if hasattr(TileInteractionUtility, 'dismantle_furniture'):
-                success, w_amt, m_amt = TileInteractionUtility.dismantle_furniture(world, fx, fy, survivor.z, survivor.inventory)
+            if hasattr(tile_backend, 'dismantle_furniture'):
+                success, w_amt, m_amt = tile_backend.dismantle_furniture(world, fx, fy, survivor.z, survivor.inventory)
                 if success:
                     survivor.score += 12.0
                     if noise_events is not None:

@@ -2,12 +2,14 @@ import math
 import random
 
 from src.entities.events import NoiseEvent
+from src.entities.identifiers import next_uid
 from src.world.tiles import TileType
 
 
 class Animal:
     """Base wild animal entity."""
     def __init__(self, x, y, hp=30.0, z=0):
+        self.uid = next_uid()
         self.x = float(x)
         self.y = float(y)
         self.z = int(z)

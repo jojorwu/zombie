@@ -52,7 +52,8 @@ class PythonRustEngineBridge:
 
     Responsibilities:
       * push survivor/zombie rosters into the Rust core using a stable
-        identity mapping (entity_id = id(py_entity)), never index alignment;
+        identity mapping (entity_id = py_entity.uid, a monotonic unique id —
+        never ``id()`` and never index alignment);
       * run the full simulation step inside Rust;
       * hand the neural network a zero-copy (N, 57) observation matrix;
       * harvest updated state back onto Python view entities (UI only);
@@ -160,11 +161,13 @@ class PythonRustEngineBridge:
         """Synchronizes Python survivors and zombies into RustFullSimulationCore.
 
         Zombies are synced through a stable identity mapping: each row carries
-        `id(py_zombie)` as `entity_id`, so the Rust roster matches entities by
-        id instead of row position. This keeps chunk freeze/rehydrate and death
-        cleanup (which reorder or resize the Python active list) from ever
-        mapping wrong slots onto entities. Pass `full_roster=True` on world
-        reset/generation start to rebuild the Rust roster from scratch.
+        the entity's monotonic ``uid`` as `entity_id` (never ``id()``, which is
+        recycled after GC and loses precision through float32), so the Rust
+        roster matches entities by id instead of row position. This keeps chunk
+        freeze/rehydrate and death cleanup (which reorder or resize the Python
+        active list) from ever mapping wrong slots onto entities. Pass
+        `full_roster=True` on world reset/generation start to rebuild the Rust
+        roster from scratch.
         """
         if not self.full_sim_core:
             return
@@ -186,11 +189,13 @@ class PythonRustEngineBridge:
         if hasattr(self.full_sim_core, 'sync_zombies_batch') and zombies:
             n_z: int = len(zombies)
             # Row layout: [entity_id, x, y, z_level, hp, speed] — 6 columns.
+            # entity_id is the monotonic uid; uids stay below 2**24 in any
+            # realistic run so they are exact even through the float32 buffer.
             if not hasattr(self, '_zomb_buf') or self._zomb_buf.shape[0] != n_z:
                 self._zomb_buf = np.empty((n_z, 6), dtype=np.float32)
 
             for i, z in enumerate(zombies):
-                self._zomb_buf[i, 0] = float(id(z))
+                self._zomb_buf[i, 0] = float(getattr(z, 'uid', 0))
                 self._zomb_buf[i, 1] = float(z.x)
                 self._zomb_buf[i, 2] = float(z.y)
                 self._zomb_buf[i, 3] = float(z.z)
@@ -254,12 +259,12 @@ class PythonRustEngineBridge:
 
         if hasattr(self.full_sim_core, 'get_zombies_batch') and zombies:
             # Rust returns only the ACTIVE window; rows are keyed by entity_id.
-            # Match back to Python objects by id() so reordering on either side
-            # never misaligns state (stable mapping table, variant A).
+            # Match back to Python objects by their stable monotonic uid so
+            # reordering on either side never misaligns state (variant A).
             z_arr: np.ndarray = self.full_sim_core.get_zombies_batch()
-            by_id: dict[int, int] = {id(z): i for i, z in enumerate(zombies)}
+            by_uid: dict[int, int] = {getattr(z, 'uid', 0): i for i, z in enumerate(zombies)}
             for row in range(z_arr.shape[0]):
-                py_idx = by_id.get(int(z_arr[row, 0]))
+                py_idx = by_uid.get(int(z_arr[row, 0]))
                 if py_idx is None:
                     continue
                 z = zombies[py_idx]

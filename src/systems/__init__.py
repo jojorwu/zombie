@@ -23,17 +23,30 @@ except ImportError:
     compute_a_star_3d_path = None
     compute_zombie_flock_steering = None
 
-# Light imports (no src.world dependency)
-from src.systems.sound import SoundUtility
-from src.systems.ballistics import BallisticsUtility, MaterialResistance
-from src.systems.electricity import ElectricityUtility
-from src.systems.vehicle import VehicleType, VehicleData, VehiclePhysicsUtility, VehicleRegistry
-from src.systems.food_spoilage import FoodSpoilageUtility
-from src.systems.container import ItemCategory, ITEM_WEIGHTS, ContainerUtility
-from src.systems.item_state import ItemConditionState, ItemStateUtility
-
-# Heavy imports (depend on src.world) — imported lazily via __getattr__
+# NOTE: all re-exports are resolved lazily via __getattr__ below.  Eager
+# imports here created circular-import chains such as:
+#   src.systems.__init__ -> src.systems.container -> src.entities.item ->
+#   src.entities.__init__ -> src.entities.survivor.looting ->
+#   src.systems.container (partially initialized)  => ImportError
+# Keeping the barrel lazy means importing any leaf module never drags the
+# whole graph in, regardless of entry point.
 _lazy = {
+    # Light systems (no src.world dependency)
+    "SoundUtility": "src.systems.sound",
+    "BallisticsUtility": "src.systems.ballistics",
+    "MaterialResistance": "src.systems.ballistics",
+    "ElectricityUtility": "src.systems.electricity",
+    "VehicleType": "src.systems.vehicle",
+    "VehicleData": "src.systems.vehicle",
+    "VehiclePhysicsUtility": "src.systems.vehicle",
+    "VehicleRegistry": "src.systems.vehicle",
+    "FoodSpoilageUtility": "src.systems.food_spoilage",
+    "ItemCategory": "src.systems.container",
+    "ITEM_WEIGHTS": "src.systems.container",
+    "ContainerUtility": "src.systems.container",
+    "ItemConditionState": "src.systems.item_state",
+    "ItemStateUtility": "src.systems.item_state",
+    # Heavy imports (depend on src.world)
     "PathfindingUtility": "src.systems.pathfinding",
     "TileInteractionUtility": "src.systems.tile_interaction",
 }

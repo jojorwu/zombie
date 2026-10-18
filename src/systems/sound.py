@@ -39,6 +39,11 @@ class SoundUtility:
     HEARING_THRESHOLD_DB = 20.0
 
     @classmethod
+    def get_source_db_spl(cls, sound_type):
+        """Return the source sound pressure level (dB SPL) for a noise profile."""
+        return cls.SOUND_PROFILES.get(sound_type, {}).get("db_spl", 50.0)
+
+    @classmethod
     def calculate_perceived_decibels(cls, sound_type, distance_m, wall_count=0, door_count=0):
         """
         Calculates the perceived sound pressure in dB at a given distance through obstacles.

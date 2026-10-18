@@ -209,8 +209,10 @@ class ChunkManager:
             chunk = self.get_chunk(coords[0], coords[1])
             if chunk and chunk.stored_zombies:
                 for z in chunk.stored_zombies:
-                    if getattr(z, 'is_alive', True) and id(z) not in seen_ids:
-                        seen_ids.add(id(z))
+                    # Dedupe by stable monotonic uid, not id(): id() values are
+                    # recycled after GC/pooling and can collide across lifetimes.
+                    if getattr(z, 'is_alive', True) and z.uid not in seen_ids:
+                        seen_ids.add(z.uid)
                         rehydrated.append(z)
                 chunk.stored_zombies.clear()
         return rehydrated
@@ -244,8 +246,9 @@ class ChunkManager:
             chunk = self.get_chunk(coords[0], coords[1])
             if chunk and chunk.stored_vehicles:
                 for v in chunk.stored_vehicles:
-                    if id(v) not in seen_ids:
-                        seen_ids.add(id(v))
+                    # Dedupe by stable monotonic uid (see zombie rehydrate above).
+                    if v.uid not in seen_ids:
+                        seen_ids.add(v.uid)
                         rehydrated.append(v)
                 chunk.stored_vehicles.clear()
         return rehydrated
@@ -278,8 +281,9 @@ class ChunkManager:
             chunk = self.get_chunk(coords[0], coords[1])
             if chunk and chunk.stored_items:
                 for item in chunk.stored_items:
-                    if not getattr(item, 'collected', False) and id(item) not in seen_ids:
-                        seen_ids.add(id(item))
+                    uid = getattr(item, "uid", None) or id(item)
+                    if not getattr(item, 'collected', False) and uid not in seen_ids:
+                        seen_ids.add(uid)
                         rehydrated.append(item)
                 chunk.stored_items.clear()
         return rehydrated

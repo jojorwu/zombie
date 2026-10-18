@@ -389,7 +389,7 @@ class SimulationEngine:
 
         if self.rust_bridge.rust_active:
             # Rust owns zombie AI/flocking for the ACTIVE window only. The
-            # bridge sync uses a stable identity mapping (entity_id = py_z.uid)
+            # bridge sync uses a stable identity mapping (uid via the int64 vector)
             # instead of index alignment, so chunk freeze/rehydrate and death
             # cleanup can freely reorder or resize the Python roster without
             # misaligning slots. Sync every tick: rows present in the buffer

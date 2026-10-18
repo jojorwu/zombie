@@ -68,6 +68,7 @@ class PythonRustEngineBridge:
     full_sim_core: Any | None
     _surv_buf: np.ndarray
     _zomb_buf: np.ndarray
+    _zomb_uids: np.ndarray
 
     def __init__(self, width: int = 1000, height: int = 1000, num_survivors: int = 1, num_zombies: int = 20) -> None:
         self.width = width
@@ -160,10 +161,10 @@ class PythonRustEngineBridge:
     ) -> None:
         """Synchronizes Python survivors and zombies into RustFullSimulationCore.
 
-        Zombies are synced through a stable identity mapping: each row carries
-        the entity's monotonic ``uid`` as `entity_id` (never ``id()``, which is
-        recycled after GC and loses precision through float32), so the Rust
-        roster matches entities by id instead of row position. This keeps chunk
+        Zombies are synced through a stable identity mapping: uids travel in a
+        dedicated int64 vector (never ``id()``, which is recycled after GC, and
+        never float32, which loses precision above 2**24), so the Rust roster
+        matches entities by uid instead of row position. This keeps chunk
         freeze/rehydrate and death cleanup (which reorder or resize the Python
         active list) from ever mapping wrong slots onto entities. Pass
         `full_roster=True` on world reset/generation start to rebuild the Rust
@@ -188,20 +189,23 @@ class PythonRustEngineBridge:
 
         if hasattr(self.full_sim_core, 'sync_zombies_batch') and zombies:
             n_z: int = len(zombies)
-            # Row layout: [entity_id, x, y, z_level, hp, speed] — 6 columns.
-            # entity_id is the monotonic uid; uids stay below 2**24 in any
-            # realistic run so they are exact even through the float32 buffer.
-            if not hasattr(self, '_zomb_buf') or self._zomb_buf.shape[0] != n_z:
-                self._zomb_buf = np.empty((n_z, 6), dtype=np.float32)
+            # Identity travels in a dedicated int64 vector (exact for any uid,
+            # no float32 precision ceiling); spatial/vital data stays in a
+            # float32 matrix with columns [x, y, z_level, hp, speed].
+            if (not hasattr(self, '_zomb_buf') or self._zomb_buf.shape[0] != n_z
+                    or self._zomb_uids.shape[0] != n_z):
+                self._zomb_buf = np.empty((n_z, 5), dtype=np.float32)
+                self._zomb_uids = np.empty(n_z, dtype=np.int64)
 
+            uids = self._zomb_uids
             for i, z in enumerate(zombies):
-                self._zomb_buf[i, 0] = float(getattr(z, 'uid', 0))
-                self._zomb_buf[i, 1] = float(z.x)
-                self._zomb_buf[i, 2] = float(z.y)
-                self._zomb_buf[i, 3] = float(z.z)
-                self._zomb_buf[i, 4] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
-                self._zomb_buf[i, 5] = float(getattr(z, 'speed', 0.08))
-            self.full_sim_core.sync_zombies_batch(self._zomb_buf, full_roster)
+                uids[i] = int(getattr(z, 'uid', 0))
+                self._zomb_buf[i, 0] = float(z.x)
+                self._zomb_buf[i, 1] = float(z.y)
+                self._zomb_buf[i, 2] = float(z.z)
+                self._zomb_buf[i, 3] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
+                self._zomb_buf[i, 4] = float(getattr(z, 'speed', 0.08))
+            self.full_sim_core.sync_zombies_batch(self._zomb_uids, self._zomb_buf, full_roster)
 
     def step_full_simulation(self, actions: list[int], movements: list[tuple[float, float]]) -> np.ndarray:
         """Executes full simulation step in Rust and returns 2D observation tensor for PyTorch."""
@@ -258,19 +262,20 @@ class PythonRustEngineBridge:
                     s.is_alive = salive
 
         if hasattr(self.full_sim_core, 'get_zombies_batch') and zombies:
-            # Rust returns only the ACTIVE window; rows are keyed by entity_id.
-            # Match back to Python objects by their stable monotonic uid so
-            # reordering on either side never misaligns state (variant A).
-            z_arr: np.ndarray = self.full_sim_core.get_zombies_batch()
+            # Rust returns only the ACTIVE window as (uids int64[N],
+            # data float32[N, 5] = [x, y, z_level, hp, is_alive]). Rows are
+            # keyed by uid so reordering on either side never misaligns state.
+            z_uids: np.ndarray
+            z_uids, z_arr = self.full_sim_core.get_zombies_batch()
             by_uid: dict[int, int] = {getattr(z, 'uid', 0): i for i, z in enumerate(zombies)}
             for row in range(z_arr.shape[0]):
-                py_idx = by_uid.get(int(z_arr[row, 0]))
+                py_idx = by_uid.get(int(z_uids[row]))
                 if py_idx is None:
                     continue
                 z = zombies[py_idx]
-                z.x, z.y, z.z = float(z_arr[row, 1]), float(z_arr[row, 2]), int(z_arr[row, 3])
-                zhp: float = float(z_arr[row, 4])
-                zalive: bool = bool(z_arr[row, 5] > 0.5)
+                z.x, z.y, z.z = float(z_arr[row, 0]), float(z_arr[row, 1]), int(z_arr[row, 2])
+                zhp: float = float(z_arr[row, 3])
+                zalive: bool = bool(z_arr[row, 4] > 0.5)
                 z.hp = zhp
                 z.health = zhp
                 z.is_alive = zalive

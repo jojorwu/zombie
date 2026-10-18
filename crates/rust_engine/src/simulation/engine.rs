@@ -208,17 +208,25 @@ impl RustFullSimulationCore {
     }
 
     /// Idempotent, identity-keyed zombie roster sync (stable mapping table).
-    /// `data` rows are `[entity_id, x, y, z_level, hp, speed]`, where `entity_id`
-    /// is the entity's stable monotonic uid (`py_zombie.uid`). Rust matches
-    /// incoming entities by id instead of row index, so chunk freeze/rehydrate
-    /// and death cleanup can reorder or resize the Python active list without
-    /// ever mapping wrong slots onto entities. Rows absent from `data` become
-    /// frozen (kept in the roster, excluded from the active window); ids not
-    /// seen before are appended as new zombies.
-    #[pyo3(signature = (data, full_roster = false))]
-    pub fn sync_zombies_batch(&mut self, data: PyReadonlyArray2<f32>, full_roster: bool) {
+    /// `uids` is an int64 vector of each entity's stable monotonic uid
+    /// (`py_zombie.uid`) — exact for any uid, no float32 precision loss.
+    /// `data` rows are `[x, y, z_level, hp, speed]`, aligned row-for-row with
+    /// `uids`. Rust matches incoming entities by uid instead of row index, so
+    /// chunk freeze/rehydrate and death cleanup can reorder or resize the
+    /// Python active list without ever mapping wrong slots onto entities.
+    /// Rows absent from `data` become frozen (kept in the roster, excluded
+    /// from the active window); uids not seen before are appended as new
+    /// zombies.
+    #[pyo3(signature = (uids, data, full_roster = false))]
+    pub fn sync_zombies_batch(
+        &mut self,
+        uids: PyReadonlyArray1<i64>,
+        data: PyReadonlyArray2<f32>,
+        full_roster: bool,
+    ) {
+        let uid_vec = uids.as_array();
         let array = data.as_array();
-        let rows = array.nrows();
+        let rows = array.nrows().min(uid_vec.len());
 
         if full_roster {
             // Full-world snapshot (e.g. generation reset): rebuild the roster
@@ -226,12 +234,12 @@ impl RustFullSimulationCore {
             self.zombies.clear();
             self.active_zombie_indices.clear();
             for i in 0..rows {
-                let eid = array[[i, 0]] as i64;
-                let x = array[[i, 1]];
-                let y = array[[i, 2]];
-                let z = array[[i, 3]] as i32;
-                let hp = array[[i, 4]];
-                let speed = array[[i, 5]];
+                let eid = uid_vec[i];
+                let x = array[[i, 0]];
+                let y = array[[i, 1]];
+                let z = array[[i, 2]] as i32;
+                let hp = array[[i, 3]];
+                let speed = array[[i, 4]];
                 let idx = self.zombies.len();
                 self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed, eid));
                 self.active_zombie_indices.push(idx);
@@ -242,12 +250,12 @@ impl RustFullSimulationCore {
         // Incremental active-window sync: update-by-id, append-new, freeze-missing.
         let mut touched: Vec<bool> = vec![false; self.zombies.len()];
         for i in 0..rows {
-            let eid = array[[i, 0]] as i64;
-            let x = array[[i, 1]];
-            let y = array[[i, 2]];
-            let z = array[[i, 3]] as i32;
-            let hp = array[[i, 4]];
-            let speed = array[[i, 5]];
+            let eid = uid_vec[i];
+            let x = array[[i, 0]];
+            let y = array[[i, 1]];
+            let z = array[[i, 2]] as i32;
+            let hp = array[[i, 3]];
+            let speed = array[[i, 4]];
 
             match self.zombies.iter().position(|zb| zb.entity_id == eid) {
                 Some(idx) => {
@@ -278,13 +286,20 @@ impl RustFullSimulationCore {
             .collect();
     }
 
-    /// Harvests only the ACTIVE-window zombies. Row order matches the last
-    /// `sync_zombies_batch(...)` call, so Python can zip it with its own list.
-    /// Columns: [entity_id, x, y, z_level, hp, is_alive].
-    pub fn get_zombies_batch<'py>(&self, py: Python<'py>) -> &'py PyArray2<f32> {
+    /// Harvests only the ACTIVE-window zombies. Returns `(uids, data)` where
+    /// `uids` is int64[N] (exact monotonic uids) and `data` is float32[N, 5]
+    /// with columns `[x, y, z_level, hp, is_alive]`. Row order matches the
+    /// last `sync_zombies_batch(...)` call, so Python can zip it with its own
+    /// list; rows are keyed by uid for safe reordering on either side.
+    pub fn get_zombies_batch<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> (&'py PyArray1<i64>, &'py PyArray2<f32>) {
         let active = &self.active_zombie_indices;
         let n = active.len();
-        let py_array = PyArray2::<f32>::zeros(py, [n, 6], false);
+        let uid_array = PyArray1::<i64>::zeros(py, [n], false);
+        let py_array = PyArray2::<f32>::zeros(py, [n, 5], false);
+        let uids = unsafe { uid_array.as_slice_mut().unwrap() };
         let slice = unsafe { py_array.as_slice_mut().unwrap() };
 
         let zombies_ref = &self.zombies;
@@ -293,16 +308,16 @@ impl RustFullSimulationCore {
                 continue;
             }
             let z = &zombies_ref[zi];
-            let r = &mut slice[row * 6..row * 6 + 6];
-            r[0] = z.entity_id as f32;
-            r[1] = z.x;
-            r[2] = z.y;
-            r[3] = z.z as f32;
-            r[4] = z.hp;
-            r[5] = if z.is_alive { 1.0 } else { 0.0 };
+            let r = &mut slice[row * 5..row * 5 + 5];
+            uids[row] = z.entity_id;
+            r[0] = z.x;
+            r[1] = z.y;
+            r[2] = z.z as f32;
+            r[3] = z.hp;
+            r[4] = if z.is_alive { 1.0 } else { 0.0 };
         }
 
-        py_array
+        (uid_array, py_array)
     }
 
     pub fn sync_survivors_batch(&mut self, data: PyReadonlyArray2<f32>) {

@@ -1,3 +1,4 @@
+import logging
 import threading
 import time
 from collections.abc import Callable
@@ -77,9 +78,9 @@ class EventBus:
             for handler in handlers:
                 try:
                     handler(event)
-                except Exception as e:
-                    import logging
-                    logging.error(f"Error handling event {event_type.__name__}: {e}")
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "Error handling event %s", event_type.__name__)
 
     def clear(self):
         """Resets all queues and subscribers for clean memory teardown."""

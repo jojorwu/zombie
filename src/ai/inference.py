@@ -1,3 +1,4 @@
+import logging
 import math
 from typing import Any
 
@@ -84,6 +85,8 @@ def batch_get_action_and_movement(
         else:
             inp_tensor = torch.from_numpy(inp_np).to(DEVICE).unsqueeze(1)
     except Exception:
+        logging.getLogger(__name__).warning(
+            "Zero-copy tensor conversion failed; falling back to list copy", exc_info=True)
         inp_tensor = torch.tensor(inp_np.tolist(), dtype=torch.float32, device=DEVICE).unsqueeze(1)
 
     valid_hiddens = []

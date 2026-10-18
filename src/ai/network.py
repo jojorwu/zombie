@@ -1,5 +1,6 @@
 import io
 import math
+import logging
 import os
 import random
 import zlib
@@ -26,7 +27,8 @@ def get_best_device() -> torch.device:
             if hasattr(torch, "set_num_interop_threads"):
                 torch.set_num_interop_threads(max(1, min(num_cores // 2, 8)))
         except Exception:
-            pass
+            logging.getLogger(__name__).debug(
+                "torch thread tuning unsupported on this build", exc_info=True)
         return torch.device("cpu")
 
 
@@ -69,7 +71,8 @@ class BrainNet(nn.Module):
             example_h = torch.zeros(1, self.hidden_size, device=DEVICE)
             return torch.jit.trace(self, (example_input, example_h))
         except Exception:
-            pass
+            logging.getLogger(__name__).warning(
+                "TorchScript tracing failed; running eager mode", exc_info=True)
         return self
 
     def init_hidden(self) -> torch.Tensor:
@@ -85,6 +88,8 @@ class BrainNet(nn.Module):
                 try:
                     inp_tensor = torch.from_numpy(inputs).float().to(DEVICE)
                 except Exception:
+                    logging.getLogger(__name__).warning(
+                        "Zero-copy tensor conversion failed; falling back to list copy", exc_info=True)
                     inp_tensor = torch.tensor(inputs.tolist(), dtype=torch.float32, device=DEVICE)
             else:
                 inp_tensor = torch.tensor(inputs, dtype=torch.float32, device=DEVICE)

@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 import numpy as np
@@ -49,6 +50,8 @@ class VulkanBridge:
                 self.rust_renderer = rust_engine.VulkanTileRenderer(map_draw_w, map_draw_h, self.tile_size)
                 self.rust_dimensions = (map_draw_w, map_draw_h)
             except Exception:
+                logging.getLogger(__name__).error(
+                    "Vulkan tile renderer init failed; falling back to pygame blit", exc_info=True)
                 self.rust_renderer = None
                 return None
 

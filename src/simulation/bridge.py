@@ -108,37 +108,114 @@ class PythonRustEngineBridge:
                 item.x, item.y, item.z, itype, getattr(item, "amount", 1)
             )
 
+    def _push_survivor_inputs(
+        self,
+        survivors: list[Any],
+        actions: list[int],
+        movements: list[tuple[float, float]],
+    ) -> None:
+        """Writes brain decisions (action + movement intent) into the Rust
+        survivor rows via a fused batch sync.
+
+        Column layout of the survivor buffer: [x, y, z, health, hunger,
+        thirst, action, move_dx, move_dy]. The last three columns are read
+        by Rust's step_simulation as the survivor inputs; keeping them in
+        the same buffer lets one crossing carry both world state and
+        decisions. When the native core lacks the fused API we fall back to
+        the legacy 6-column sync plus per-survivor input injection.
+        """
+        n_s: int = len(survivors)
+        if hasattr(self.full_sim_core, "sync_survivors_batch") and n_s:
+            if not hasattr(self, "_surv_buf9") or self._surv_buf9.shape[0] != n_s:
+                self._surv_buf9 = np.zeros((n_s, 9), dtype=np.float32)
+            buf = self._surv_buf9
+            buf[:, 6:] = 0.0
+            for i, s in enumerate(survivors):
+                buf[i, 0] = float(s.x)
+                buf[i, 1] = float(s.y)
+                buf[i, 2] = float(s.z)
+                buf[i, 3] = float(getattr(s, "health", 100.0))
+                buf[i, 4] = float(getattr(s, "hunger", 100.0))
+                buf[i, 5] = float(getattr(s, "thirst", 100.0))
+                buf[i, 6] = float(actions[i]) if i < len(actions) else 0.0
+                if i < len(movements):
+                    buf[i, 7] = float(movements[i][0])
+                    buf[i, 8] = float(movements[i][1])
+            try:
+                self.full_sim_core.sync_survivors_batch(buf)
+                return
+            except TypeError:
+                # Older native build expects exactly 6 columns; fall through.
+                pass
+        if hasattr(self.full_sim_core, "sync_survivors_batch") and n_s:
+            self.sync_entities_to_rust(survivors, [])
+        if hasattr(self.full_sim_core, "set_survivor_inputs"):
+            for i, s in enumerate(survivors):
+                act = actions[i] if i < len(actions) else 0
+                mv = movements[i] if i < len(movements) else (0.0, 0.0)
+                self.full_sim_core.set_survivor_inputs(int(getattr(s, "uid", i)), act, float(mv[0]), float(mv[1]))
+
     def step_survivor_tick(
         self,
         survivors: list[Any],
         zombies: list[Any],
         actions: list[int],
         movements: list[tuple[float, float]],
+        *,
+        sync_zombies: bool = True,
     ) -> np.ndarray:
         """One Rust-owned tick for the survivor phase.
 
-        Syncs rosters (identity-mapped), executes all game logic in Rust
-        (vitals, movement, looting, crafting, combat, flocking, noise),
-        harvests state back onto the Python view entities, and returns the
-        fresh observation matrix for the next neural-network pass.
+        Syncs rosters (identity-mapped, with brain decisions fused into the
+        same push), executes all game logic in Rust (vitals, movement,
+        looting, crafting, combat, flocking, noise), harvests state back
+        onto the Python view entities, and returns the fresh observation
+        matrix for the next neural-network pass.
+
+        ``sync_zombies=False`` skips the zombie half of the input sync —
+        used when the caller already pushed this tick's final zombie roster
+        (chunk streaming runs before the survivor phase).
         """
-        self.sync_entities_to_rust(survivors, zombies)
+        self._push_survivor_inputs(survivors, actions, movements)
+        self.sync_entities_to_rust(survivors, zombies, sync_zombies=sync_zombies)
         self.full_sim_core.step_simulation(actions, movements)
         self.sync_rust_to_entities(survivors, zombies)
         return self.full_sim_core.get_observations_matrix()
 
-    def step_zombie_phase_tick(self, survivors: list[Any], zombies: list[Any]) -> None:
+    def step_zombie_phase_tick(
+        self,
+        survivors: list[Any],
+        zombies: list[Any],
+        *,
+        full_roster: bool = False,
+        skip_sync_in: bool = False,
+        skip_harvest: bool = False,
+    ) -> None:
         """Rust zombie-AI/flocking tick with idle survivor actions.
 
         Called after the survivor phase: sync pushes the current active
         zombie window (chunk freeze/rehydrate may have changed it), Rust
         steps flocking/combat with no-op survivor input, then live state is
         harvested back onto the Python view objects.
+
+        ``skip_sync_in`` / ``skip_harvest`` let the engine fuse the two
+        per-tick bridge crossings into one: when the survivor phase already
+        harvested state this tick and nothing touched entity positions since,
+        the Rust side is authoritative — only the (possibly reordered) zombie
+        roster needs syncing. ``full_roster`` rebuilds the Rust zombie roster
+        from scratch (used after chunk freeze/rehydrate).
         """
         n_s: int = len(survivors)
-        self.sync_entities_to_rust(survivors, zombies)
+        if not skip_sync_in:
+            # Survivors are already authoritative in Rust right after the
+            # survivor-phase harvest; only the (possibly reordered/frozen)
+            # zombie roster needs re-pushing.
+            self.sync_entities_to_rust(
+                survivors, zombies, full_roster=full_roster, sync_survivors=False
+            )
         self.full_sim_core.step_simulation([0] * n_s, [(0.0, 0.0)] * n_s)
-        self.sync_rust_to_entities(survivors, zombies)
+        if not skip_harvest:
+            self.sync_rust_to_entities(survivors, zombies)
 
     def sync_survivor_state(self, survivor: Any, current_tick: int = 0) -> None:
         """Synchronize Python survivor entity state into RustEngineCore."""
@@ -158,6 +235,8 @@ class PythonRustEngineBridge:
         survivors: list[Any],
         zombies: list[Any],
         full_roster: bool = False,
+        sync_zombies: bool = True,
+        sync_survivors: bool = True,
     ) -> None:
         """Synchronizes Python survivors and zombies into RustFullSimulationCore.
 
@@ -168,12 +247,15 @@ class PythonRustEngineBridge:
         freeze/rehydrate and death cleanup (which reorder or resize the Python
         active list) from ever mapping wrong slots onto entities. Pass
         `full_roster=True` on world reset/generation start to rebuild the Rust
-        roster from scratch.
+        roster from scratch. `sync_zombies=False` / `sync_survivors=False`
+        restrict the push to one half of the roster — used by the fused
+        per-tick pipeline so each side is re-pushed only when it actually
+        changed since the last crossing.
         """
         if not self.full_sim_core:
             return
 
-        if hasattr(self.full_sim_core, 'sync_survivors_batch') and survivors:
+        if sync_survivors and hasattr(self.full_sim_core, 'sync_survivors_batch') and survivors:
             n_s: int = len(survivors)
             if not hasattr(self, '_surv_buf') or self._surv_buf.shape[0] != n_s:
                 self._surv_buf = np.empty((n_s, 6), dtype=np.float32)
@@ -187,7 +269,8 @@ class PythonRustEngineBridge:
                 self._surv_buf[i, 5] = float(getattr(s, 'thirst', 100.0))
             self.full_sim_core.sync_survivors_batch(self._surv_buf)
 
-        if hasattr(self.full_sim_core, 'sync_zombies_batch') and zombies:
+        if (sync_zombies and hasattr(self.full_sim_core, 'sync_zombies_batch')
+                and zombies):
             n_z: int = len(zombies)
             # Identity travels in a dedicated int64 vector (exact for any uid,
             # no float32 precision ceiling); spatial/vital data stays in a

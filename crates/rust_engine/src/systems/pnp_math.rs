@@ -13,7 +13,12 @@ impl RustPNPComplexityEngine {
         RustPNPComplexityEngine { degree }
     }
 
-    pub fn solve_polynomial_knapsack(&self, capacity: f32, weights: Vec<f32>, values: Vec<f32>) -> (f32, Vec<usize>) {
+    pub fn solve_polynomial_knapsack(
+        &self,
+        capacity: f32,
+        weights: Vec<f32>,
+        values: Vec<f32>,
+    ) -> (f32, Vec<usize>) {
         let n = weights.len();
         if n == 0 || capacity <= 0.0 {
             return (0.0, vec![]);
@@ -22,7 +27,11 @@ impl RustPNPComplexityEngine {
         // Greedy Value-to-Weight Ratio heuristic
         let mut items: Vec<(usize, f32, f32, f32)> = (0..n)
             .map(|i| {
-                let ratio = if weights[i] > 0.0 { values[i] / weights[i] } else { 0.0 };
+                let ratio = if weights[i] > 0.0 {
+                    values[i] / weights[i]
+                } else {
+                    0.0
+                };
                 (i, weights[i], values[i], ratio)
             })
             .collect();
@@ -52,7 +61,11 @@ impl RustPNPComplexityEngine {
             let eval_lit = |lit: i32| -> bool {
                 let var = lit.abs();
                 let val = *assign_map.get(&var).unwrap_or(&false);
-                if lit > 0 { val } else { !val }
+                if lit > 0 {
+                    val
+                } else {
+                    !val
+                }
             };
 
             let clause_sat = eval_lit(l1) || eval_lit(l2) || eval_lit(l3);

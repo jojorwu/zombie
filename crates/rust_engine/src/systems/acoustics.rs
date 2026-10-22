@@ -59,3 +59,9 @@ impl RustAcousticSystem {
         attenuated.max(0.0)
     }
 }
+
+impl Default for RustAcousticSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}

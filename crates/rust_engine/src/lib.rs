@@ -13,18 +13,24 @@ pub mod world;
 use ai::RustBrainInference;
 
 use entities::{
-    RustAnatomicalHealth, RustContainerUtility, RustEntityManager, RustFoodSpoilageUtility, RustSurvivorEntity,
-    RustVehiclePhysics, RustZombieEngine,
+    RustAnatomicalHealth, RustContainerUtility, RustEntityManager, RustFoodSpoilageUtility,
+    RustSurvivorEntity, RustVehiclePhysics, RustZombieEngine,
 };
 use modding::RustLuaModManager;
 use renderer::VulkanTileRenderer;
-use simulation::{RustEngineCore, RustFullSimulationCore, RustParallelEnvManager, RustSpatialGrid, RustWorldItem};
-use systems::{
-    compute_a_star_3d_path, compute_zombie_flock_steering, PhysicalProjectile, RustAcousticSystem, RustAnimalUtility,
-    RustBallisticsUtility, RustElectricityUtility, RustEnvironmentManager, RustItemStateUtility,
-    RustPNPComplexityEngine, RustParticleSystem, RustPlantUtility, RustTileInteractionUtility,
+use simulation::{
+    RustEngineCore, RustFullSimulationCore, RustParallelEnvManager, RustSpatialGrid, RustWorldItem,
 };
-use world::{check_line_of_sight_rust, compute_fog_of_war_rust, RustWorldGenerator, RustWorldGrid, RustChunkManager};
+use systems::{
+    compute_a_star_3d_path, compute_zombie_flock_steering, PhysicalProjectile, RustAcousticSystem,
+    RustAnimalUtility, RustBallisticsUtility, RustElectricityUtility, RustEnvironmentManager,
+    RustItemStateUtility, RustPNPComplexityEngine, RustParticleSystem, RustPlantUtility,
+    RustTileInteractionUtility,
+};
+use world::{
+    check_line_of_sight_rust, compute_fog_of_war_rust, RustChunkManager, RustWorldGenerator,
+    RustWorldGrid,
+};
 
 #[pymodule]
 fn rust_engine(_py: Python, m: &PyModule) -> PyResult<()> {

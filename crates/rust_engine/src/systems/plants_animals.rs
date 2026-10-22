@@ -17,7 +17,11 @@ impl RustPlantUtility {
     }
 
     #[staticmethod]
-    pub fn calculate_growth_progress(current_stage: u32, temperature_c: f32, rained_today: bool) -> (u32, f32) {
+    pub fn calculate_growth_progress(
+        current_stage: u32,
+        temperature_c: f32,
+        rained_today: bool,
+    ) -> (u32, f32) {
         if temperature_c < 2.0 {
             return (current_stage, 0.0);
         }
@@ -53,7 +57,13 @@ impl RustAnimalUtility {
     }
 
     #[staticmethod]
-    pub fn calculate_flee_vector(animal_x: f32, animal_y: f32, threat_x: f32, threat_y: f32, speed: f32) -> (f32, f32) {
+    pub fn calculate_flee_vector(
+        animal_x: f32,
+        animal_y: f32,
+        threat_x: f32,
+        threat_y: f32,
+        speed: f32,
+    ) -> (f32, f32) {
         let dx = animal_x - threat_x;
         let dy = animal_y - threat_y;
         let dist = (dx * dx + dy * dy).sqrt();

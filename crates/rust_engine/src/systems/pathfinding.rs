@@ -1,7 +1,7 @@
-use pyo3::prelude::*;
 use numpy::PyReadonlyArray3;
-use std::collections::{BinaryHeap, HashMap};
+use pyo3::prelude::*;
 use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct PathNode {
@@ -27,7 +27,39 @@ impl PartialOrd for PathNode {
 pub fn is_walkable_tile(t: i64) -> bool {
     matches!(
         t,
-        0 | 1 | 3 | 5 | 7 | 8 | 10 | 12 | 13 | 14 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 26 | 27 | 28 | 30 | 50 | 51 | 52 | 54 | 57 | 62 | 63 | 64 | 65 | 75 | 76 | 78 | 79
+        0 | 1
+            | 3
+            | 5
+            | 7
+            | 8
+            | 10
+            | 12
+            | 13
+            | 14
+            | 18
+            | 19
+            | 20
+            | 21
+            | 22
+            | 23
+            | 24
+            | 26
+            | 27
+            | 28
+            | 30
+            | 50
+            | 51
+            | 52
+            | 54
+            | 57
+            | 62
+            | 63
+            | 64
+            | 65
+            | 75
+            | 76
+            | 78
+            | 79
     )
 }
 
@@ -93,14 +125,26 @@ pub fn compute_a_star_3d_path<'py>(
     let mut came_from = HashMap::new();
 
     let h_start = (((sx - gx).abs() + (sy - gy).abs()) * 10 + (sz - gz).abs() * 30) as u32;
-    open_set.push(PathNode { f: h_start, g: 0, x: sx, y: sy, z: sz });
+    open_set.push(PathNode {
+        f: h_start,
+        g: 0,
+        x: sx,
+        y: sy,
+        z: sz,
+    });
     g_score.insert((sx, sy, sz), 0u32);
 
     let mut nodes_expanded = 0;
 
     let neighbors_2d = [
-        (-1, 0, 10), (1, 0, 10), (0, -1, 10), (0, 1, 10),
-        (-1, -1, 14), (1, -1, 14), (-1, 1, 14), (1, 1, 14),
+        (-1, 0, 10),
+        (1, 0, 10),
+        (0, -1, 10),
+        (0, 1, 10),
+        (-1, -1, 14),
+        (1, -1, 14),
+        (-1, 1, 14),
+        (1, 1, 14),
     ];
 
     while let Some(current) = open_set.pop() {
@@ -152,8 +196,15 @@ pub fn compute_a_star_3d_path<'py>(
                 if tentative_g < existing_g {
                     came_from.insert((nx, ny, nz), (current.x, current.y, current.z));
                     g_score.insert((nx, ny, nz), tentative_g);
-                    let h = (((nx - gx).abs() + (ny - gy).abs()) * 10 + (nz - gz).abs() * 30) as u32;
-                    open_set.push(PathNode { f: tentative_g + h, g: tentative_g, x: nx, y: ny, z: nz });
+                    let h =
+                        (((nx - gx).abs() + (ny - gy).abs()) * 10 + (nz - gz).abs() * 30) as u32;
+                    open_set.push(PathNode {
+                        f: tentative_g + h,
+                        g: tentative_g,
+                        x: nx,
+                        y: ny,
+                        z: nz,
+                    });
                 }
             }
         }
@@ -165,13 +216,26 @@ pub fn compute_a_star_3d_path<'py>(
                 let tile = get_tile(current.x, current.y, nz);
                 if tile >= 0 && (is_walkable_tile(tile) || is_breakable_tile(tile)) {
                     let tentative_g = current.g + 20;
-                    let existing_g = g_score.get(&(current.x, current.y, nz)).copied().unwrap_or(u32::MAX);
+                    let existing_g = g_score
+                        .get(&(current.x, current.y, nz))
+                        .copied()
+                        .unwrap_or(u32::MAX);
 
                     if tentative_g < existing_g {
-                        came_from.insert((current.x, current.y, nz), (current.x, current.y, current.z));
+                        came_from.insert(
+                            (current.x, current.y, nz),
+                            (current.x, current.y, current.z),
+                        );
                         g_score.insert((current.x, current.y, nz), tentative_g);
-                        let h = (((current.x - gx).abs() + (current.y - gy).abs()) * 10 + (nz - gz).abs() * 30) as u32;
-                        open_set.push(PathNode { f: tentative_g + h, g: tentative_g, x: current.x, y: current.y, z: nz });
+                        let h = (((current.x - gx).abs() + (current.y - gy).abs()) * 10
+                            + (nz - gz).abs() * 30) as u32;
+                        open_set.push(PathNode {
+                            f: tentative_g + h,
+                            g: tentative_g,
+                            x: current.x,
+                            y: current.y,
+                            z: nz,
+                        });
                     }
                 }
             }

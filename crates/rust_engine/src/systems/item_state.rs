@@ -11,7 +11,11 @@ impl RustItemStateUtility {
     }
 
     #[staticmethod]
-    pub fn calculate_durability_loss(base_durability: f32, metal_quality_tier: u32, hits_count: u32) -> f32 {
+    pub fn calculate_durability_loss(
+        base_durability: f32,
+        metal_quality_tier: u32,
+        hits_count: u32,
+    ) -> f32 {
         let quality_multiplier = match metal_quality_tier {
             0 => 2.0, // Scrap
             1 => 1.0, // Iron
@@ -31,5 +35,11 @@ impl RustItemStateUtility {
             return 0.0;
         }
         ((steel_ingots * 1.0 + scrap_iron * 0.4) / total) * 100.0
+    }
+}
+
+impl Default for RustItemStateUtility {
+    fn default() -> Self {
+        Self::new()
     }
 }

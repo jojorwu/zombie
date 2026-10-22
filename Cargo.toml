@@ -3,3 +3,13 @@ members = [
     "crates/rust_engine",
 ]
 resolver = "2"
+
+# Optimized release profile for the simulation hot path (plan item 8).
+# `lto = "fat"` + codegen-units=1 removes cross-crate call overhead in the
+# per-tick sync loops; panic=abort shrinks the unwinding tables.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "debuginfo"

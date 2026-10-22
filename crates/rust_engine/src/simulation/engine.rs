@@ -1,10 +1,10 @@
-use pyo3::prelude::*;
-use numpy::{PyArray1, PyArray2, PyArray3, IntoPyArray, PyReadonlyArray1, PyReadonlyArray2};
-use rayon::prelude::*;
-use std::collections::HashMap;
-use crate::world::RustWorldGrid;
 use crate::entities::{RustSurvivorEntity, RustZombieEngine};
 use crate::systems::RustAcousticSystem;
+use crate::world::RustWorldGrid;
+use numpy::{IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2};
+use pyo3::prelude::*;
+use rayon::prelude::*;
+use std::collections::HashMap;
 
 #[pyclass]
 pub struct RustEngineCore {
@@ -20,8 +20,18 @@ impl RustEngineCore {
         }
     }
 
-    pub fn sync_survivor_state(&mut self, x: f32, y: f32, z: i32, health: f32, hunger: f32, thirst: f32, current_tick: u64) {
-        self.sim.sync_survivor_at(0, x, y, z, health, hunger, thirst);
+    pub fn sync_survivor_state(
+        &mut self,
+        x: f32,
+        y: f32,
+        z: i32,
+        health: f32,
+        hunger: f32,
+        thirst: f32,
+        current_tick: u64,
+    ) {
+        self.sim
+            .sync_survivor_at(0, x, y, z, health, hunger, thirst);
         self.sim.current_tick = current_tick;
     }
 
@@ -32,7 +42,11 @@ impl RustEngineCore {
     pub fn get_observation_flat<'py>(&self, py: Python<'py>) -> &'py PyArray1<f32> {
         let obs_matrix = self.sim.get_observations_matrix(py);
         let slice = unsafe { obs_matrix.as_slice().unwrap() };
-        let first_57 = if slice.len() >= 57 { slice[0..57].to_vec() } else { vec![0.0f32; 57] };
+        let first_57 = if slice.len() >= 57 {
+            slice[0..57].to_vec()
+        } else {
+            vec![0.0f32; 57]
+        };
         first_57.into_pyarray(py)
     }
 
@@ -116,7 +130,14 @@ impl RustFullSimulationCore {
         for i in 0..num_zombies {
             let zx = (width / 4) as f32 + ((i % 10) as f32 * 3.0);
             let zy = (height / 4) as f32 + ((i / 10) as f32 * 3.0);
-            zombies.push(RustZombieEngine::new(zx, zy, 0, 50.0, 0.08, -(i as i64) - 1));
+            zombies.push(RustZombieEngine::new(
+                zx,
+                zy,
+                0,
+                50.0,
+                0.08,
+                -(i as i64) - 1,
+            ));
         }
 
         let active_zombie_indices: Vec<usize> = (0..zombies.len()).collect();
@@ -158,12 +179,22 @@ impl RustFullSimulationCore {
 
     pub fn add_zombie(&mut self, x: f32, y: f32, z: i32, hp: f32, speed: f32) -> usize {
         let id = self.zombies.len();
-        self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed, -(id as i64) - 1));
+        self.zombies
+            .push(RustZombieEngine::new(x, y, z, hp, speed, -(id as i64) - 1));
         self.active_zombie_indices.push(id);
         id
     }
 
-    pub fn sync_survivor_at(&mut self, index: usize, x: f32, y: f32, z: i32, hp: f32, hunger: f32, thirst: f32) {
+    pub fn sync_survivor_at(
+        &mut self,
+        index: usize,
+        x: f32,
+        y: f32,
+        z: i32,
+        hp: f32,
+        hunger: f32,
+        thirst: f32,
+    ) {
         if index < self.survivors.len() {
             let surv = &mut self.survivors[index];
             surv.x = x;
@@ -241,7 +272,8 @@ impl RustFullSimulationCore {
                 let hp = array[[i, 3]];
                 let speed = array[[i, 4]];
                 let idx = self.zombies.len();
-                self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed, eid));
+                self.zombies
+                    .push(RustZombieEngine::new(x, y, z, hp, speed, eid));
                 self.active_zombie_indices.push(idx);
             }
             return;
@@ -272,7 +304,8 @@ impl RustFullSimulationCore {
                 }
                 None => {
                     let idx = self.zombies.len();
-                    self.zombies.push(RustZombieEngine::new(x, y, z, hp, speed, eid));
+                    self.zombies
+                        .push(RustZombieEngine::new(x, y, z, hp, speed, eid));
                     touched.push(true);
                 }
             }
@@ -356,15 +389,18 @@ impl RustFullSimulationCore {
         let slice = unsafe { py_array.as_slice_mut().unwrap() };
 
         let survivors_ref = &self.survivors;
-        slice.par_chunks_mut(4).enumerate().for_each(|(i, s_slice)| {
-            if i < survivors_ref.len() {
-                let s = &survivors_ref[i];
-                s_slice[0] = s.x;
-                s_slice[1] = s.y;
-                s_slice[2] = s.z as f32;
-                s_slice[3] = if s.is_alive { 1.0 } else { 0.0 };
-            }
-        });
+        slice
+            .par_chunks_mut(4)
+            .enumerate()
+            .for_each(|(i, s_slice)| {
+                if i < survivors_ref.len() {
+                    let s = &survivors_ref[i];
+                    s_slice[0] = s.x;
+                    s_slice[1] = s.y;
+                    s_slice[2] = s.z as f32;
+                    s_slice[3] = if s.is_alive { 1.0 } else { 0.0 };
+                }
+            });
 
         py_array
     }
@@ -451,7 +487,9 @@ impl RustFullSimulationCore {
         // Calculate ambient light based on 24-hour cycle (3,600 ticks = 1 day)
         let day_tick = (self.current_tick % 3600) as f32;
         let day_phase = (day_tick / 3600.0) * std::f32::consts::TAU;
-        self.ambient_light = (0.2 + 0.8 * ((day_phase - std::f32::consts::FRAC_PI_2).sin() * 0.5 + 0.5)).clamp(0.1, 1.0);
+        self.ambient_light = (0.2
+            + 0.8 * ((day_phase - std::f32::consts::FRAC_PI_2).sin() * 0.5 + 0.5))
+            .clamp(0.1, 1.0);
 
         let mut dropped_loot: Vec<(f32, f32, i32, u32)> = Vec::new();
 
@@ -559,7 +597,8 @@ impl RustFullSimulationCore {
                             }
                             let z = &self.zombies[zi];
                             if z.is_alive && z.z == surv_z {
-                                let d2 = (z.x - surv_x) * (z.x - surv_x) + (z.y - surv_y) * (z.y - surv_y);
+                                let d2 = (z.x - surv_x) * (z.x - surv_x)
+                                    + (z.y - surv_y) * (z.y - surv_y);
                                 if d2 < min_d2 {
                                     min_d2 = d2;
                                     target_idx = Some(zi);
@@ -573,7 +612,12 @@ impl RustFullSimulationCore {
                                 z.is_alive = false;
                                 surv.kills += 1;
                                 surv.score += 25.0;
-                                dropped_loot.push((z.x, z.y, z.z, ((self.current_tick % 5) + 1) as u32));
+                                dropped_loot.push((
+                                    z.x,
+                                    z.y,
+                                    z.z,
+                                    ((self.current_tick % 5) + 1) as u32,
+                                ));
                             }
                         }
                     } else {
@@ -595,7 +639,12 @@ impl RustFullSimulationCore {
                                         z.is_alive = false;
                                         surv.kills += 1;
                                         surv.score += 20.0;
-                                        dropped_loot.push((z.x, z.y, z.z, ((self.current_tick % 5) + 1) as u32));
+                                        dropped_loot.push((
+                                            z.x,
+                                            z.y,
+                                            z.z,
+                                            ((self.current_tick % 5) + 1) as u32,
+                                        ));
                                     }
                                     break;
                                 }
@@ -662,7 +711,9 @@ impl RustFullSimulationCore {
         }
 
         // 2. Update Zombies (with flocking + perception)
-        let active_survivors: Vec<(f32, f32, i32)> = self.survivors.iter()
+        let active_survivors: Vec<(f32, f32, i32)> = self
+            .survivors
+            .iter()
             .filter(|s| s.is_alive)
             .map(|s| (s.x, s.y, s.z))
             .collect();
@@ -682,34 +733,44 @@ impl RustFullSimulationCore {
 
         // Parallelized Flocking separation and mode assessment using Rayon
         let zombies_ref = &self.zombies;
-        steerings.par_iter_mut().zip(behavior_modes.par_iter_mut()).enumerate().for_each(|(i, (steer, mode))| {
-            let z1 = &zombies_ref[i];
-            if !z1.is_alive || !is_active[i] {
-                return;
-            }
-            let mut sep_x = 0.0f32;
-            let mut sep_y = 0.0f32;
-            let mut nearby_count = 0usize;
+        steerings
+            .par_iter_mut()
+            .zip(behavior_modes.par_iter_mut())
+            .enumerate()
+            .for_each(|(i, (steer, mode))| {
+                let z1 = &zombies_ref[i];
+                if !z1.is_alive || !is_active[i] {
+                    return;
+                }
+                let mut sep_x = 0.0f32;
+                let mut sep_y = 0.0f32;
+                let mut nearby_count = 0usize;
 
-            for (j, z2) in zombies_ref.iter().enumerate() {
-                if i == j || !z2.is_alive || z1.z != z2.z {
-                    continue;
+                for (j, z2) in zombies_ref.iter().enumerate() {
+                    if i == j || !z2.is_alive || z1.z != z2.z {
+                        continue;
+                    }
+                    let dx = z1.x - z2.x;
+                    let dy = z1.y - z2.y;
+                    let d2 = dx * dx + dy * dy;
+                    if d2 < 36.0 {
+                        nearby_count += 1;
+                    }
+                    if d2 > 0.0001 && d2 < 2.25 {
+                        let d = d2.sqrt();
+                        sep_x += (dx / d) * (1.5 - d);
+                        sep_y += (dy / d) * (1.5 - d);
+                    }
                 }
-                let dx = z1.x - z2.x;
-                let dy = z1.y - z2.y;
-                let d2 = dx * dx + dy * dy;
-                if d2 < 36.0 {
-                    nearby_count += 1;
-                }
-                if d2 > 0.0001 && d2 < 2.25 {
-                    let d = d2.sqrt();
-                    sep_x += (dx / d) * (1.5 - d);
-                    sep_y += (dy / d) * (1.5 - d);
-                }
-            }
-            *steer = (sep_x, sep_y);
-            *mode = if nearby_count >= 9 { 2 } else if nearby_count >= 3 { 1 } else { 0 };
-        });
+                *steer = (sep_x, sep_y);
+                *mode = if nearby_count >= 9 {
+                    2
+                } else if nearby_count >= 3 {
+                    1
+                } else {
+                    0
+                };
+            });
 
         // Track zombie pressure against door/barricade tiles
         let mut tile_pressure: HashMap<(i32, i32, i32), usize> = HashMap::new();
@@ -743,7 +804,7 @@ impl RustFullSimulationCore {
                 for &(nx, ny, nz, vol) in &self.noise_events {
                     if nz == zombie.z {
                         let heard = RustAcousticSystem::propagate_noise_decibels(
-                            nx, ny, nz, vol, zombie.x, zombie.y, zombie.z
+                            nx, ny, nz, vol, zombie.x, zombie.y, zombie.z,
                         );
                         if heard > 20.0 {
                             closest_target = Some((nx, ny));
@@ -759,7 +820,13 @@ impl RustFullSimulationCore {
                 let dist = (dx * dx + dy * dy).sqrt();
                 if dist > 0.2 {
                     let (sep_x, sep_y) = steerings[i];
-                    let mode_speed_mult = if zombie.behavior_mode == 2 { 1.25 } else if zombie.behavior_mode == 1 { 1.0 } else { 0.85 };
+                    let mode_speed_mult = if zombie.behavior_mode == 2 {
+                        1.25
+                    } else if zombie.behavior_mode == 1 {
+                        1.0
+                    } else {
+                        0.85
+                    };
                     let cur_speed = zombie.speed * mode_speed_mult;
 
                     let move_x = (dx / dist) * cur_speed + sep_x * 0.05;
@@ -774,7 +841,9 @@ impl RustFullSimulationCore {
                     } else {
                         let obstacle_x = new_zx as i32;
                         let obstacle_y = new_zy as i32;
-                        *tile_pressure.entry((obstacle_x, obstacle_y, zombie.z)).or_insert(0) += 1;
+                        *tile_pressure
+                            .entry((obstacle_x, obstacle_y, zombie.z))
+                            .or_insert(0) += 1;
                     }
                 }
             } else {
@@ -841,115 +910,123 @@ impl RustFullSimulationCore {
         let cur_tick = self.current_tick;
         let grid_ref = &self.world_grid;
 
-        slice.par_chunks_mut(57).enumerate().for_each(|(i, chunk_slice)| {
-            if i >= survivors_ref.len() {
-                return;
-            }
-            let surv = &survivors_ref[i];
-
-            // 0..4: Vitals & Light
-            chunk_slice[0] = surv.hp / 100.0;
-            chunk_slice[1] = surv.hunger / 100.0;
-            chunk_slice[2] = surv.thirst / 100.0;
-            chunk_slice[3] = surv.sleep / 100.0;
-            chunk_slice[4] = ambient;
-
-            // 5..7: Equipment & Vehicle
-            chunk_slice[5] = if surv.in_vehicle { 1.0 } else { 0.0 };
-            chunk_slice[6] = if surv.weapon_tier > 0 { 1.0 } else { 0.0 };
-            chunk_slice[7] = if surv.medkits > 0 { 1.0 } else { 0.0 };
-
-            // 8..10: Closest Zombie dx, dy, dz
-            let mut min_z_dist2 = 625.0f32; // 25^2
-            let mut z_dx = 0.0f32;
-            let mut z_dy = 0.0f32;
-            let mut z_dz = 0.0f32;
-            for &zi in active_zombie_indices_ref {
-                if zi >= zombies_ref.len() {
-                    continue;
+        slice
+            .par_chunks_mut(57)
+            .enumerate()
+            .for_each(|(i, chunk_slice)| {
+                if i >= survivors_ref.len() {
+                    return;
                 }
-                let z = &zombies_ref[zi];
-                if z.is_alive && z.z == surv.z {
-                    let dx = z.x - surv.x;
-                    let dy = z.y - surv.y;
-                    let d2 = dx * dx + dy * dy;
-                    if d2 < min_z_dist2 {
-                        min_z_dist2 = d2;
-                        z_dx = (dx / 25.0).clamp(-1.0, 1.0);
-                        z_dy = (dy / 25.0).clamp(-1.0, 1.0);
-                        z_dz = (z.z - surv.z) as f32 / 20.0;
+                let surv = &survivors_ref[i];
+
+                // 0..4: Vitals & Light
+                chunk_slice[0] = surv.hp / 100.0;
+                chunk_slice[1] = surv.hunger / 100.0;
+                chunk_slice[2] = surv.thirst / 100.0;
+                chunk_slice[3] = surv.sleep / 100.0;
+                chunk_slice[4] = ambient;
+
+                // 5..7: Equipment & Vehicle
+                chunk_slice[5] = if surv.in_vehicle { 1.0 } else { 0.0 };
+                chunk_slice[6] = if surv.weapon_tier > 0 { 1.0 } else { 0.0 };
+                chunk_slice[7] = if surv.medkits > 0 { 1.0 } else { 0.0 };
+
+                // 8..10: Closest Zombie dx, dy, dz
+                let mut min_z_dist2 = 625.0f32; // 25^2
+                let mut z_dx = 0.0f32;
+                let mut z_dy = 0.0f32;
+                let mut z_dz = 0.0f32;
+                for &zi in active_zombie_indices_ref {
+                    if zi >= zombies_ref.len() {
+                        continue;
+                    }
+                    let z = &zombies_ref[zi];
+                    if z.is_alive && z.z == surv.z {
+                        let dx = z.x - surv.x;
+                        let dy = z.y - surv.y;
+                        let d2 = dx * dx + dy * dy;
+                        if d2 < min_z_dist2 {
+                            min_z_dist2 = d2;
+                            z_dx = (dx / 25.0).clamp(-1.0, 1.0);
+                            z_dy = (dy / 25.0).clamp(-1.0, 1.0);
+                            z_dz = (z.z - surv.z) as f32 / 20.0;
+                        }
                     }
                 }
-            }
-            chunk_slice[8] = z_dx;
-            chunk_slice[9] = z_dy;
-            chunk_slice[10] = z_dz;
+                chunk_slice[8] = z_dx;
+                chunk_slice[9] = z_dy;
+                chunk_slice[10] = z_dz;
 
-            // 11..13: Closest Item dx, dy, dz
-            let mut min_i_dist2 = 625.0f32;
-            let mut i_dx = 0.0f32;
-            let mut i_dy = 0.0f32;
-            let mut i_dz = 0.0f32;
-            for it in items_ref {
-                if it.active && it.z == surv.z {
-                    let dx = it.x - surv.x;
-                    let dy = it.y - surv.y;
-                    let d2 = dx * dx + dy * dy;
-                    if d2 < min_i_dist2 {
-                        min_i_dist2 = d2;
-                        i_dx = (dx / 25.0).clamp(-1.0, 1.0);
-                        i_dy = (dy / 25.0).clamp(-1.0, 1.0);
-                        i_dz = (it.z - surv.z) as f32 / 20.0;
+                // 11..13: Closest Item dx, dy, dz
+                let mut min_i_dist2 = 625.0f32;
+                let mut i_dx = 0.0f32;
+                let mut i_dy = 0.0f32;
+                let mut i_dz = 0.0f32;
+                for it in items_ref {
+                    if it.active && it.z == surv.z {
+                        let dx = it.x - surv.x;
+                        let dy = it.y - surv.y;
+                        let d2 = dx * dx + dy * dy;
+                        if d2 < min_i_dist2 {
+                            min_i_dist2 = d2;
+                            i_dx = (dx / 25.0).clamp(-1.0, 1.0);
+                            i_dy = (dy / 25.0).clamp(-1.0, 1.0);
+                            i_dz = (it.z - surv.z) as f32 / 20.0;
+                        }
                     }
                 }
-            }
-            chunk_slice[11] = i_dx;
-            chunk_slice[12] = i_dy;
-            chunk_slice[13] = i_dz;
+                chunk_slice[11] = i_dx;
+                chunk_slice[12] = i_dy;
+                chunk_slice[13] = i_dz;
 
-            // 14..16: Resource indicators
-            chunk_slice[14] = (surv.ammo as f32 / 50.0).clamp(0.0, 1.0);
-            chunk_slice[15] = (surv.food_items as f32 / 10.0).clamp(0.0, 1.0);
-            chunk_slice[16] = (surv.water_items as f32 / 10.0).clamp(0.0, 1.0);
+                // 14..16: Resource indicators
+                chunk_slice[14] = (surv.ammo as f32 / 50.0).clamp(0.0, 1.0);
+                chunk_slice[15] = (surv.food_items as f32 / 10.0).clamp(0.0, 1.0);
+                chunk_slice[16] = (surv.water_items as f32 / 10.0).clamp(0.0, 1.0);
 
-            // 17..19: Materials & Stats
-            chunk_slice[17] = (surv.materials as f32 / 10.0).clamp(0.0, 1.0);
-            chunk_slice[18] = (surv.weapon_tier as f32 / 3.0).clamp(0.0, 1.0);
-            chunk_slice[19] = (surv.stamina / 100.0).clamp(0.0, 1.0);
+                // 17..19: Materials & Stats
+                chunk_slice[17] = (surv.materials as f32 / 10.0).clamp(0.0, 1.0);
+                chunk_slice[18] = (surv.weapon_tier as f32 / 3.0).clamp(0.0, 1.0);
+                chunk_slice[19] = (surv.stamina / 100.0).clamp(0.0, 1.0);
 
-            // 20..23: Position & Time
-            chunk_slice[20] = (surv.x / width_f).clamp(0.0, 1.0);
-            chunk_slice[21] = (surv.y / height_f).clamp(0.0, 1.0);
-            chunk_slice[22] = (surv.z as f32 / 20.0).clamp(-1.0, 1.0);
-            chunk_slice[23] = (cur_tick % 3600) as f32 / 3600.0;
+                // 20..23: Position & Time
+                chunk_slice[20] = (surv.x / width_f).clamp(0.0, 1.0);
+                chunk_slice[21] = (surv.y / height_f).clamp(0.0, 1.0);
+                chunk_slice[22] = (surv.z as f32 / 20.0).clamp(-1.0, 1.0);
+                chunk_slice[23] = (cur_tick % 3600) as f32 / 3600.0;
 
-            // 24..31: Morale, Score, Kills
-            chunk_slice[24] = 0.0;
-            chunk_slice[25] = 0.0;
-            chunk_slice[26] = 0.8;
-            chunk_slice[27] = surv.hp / 100.0;
-            chunk_slice[28] = surv.hp / 100.0;
-            chunk_slice[29] = surv.hp / 100.0;
-            chunk_slice[30] = 0.0;
-            chunk_slice[31] = (surv.kills as f32 / 20.0).clamp(0.0, 1.0);
+                // 24..31: Morale, Score, Kills
+                chunk_slice[24] = 0.0;
+                chunk_slice[25] = 0.0;
+                chunk_slice[26] = 0.8;
+                chunk_slice[27] = surv.hp / 100.0;
+                chunk_slice[28] = surv.hp / 100.0;
+                chunk_slice[29] = surv.hp / 100.0;
+                chunk_slice[30] = 0.0;
+                chunk_slice[31] = (surv.kills as f32 / 20.0).clamp(0.0, 1.0);
 
-            // 32..56: 5x5 Local Spatial Grid Vision
-            let sx = surv.x as i32;
-            let sy = surv.y as i32;
-            let sz = surv.z;
-            let mut sensor_idx = 32;
+                // 32..56: 5x5 Local Spatial Grid Vision
+                let sx = surv.x as i32;
+                let sy = surv.y as i32;
+                let sz = surv.z;
+                let mut sensor_idx = 32;
 
-            for dy in -2..=2 {
-                for dx in -2..=2 {
-                    if sensor_idx < 57 {
-                        let tx = sx + dx;
-                        let ty = sy + dy;
-                        chunk_slice[sensor_idx] = if grid_ref.is_walkable(tx as f32, ty as f32, sz) { 1.0 } else { -1.0 };
-                        sensor_idx += 1;
+                for dy in -2..=2 {
+                    for dx in -2..=2 {
+                        if sensor_idx < 57 {
+                            let tx = sx + dx;
+                            let ty = sy + dy;
+                            chunk_slice[sensor_idx] =
+                                if grid_ref.is_walkable(tx as f32, ty as f32, sz) {
+                                    1.0
+                                } else {
+                                    -1.0
+                                };
+                            sensor_idx += 1;
+                        }
                     }
                 }
-            }
-        });
+            });
 
         py_array
     }
@@ -971,10 +1048,21 @@ pub struct RustParallelEnvManager {
 #[pymethods]
 impl RustParallelEnvManager {
     #[new]
-    pub fn new(num_envs: usize, width: usize, height: usize, num_survivors: usize, num_zombies: usize) -> Self {
+    pub fn new(
+        num_envs: usize,
+        width: usize,
+        height: usize,
+        num_survivors: usize,
+        num_zombies: usize,
+    ) -> Self {
         let mut envs = Vec::with_capacity(num_envs);
         for _ in 0..num_envs {
-            envs.push(RustFullSimulationCore::new(width, height, num_survivors, num_zombies));
+            envs.push(RustFullSimulationCore::new(
+                width,
+                height,
+                num_survivors,
+                num_zombies,
+            ));
         }
         RustParallelEnvManager {
             num_envs,
@@ -1002,8 +1090,16 @@ impl RustParallelEnvManager {
         // Release Python GIL and execute Rayon parallel simulation step
         py.allow_threads(|| {
             envs.par_iter_mut().enumerate().for_each(|(i, env)| {
-                let actions = if i < all_actions.len() { all_actions[i].clone() } else { vec![] };
-                let movements = if i < all_movements.len() { all_movements[i].clone() } else { vec![] };
+                let actions = if i < all_actions.len() {
+                    all_actions[i].clone()
+                } else {
+                    vec![]
+                };
+                let movements = if i < all_movements.len() {
+                    all_movements[i].clone()
+                } else {
+                    vec![]
+                };
                 env.step_simulation(actions, movements);
             });
         });
@@ -1037,7 +1133,11 @@ impl RustParallelEnvManager {
                         if sensor_idx < 57 {
                             let tx = sx + dx;
                             let ty = sy + dy;
-                            let is_walk = if env.world_grid.is_walkable(tx as f32, ty as f32, sz) { 1.0f32 } else { 0.0f32 };
+                            let is_walk = if env.world_grid.is_walkable(tx as f32, ty as f32, sz) {
+                                1.0f32
+                            } else {
+                                0.0f32
+                            };
                             total_obs[s_offset + sensor_idx] = is_walk;
                             sensor_idx += 1;
                         }
@@ -1046,7 +1146,9 @@ impl RustParallelEnvManager {
             }
         }
 
-        let array3d = numpy::ndarray::Array3::from_shape_vec((num_envs, num_survivors, 57), total_obs).unwrap();
+        let array3d =
+            numpy::ndarray::Array3::from_shape_vec((num_envs, num_survivors, 57), total_obs)
+                .unwrap();
         array3d.into_pyarray(py)
     }
 }

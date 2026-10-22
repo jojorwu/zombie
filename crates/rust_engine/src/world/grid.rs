@@ -66,7 +66,42 @@ impl RustWorldGrid {
 
     pub fn is_walkable(&self, x: f32, y: f32, z: i32) -> bool {
         let tile = self.get_tile(x as i32, y as i32, z);
-        matches!(tile, 0 | 1 | 3 | 5 | 7 | 8 | 10 | 12 | 13 | 14 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 26 | 27 | 28 | 30 | 50 | 51 | 52 | 54 | 57 | 62 | 63 | 64 | 65 | 75 | 76 | 78 | 79)
+        matches!(
+            tile,
+            0 | 1
+                | 3
+                | 5
+                | 7
+                | 8
+                | 10
+                | 12
+                | 13
+                | 14
+                | 18
+                | 19
+                | 20
+                | 21
+                | 22
+                | 23
+                | 24
+                | 26
+                | 27
+                | 28
+                | 30
+                | 50
+                | 51
+                | 52
+                | 54
+                | 57
+                | 62
+                | 63
+                | 64
+                | 65
+                | 75
+                | 76
+                | 78
+                | 79
+        )
     }
 }
 
@@ -99,7 +134,11 @@ impl RustChunkManager {
         (cx, cy)
     }
 
-    pub fn update_active_chunks(&mut self, survivor_positions: Vec<(f32, f32)>, active_radius: usize) -> Vec<(usize, usize)> {
+    pub fn update_active_chunks(
+        &mut self,
+        survivor_positions: Vec<(f32, f32)>,
+        active_radius: usize,
+    ) -> Vec<(usize, usize)> {
         let mut new_active = HashSet::new();
         for (sx, sy) in survivor_positions {
             let (cx, cy) = self.get_chunk_coords(sx, sy);

@@ -73,6 +73,12 @@ impl RustBallisticsUtility {
     }
 }
 
+impl Default for RustBallisticsUtility {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Native Particle System in Rust.
 #[pyclass]
 pub struct RustParticleSystem {
@@ -104,5 +110,11 @@ impl RustParticleSystem {
             }
         });
         self.particles.len()
+    }
+}
+
+impl Default for RustParticleSystem {
+    fn default() -> Self {
+        Self::new()
     }
 }

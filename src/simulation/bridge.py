@@ -1,6 +1,9 @@
 from typing import Any
 
+import logging
 import numpy as np
+
+_logger = logging.getLogger(__name__)
 
 try:
     from rust_engine import RustEngineCore, RustFullSimulationCore
@@ -23,7 +26,9 @@ def map_item_type_to_rust(item_type_name: str) -> int:
     """Maps a Python ``ResourceItem`` type name to the Rust numeric item kind.
 
     Unknown types fall back to FOOD so stray spawns still land in the Rust
-    loot registry instead of being silently dropped.
+    loot registry instead of being silently dropped (a warning is logged so
+    the gap between the Python item catalogue and the Rust numeric registry
+    stays visible — plan item: explicit mapping + warning log).
     """
     mapping: dict[str, int] = {
         "canned_food": ITEM_TYPE_FOOD,
@@ -43,6 +48,39 @@ def map_item_type_to_rust(item_type_name: str) -> int:
         "rifle": ITEM_TYPE_WEAPON,
     }
     return mapping.get(item_type_name, ITEM_TYPE_FOOD)
+
+
+_WARNED_UNKNOWN_ITEM_TYPES: set[str] = set()
+
+# Python-side item catalogue (names produced by EntityFactory/spawner).
+# Anything outside this set reaching the bridge means the two sides drifted.
+KNOWN_PYTHON_ITEM_TYPES: frozenset[str] = frozenset({
+    "canned_food", "food", "steak", "cereal",
+    "water", "medkit",
+    "pistol_ammo", "shotgun_shells", "rifle_ammo",
+    "wood", "metal",
+    "weapon", "pistol", "shotgun", "rifle",
+})
+
+
+def map_item_type_to_rust_logged(
+    item_type_name: str, logger: Any, context: str = ""
+) -> int:
+    """``map_item_type_to_rust`` + a once-per-name warning for unknown types.
+
+    Unknown names still map to FOOD (so loot is never silently dropped), but
+    drift between the Python catalogue and the Rust numeric registry is now
+    visible in the log instead of being masked by the fallback.
+    """
+    rust_id = map_item_type_to_rust(item_type_name)
+    if item_type_name not in KNOWN_PYTHON_ITEM_TYPES and item_type_name not in _WARNED_UNKNOWN_ITEM_TYPES:
+        _WARNED_UNKNOWN_ITEM_TYPES.add(item_type_name)
+        logger.warning(
+            "Unknown Python item type %r%s mapped to FOOD(1) in Rust registry; "
+            "add it to map_item_type_to_rust()/KNOWN_PYTHON_ITEM_TYPES.",
+            item_type_name, f" ({context})" if context else "",
+        )
+    return rust_id
 
 
 class PythonRustEngineBridge:
@@ -103,7 +141,9 @@ class PythonRustEngineBridge:
         if not self.rust_active:
             return
         for item in items:
-            itype = map_item_type_to_rust(getattr(item, "item_type", ""))
+            itype = map_item_type_to_rust_logged(
+                getattr(item, "item_type", ""), _logger, context=f"uid={getattr(item, 'uid', '?')}"
+            )
             self.add_item_to_rust(
                 item.x, item.y, item.z, itype, getattr(item, "amount", 1)
             )

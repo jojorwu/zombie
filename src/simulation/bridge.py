@@ -108,10 +108,24 @@ class PythonRustEngineBridge:
     _zomb_buf: np.ndarray
     _zomb_uids: np.ndarray
 
-    def __init__(self, width: int = 1000, height: int = 1000, num_survivors: int = 1, num_zombies: int = 20) -> None:
+    def __init__(
+        self,
+        width: int = 1000,
+        height: int = 1000,
+        num_survivors: int = 1,
+        num_zombies: int = 20,
+        force_python_fallback: bool = False,
+    ) -> None:
+        """Create the Python↔Rust boundary.
+
+        ``force_python_fallback`` is a test seam: even when the native
+        ``rust_engine`` module is importable, the bridge runs in pure-Python
+        fallback mode. This lets both branches of the duplicated logic be
+        exercised in tests without uninstalling the Rust core (plan item 3).
+        """
         self.width = width
         self.height = height
-        if RUST_ENGINE_AVAILABLE:
+        if RUST_ENGINE_AVAILABLE and not force_python_fallback:
             self.native_core = RustEngineCore(width, height)
             self.full_sim_core = RustFullSimulationCore(width, height, num_survivors, num_zombies)
         else:
@@ -128,7 +142,14 @@ class PythonRustEngineBridge:
     # ------------------------------------------------------------------ #
 
     def get_observations(self) -> np.ndarray:
-        """Zero-copy (N, 57) observation matrix computed in Rust (Rayon-parallel)."""
+        """Zero-copy (N, 57) observation matrix computed in Rust (Rayon-parallel).
+
+        Falls back to a correctly-shaped zero matrix when the bridge runs in
+        Python-fallback mode (``force_python_fallback=True`` or no native
+        module), so callers can treat both branches uniformly.
+        """
+        if self.full_sim_core is None:
+            return np.zeros((0, 57), dtype=np.float32)
         return self.full_sim_core.get_observations_matrix()
 
     def emit_noise(self, x: float, y: float, z: int, volume: float) -> None:
@@ -164,6 +185,8 @@ class PythonRustEngineBridge:
         decisions. When the native core lacks the fused API we fall back to
         the legacy 6-column sync plus per-survivor input injection.
         """
+        if self.full_sim_core is None:
+            return
         n_s: int = len(survivors)
         if hasattr(self.full_sim_core, "sync_survivors_batch") and n_s:
             if not hasattr(self, "_surv_buf9") or self._surv_buf9.shape[0] != n_s:
@@ -215,7 +238,13 @@ class PythonRustEngineBridge:
         ``sync_zombies=False`` skips the zombie half of the input sync —
         used when the caller already pushed this tick's final zombie roster
         (chunk streaming runs before the survivor phase).
+
+        Python-fallback mode: Rust owns the simulation, so with no native
+        core there is nothing to step; we return a zero observation matrix
+        and leave entity state untouched instead of crashing.
         """
+        if self.full_sim_core is None:
+            return np.zeros((len(survivors), 57), dtype=np.float32)
         self._push_survivor_inputs(survivors, actions, movements)
         self.sync_entities_to_rust(survivors, zombies, sync_zombies=sync_zombies)
         self.full_sim_core.step_simulation(actions, movements)
@@ -244,7 +273,12 @@ class PythonRustEngineBridge:
         the Rust side is authoritative — only the (possibly reordered) zombie
         roster needs syncing. ``full_roster`` rebuilds the Rust zombie roster
         from scratch (used after chunk freeze/rehydrate).
+
+        Python-fallback mode: no native core means nothing to step; the call
+        is a safe no-op.
         """
+        if self.full_sim_core is None:
+            return
         n_s: int = len(survivors)
         if not skip_sync_in:
             # Survivors are already authoritative in Rust right after the

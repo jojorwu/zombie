@@ -59,7 +59,19 @@ class SimulationEngine:
     noise_events: list[NoiseEvent]
     scent_trails: list[ScentTrail]
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        rust_bridge: PythonRustEngineBridge | None = None,
+    ) -> None:
+        """Create the simulation controller.
+
+        ``rust_bridge`` may be injected for testing (e.g. a mock bridge or one
+        built with the Python fallback forced). When omitted, a real
+        :class:`PythonRustEngineBridge` is constructed lazily against the world
+        dimensions once they are known (see :meth:`setup_world`).
+        """
+        self._injected_rust_bridge = rust_bridge
         self.event_bus = EventBus()
         self.state_exchanger = DoubleBufferedStateExchanger()
         self.chunk_persistence = LazyChunkStatePersistence()
@@ -86,12 +98,16 @@ class SimulationEngine:
             grid_enabled=self.sim_cfg.get("electricity_enabled", True)
         )
 
-        self.rust_bridge = PythonRustEngineBridge(
-            width=self.world.width,
-            height=self.world.height,
-            num_survivors=self.sim_cfg.get("num_survivors", 20),
-            num_zombies=self.sim_cfg.get("num_zombies", 30)
-        )
+        if self._injected_rust_bridge is not None:
+            # Test seam: caller supplied a bridge (mock or forced-fallback).
+            self.rust_bridge = self._injected_rust_bridge
+        else:
+            self.rust_bridge = PythonRustEngineBridge(
+                width=self.world.width,
+                height=self.world.height,
+                num_survivors=self.sim_cfg.get("num_survivors", 20),
+                num_zombies=self.sim_cfg.get("num_zombies", 30)
+            )
 
         self.spawner = EntitySpawner(self.world, self.factory)
         self.env_manager = EnvironmentManager(self.world, self.electricity_utility)
@@ -237,13 +253,16 @@ class SimulationEngine:
             coord = walkable_coords.pop()
             self.survivors.append(Survivor(coord[0] + 0.5, coord[1] + 0.5, z=coord[2]))
 
-        # Re-sync Rust engine bridge
-        self.rust_bridge = PythonRustEngineBridge(
-            width=self.world.width,
-            height=self.world.height,
-            num_survivors=len(self.survivors),
-            num_zombies=len(self.zombies)
-        )
+        # Re-sync the Rust engine bridge with the final entity counts.
+        # An injected bridge (test seam) is reused as-is; otherwise rebuild
+        # the default one so its buffers match the spawned population size.
+        if self._injected_rust_bridge is None:
+            self.rust_bridge = PythonRustEngineBridge(
+                width=self.world.width,
+                height=self.world.height,
+                num_survivors=len(self.survivors),
+                num_zombies=len(self.zombies)
+            )
         self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies, full_roster=True)
         self.rust_bridge.add_world_items(self.items)
 

@@ -1,11 +1,13 @@
 import logging
 import math
+import weakref
 from typing import Any
 
 import numpy as np
 import torch
 
 from src.ai.network import DEVICE
+from src.entities.identifiers import next_uid
 from src.systems.tile_interaction import TileInteractionUtility
 
 MOVABLE_FURNITURE_TILES = TileInteractionUtility.MOVABLE_FURNITURE_TILES
@@ -19,17 +21,41 @@ except ImportError:
     RUST_BRAIN_AVAILABLE = False
 
 CUDA_STREAM = torch.cuda.Stream() if torch.cuda.is_available() else None
-_WEIGHT_CACHE = {}
+# Single-entry cache: (uid-key of the brain list) -> stacked weight tensors.
+# Keyed by monotonic uids, never by id(), which can be recycled after GC.
+_WEIGHT_CACHE: tuple[tuple[int, ...], tuple[torch.Tensor, ...]] | None = None
+
+
+def _brain_uid(b: Any) -> int:
+    """Stable monotonic uid for a brain object (assigned on demand)."""
+    uid = getattr(b, "uid", None)
+    if uid is None:
+        try:
+            uid = next_uid()
+            b.uid = uid
+        except (AttributeError, TypeError):
+            # Object forbids attribute assignment: fall back to a
+            # per-instance weakref identity that cannot be recycled by id().
+            uid = id(weakref.ref(b))
+    return uid
 
 
 def get_cached_stacked_weights(brains: list[Any]) -> tuple[torch.Tensor, ...]:
     """
     Caches stacked weight tensors for population brains to eliminate
     per-tick torch.stack GPU allocation overhead.
+
+    The cache is keyed by the monotonic uids of the brains (not ``id()``,
+    which can be recycled after garbage collection and silently return
+    stale weights for a different set of objects).  When the caller passes
+    a different population - or any brain was replaced/reset with a new
+    uid - the stacked tensors are rebuilt.
     """
-    key = tuple(id(b) for b in brains)
-    if key in _WEIGHT_CACHE:
-        return _WEIGHT_CACHE[key]
+    global _WEIGHT_CACHE
+
+    key = tuple(_brain_uid(b) for b in brains)
+    if _WEIGHT_CACHE is not None and _WEIGHT_CACHE[0] == key:
+        return _WEIGHT_CACHE[1]
 
     with torch.no_grad():
         w_fc1 = torch.stack([b.fc1.weight for b in brains]).to(DEVICE)
@@ -42,19 +68,14 @@ def get_cached_stacked_weights(brains: list[Any]) -> tuple[torch.Tensor, ...]:
         b_out = torch.stack([b.fc_out.bias for b in brains]).to(DEVICE)
 
     weights = (w_fc1, b_fc1, w_ih, w_hh, b_ih, b_hh, w_out, b_out)
-    _WEIGHT_CACHE[key] = weights
-
-    # Keep cache compact (evict oldest if cache grows > 10)
-    if len(_WEIGHT_CACHE) > 10:
-        first_key = next(iter(_WEIGHT_CACHE))
-        del _WEIGHT_CACHE[first_key]
-
+    _WEIGHT_CACHE = (key, weights)
     return weights
 
 
 def clear_weight_cache() -> None:
     """Clears cached population weight tensors on generation end / reset."""
-    _WEIGHT_CACHE.clear()
+    global _WEIGHT_CACHE
+    _WEIGHT_CACHE = None
 
 
 def batch_get_action_and_movement(

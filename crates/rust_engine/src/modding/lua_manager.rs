@@ -1,5 +1,5 @@
-use pyo3::prelude::*;
 use mlua::{Lua, Result as LuaResult};
+use pyo3::prelude::*;
 
 /// Native Lua Mod Manager in Rust powered by `mlua`.
 #[pyclass(unsendable)]
@@ -28,5 +28,11 @@ impl RustLuaModManager {
         } else {
             Ok(false)
         }
+    }
+}
+
+impl Default for RustLuaModManager {
+    fn default() -> Self {
+        Self::new()
     }
 }

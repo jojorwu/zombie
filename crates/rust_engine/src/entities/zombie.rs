@@ -12,8 +12,10 @@ pub enum ZombieBehaviorMode {
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct RustZombieEngine {
-    /// Stable entity id assigned by the Python owner (e.g. `id(py_zombie)`).
-    /// Used by the bridge to keep the Rust zombie roster index-aligned with
+    /// Stable entity id assigned by the Python owner (`py_zombie.uid`, a
+    /// process-global monotonic counter — never `id()`, which is recycled
+    /// after GC and loses precision through float32 transport).
+    /// Used by the bridge to keep the Rust zombie roster aligned with
     /// the Python active list across chunk freeze/rehydrate/death cleanup.
     #[pyo3(get, set)]
     pub entity_id: i64,
@@ -74,7 +76,12 @@ impl RustZombieEngine {
         false
     }
 
-    pub fn update_zombie_movement(&mut self, target_x: f32, target_y: f32, is_walkable: bool) -> (f32, f32) {
+    pub fn update_zombie_movement(
+        &mut self,
+        target_x: f32,
+        target_y: f32,
+        is_walkable: bool,
+    ) -> (f32, f32) {
         if !self.is_alive {
             return (self.x, self.y);
         }
@@ -84,7 +91,11 @@ impl RustZombieEngine {
         let dist = (dx * dx + dy * dy).sqrt();
 
         if dist > 0.1 && is_walkable {
-            let eff_speed = if self.is_crawler { self.speed * 0.4 } else { self.speed };
+            let eff_speed = if self.is_crawler {
+                self.speed * 0.4
+            } else {
+                self.speed
+            };
             self.x += (dx / dist) * eff_speed;
             self.y += (dy / dist) * eff_speed;
         }

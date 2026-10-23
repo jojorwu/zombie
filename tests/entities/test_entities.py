@@ -1,13 +1,24 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
-from src.world import World, TileType
-from src.entities import Survivor, Zombie, Vehicle, Animal, ItemEntity, ResourceItem, CraftingSystem, NoiseEvent, ZombieState
-from src.simulation import EventBus, NoiseEmittedEvent, InfectionProgressEvent, AcousticSystem, InfectionSystem
-from src.entities.item_state_utility import ItemStateUtility, ItemConditionState
-from src.world.tile_interaction_utility import TileInteractionUtility
+
+from src.entities import (
+    NoiseEvent,
+    Survivor,
+    Zombie,
+    ZombieState,
+)
+from src.simulation import (
+    AcousticSystem,
+    EventBus,
+    InfectionProgressEvent,
+    InfectionSystem,
+    NoiseEmittedEvent,
+)
+from src.world import TileType, World
 
 
 class TestEntities(unittest.TestCase):
@@ -43,7 +54,7 @@ class TestEntities(unittest.TestCase):
     def test_ecs_systems_handling(self):
         bus = EventBus()
         acoustic = AcousticSystem(bus)
-        infection = InfectionSystem(bus)
+        InfectionSystem(bus)
 
         survivor = Survivor(10.0, 10.0)
         bus.publish(NoiseEmittedEvent(x=10.0, y=10.0, z=0, volume=25.0, source_type="explosion"))

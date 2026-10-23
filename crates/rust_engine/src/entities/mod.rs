@@ -50,7 +50,14 @@ impl RustEntityManager {
         }
     }
 
-    pub fn register_entity(&mut self, entity_type_str: &str, x: f32, y: f32, z: i32, hp: f32) -> u64 {
+    pub fn register_entity(
+        &mut self,
+        entity_type_str: &str,
+        x: f32,
+        y: f32,
+        z: i32,
+        hp: f32,
+    ) -> u64 {
         let etype = match entity_type_str {
             "survivor" => EntityType::Survivor,
             "zombie" => EntityType::Zombie,
@@ -93,5 +100,11 @@ impl RustEntityManager {
 
     pub fn get_active_count(&self) -> usize {
         self.entities.values().filter(|e| e.active).count()
+    }
+}
+
+impl Default for RustEntityManager {
+    fn default() -> Self {
+        Self::new()
     }
 }

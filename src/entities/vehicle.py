@@ -1,6 +1,7 @@
 import math
 
 from src.entities.events import NoiseEvent
+from src.entities.identifiers import next_uid
 from src.systems.container import ContainerUtility
 
 try:
@@ -83,12 +84,14 @@ class Vehicle:
         'physics',
         'trunk_capacity',
         'trunk_inventory',
+        'uid',
         'x',
         'y',
         'z'
     )
 
     def __init__(self, x, y, fuel=100.0, max_fuel=100.0, z=0, model_type="sedan"):
+        self.uid = next_uid()
         self.x = float(x)
         self.y = float(y)
         self.z = int(z)
@@ -145,9 +148,7 @@ class Vehicle:
             return False
         if engine and engine.hp <= 0.0:
             return False
-        if battery and battery.hp <= 0.0:
-            return False
-        return True
+        return not (battery and battery.hp <= 0.0)
 
     def update_physics(self, throttle: float = 0.0, steer: float = 0.0, brake: bool = False, world=None, noise_events=None):
         """Updates CDDA-style vehicle physics, engine operation, wheel condition, acoustic noise, and driver Z synchronization."""

@@ -44,3 +44,9 @@ impl RustEnvironmentManager {
         (light_level, self.temperature, self.wind_speed)
     }
 }
+
+impl Default for RustEnvironmentManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}

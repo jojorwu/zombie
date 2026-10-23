@@ -1,14 +1,36 @@
 import math
 import random
 
-from src.entities.events import NoiseEvent
+# Leaf-module imports only: the src.world / src.entities *packages* eagerly
+# re-export heavy modules (grid, survivor, ...) that import back into
+# src.systems, so touching their barrels at module level recreates the
+# circular-import chain. Import concrete leaf modules directly instead.
 from src.world.tiles import TileType
 
+
+def _noise_event_cls():
+    """Resolve the NoiseEvent class without importing the src.entities package."""
+    import sys
+    mod = sys.modules.get("src.entities.events")
+    if mod is None:
+        from src.entities import events as mod
+    return mod.NoiseEvent
+
+# Rust availability is probed once at import time (cheap), but the Rust
+# classes themselves are resolved lazily inside functions: this module sits in
+# the src.systems barrel and must not pull heavy native/Python modules into
+# package-startup import cycles.
 try:
-    from rust_engine import RustBallisticsUtility
-    RUST_BALLISTICS_AVAILABLE = True
+    import rust_engine as _rust
+    RUST_BALLISTICS_AVAILABLE = hasattr(_rust, "RustBallisticsUtility")
 except ImportError:
+    _rust = None
     RUST_BALLISTICS_AVAILABLE = False
+
+
+def _get_rust_ballistics():
+    """Resolve the Rust ballistics backend on first use."""
+    return _rust.RustBallisticsUtility
 
 
 class MaterialResistance:
@@ -124,7 +146,7 @@ class BallisticsUtility:
         m = data["mass_kg"]
 
         if RUST_BALLISTICS_AVAILABLE:
-            b_drop, w_drift, final_v = RustBallisticsUtility.calculate_trajectory(v0, float(distance_m), float(wind_speed_kmh))
+            b_drop, w_drift, final_v = _get_rust_ballistics().calculate_trajectory(v0, float(distance_m), float(wind_speed_kmh))
             damage_scale = max(0.2, final_v / v0)
             final_damage = data["base_damage"] * damage_scale
             return {
@@ -163,7 +185,7 @@ class BallisticsUtility:
     @classmethod
     def simulate_bullet_flight(cls, world, start_x: float, start_y: float, start_z: int, angle_rad: float, caliber: str = "9mm",
                                wind_speed_kmh: float = 0.0, wind_angle_rad: float = 0.0,
-                               targets: list = None, noise_events: list = None) -> dict:
+                               targets: list | None = None, noise_events: list | None = None) -> dict:
         """
         Executes a step-by-step raycast projectile simulation:
         - Evaluates aerodynamic velocity decay, wind drift, bullet drop
@@ -175,7 +197,7 @@ class BallisticsUtility:
         data = cls.CALIBERS.get(caliber, cls.CALIBERS["9mm"])
         v0 = data["muzzle_velocity"]
         m = data["mass_kg"]
-        cd = data["drag_coeff"]
+        data["drag_coeff"]
         max_dist = data["max_range"]
         base_dmg = data["base_damage"]
 
@@ -253,7 +275,7 @@ class BallisticsUtility:
                     })
 
                     if noise_events is not None:
-                        noise_events.append(NoiseEvent(cur_x, cur_y, cur_z, volume=25.0, source_type="ricochet"))
+                        noise_events.append(_noise_event_cls()(cur_x, cur_y, cur_z, volume=25.0, source_type="ricochet"))
                     continue
 
                 # Check Penetration
@@ -266,7 +288,7 @@ class BallisticsUtility:
                         grid_z[ty, tx] = TileType.WINDOW_BROKEN
                         shattered_windows.append((tx, ty, cur_z))
                         if noise_events is not None:
-                            noise_events.append(NoiseEvent(tx + 0.5, ty + 0.5, cur_z, volume=20.0, source_type="glass_shatter"))
+                            noise_events.append(_noise_event_cls()(tx + 0.5, ty + 0.5, cur_z, volume=20.0, source_type="glass_shatter"))
                 else:
                     # Bullet stopped by obstacle
                     break

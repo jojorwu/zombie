@@ -6,9 +6,10 @@ from typing import Any
 from src.ai.hierarchical_ai import HierarchicalDecisionPlanner
 from src.ai.inference import batch_get_action_and_movement, extract_survivor_inputs
 from src.ai.network import BrainNet, GeneticEvolutionManager
+from src.core.executors import register_executor
+from src.entities.events import NoiseEvent, ScentTrail
 from src.entities.factory import EntityFactory
 from src.entities.item import ResourceItem
-from src.entities.events import NoiseEvent, ScentTrail
 from src.entities.state_manager import LazyChunkStatePersistence
 from src.entities.survivor import Survivor
 from src.entities.vehicle import Vehicle
@@ -19,10 +20,11 @@ from src.simulation.event_bus import DamageDealtEvent, EventBus, NoiseEmittedEve
 from src.simulation.memory_monitor_utility import MemoryMonitorUtility
 from src.simulation.snapshot import DoubleBufferedStateExchanger
 from src.simulation.spawner import EntitySpawner
-from src.world.grid import World
 from src.systems.electricity import ElectricityUtility
+from src.world.grid import World
 
 SIM_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=4)
+register_executor('SIM_EXECUTOR', SIM_EXECUTOR)
 
 
 class SimulationEngine:
@@ -57,7 +59,19 @@ class SimulationEngine:
     noise_events: list[NoiseEvent]
     scent_trails: list[ScentTrail]
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        rust_bridge: PythonRustEngineBridge | None = None,
+    ) -> None:
+        """Create the simulation controller.
+
+        ``rust_bridge`` may be injected for testing (e.g. a mock bridge or one
+        built with the Python fallback forced). When omitted, a real
+        :class:`PythonRustEngineBridge` is constructed lazily against the world
+        dimensions once they are known (see :meth:`setup_world`).
+        """
+        self._injected_rust_bridge = rust_bridge
         self.event_bus = EventBus()
         self.state_exchanger = DoubleBufferedStateExchanger()
         self.chunk_persistence = LazyChunkStatePersistence()
@@ -84,12 +98,16 @@ class SimulationEngine:
             grid_enabled=self.sim_cfg.get("electricity_enabled", True)
         )
 
-        self.rust_bridge = PythonRustEngineBridge(
-            width=self.world.width,
-            height=self.world.height,
-            num_survivors=self.sim_cfg.get("num_survivors", 20),
-            num_zombies=self.sim_cfg.get("num_zombies", 30)
-        )
+        if self._injected_rust_bridge is not None:
+            # Test seam: caller supplied a bridge (mock or forced-fallback).
+            self.rust_bridge = self._injected_rust_bridge
+        else:
+            self.rust_bridge = PythonRustEngineBridge(
+                width=self.world.width,
+                height=self.world.height,
+                num_survivors=self.sim_cfg.get("num_survivors", 20),
+                num_zombies=self.sim_cfg.get("num_zombies", 30)
+            )
 
         self.spawner = EntitySpawner(self.world, self.factory)
         self.env_manager = EnvironmentManager(self.world, self.electricity_utility)
@@ -235,13 +253,16 @@ class SimulationEngine:
             coord = walkable_coords.pop()
             self.survivors.append(Survivor(coord[0] + 0.5, coord[1] + 0.5, z=coord[2]))
 
-        # Re-sync Rust engine bridge
-        self.rust_bridge = PythonRustEngineBridge(
-            width=self.world.width,
-            height=self.world.height,
-            num_survivors=len(self.survivors),
-            num_zombies=len(self.zombies)
-        )
+        # Re-sync the Rust engine bridge with the final entity counts.
+        # An injected bridge (test seam) is reused as-is; otherwise rebuild
+        # the default one so its buffers match the spawned population size.
+        if self._injected_rust_bridge is None:
+            self.rust_bridge = PythonRustEngineBridge(
+                width=self.world.width,
+                height=self.world.height,
+                num_survivors=len(self.survivors),
+                num_zombies=len(self.zombies)
+            )
         self.rust_bridge.sync_entities_to_rust(self.survivors, self.zombies, full_roster=True)
         self.rust_bridge.add_world_items(self.items)
 
@@ -261,15 +282,18 @@ class SimulationEngine:
                     self.factory.release_zombie(dz)
                 self.zombies = [z for z in self.zombies if z.is_alive]
 
-        active_noises: list[NoiseEvent] = []
-        for ne in self.noise_events:
-            ne.update()
-            if ne.lifetime <= 0 or ne.volume <= 0.0:
-                self.factory.release_noise_event(ne)
-            else:
-                active_noises.append(ne)
-        self.noise_events = active_noises
-
+        # --- Chunk streaming (before the bridge crossings) ---------------
+        # Run freeze/rehydrate FIRST so the survivor-phase sync below already
+        # sees the final active roster. That lets the zombie phase reuse the
+        # same synced state instead of paying for a second full Python<->Rust
+        # crossing per tick (plan item: fused sync pass).
+        # `zombie_state_changed` tracks whether any Python-side code touched
+        # zombie positions/hp this tick (vehicle collisions, death cleanup);
+        # when it stays False and the survivor phase pushed the full roster,
+        # Rust is authoritative and the zombie phase needs no input sync at
+        # all.
+        roster_changed: bool = False
+        zombie_state_changed: bool = self.world.current_tick % 100 == 0
         entity_positions: list[tuple[float, float]] = [(s.x, s.y) for s in self.survivors if s.is_alive]
         if entity_positions:
             self.world.chunk_manager.update_active_chunks(entity_positions, view_distance_chunks=2)
@@ -280,6 +304,7 @@ class SimulationEngine:
                 for rz in rehydrated_z:
                     if rz not in self.zombies:
                         self.zombies.append(rz)
+                        roster_changed = True
 
             rehydrated_v = self.world.chunk_manager.rehydrate_vehicles_from_active_chunks()
             if rehydrated_v:
@@ -294,9 +319,21 @@ class SimulationEngine:
                         self.items.append(ri)
 
             # Freeze entities located inside inactive chunks into chunk persistence
-            self.zombies = self.world.chunk_manager.store_zombies_in_chunks(self.zombies)
+            stored_z = self.world.chunk_manager.store_zombies_in_chunks(self.zombies)
+            if len(stored_z) != len(self.zombies):
+                roster_changed = True
+            self.zombies = stored_z
             self.vehicles = self.world.chunk_manager.store_vehicles_in_chunks(self.vehicles)
             self.items = self.world.chunk_manager.store_items_in_chunks(self.items)
+
+        active_noises: list[NoiseEvent] = []
+        for ne in self.noise_events:
+            ne.update()
+            if ne.lifetime <= 0 or ne.volume <= 0.0:
+                self.factory.release_noise_event(ne)
+            else:
+                active_noises.append(ne)
+        self.noise_events = active_noises
 
         alive_indices: list[int] = [i for i, s in enumerate(self.survivors) if s.is_alive]
         alive_count: int = len(alive_indices)
@@ -379,23 +416,34 @@ class SimulationEngine:
         active_chunk_coords: set[tuple[int, int]] = self.world.chunk_manager.active_chunks
         chunk_size: int = self.world.chunk_manager.chunk_size
 
-        # Active window used both by the legacy Python zombie-AI fallback and
-        # by the vehicle-collision pass below (Rust steps its own internal
-        # active window; this mirrors it on the Python view side).
-        active_zombies: list[Any] = [
-            z for z in self.zombies
-            if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
-        ]
-
         if self.rust_bridge.rust_active:
             # Rust owns zombie AI/flocking for the ACTIVE window only. The
-            # bridge sync uses a stable identity mapping (entity_id = id(py_z))
-            # instead of index alignment, so chunk freeze/rehydrate and death
-            # cleanup can freely reorder or resize the Python roster without
-            # misaligning slots. Sync every tick: rows present in the buffer
-            # become active, missing rows stay frozen in the Rust roster.
-            self.rust_bridge.step_zombie_phase_tick(self.survivors, self.zombies)
+            # survivor-phase sync above already pushed this tick's final
+            # roster (chunk streaming runs before it) and harvested state
+            # back, so normally we skip the redundant input sync and the
+            # intermediate harvest — one fused Python<->Rust crossing per
+            # phase instead of two full round-trips per tick. Re-sync only
+            # when freeze/rehydrate or the neural-net movement pass changed
+            # the ACTIVE window since that push; `full_roster` rebuilds the
+            # Rust active set from scratch so zombies frozen out mid-tick
+            # never get re-activated.
+            need_resync = roster_changed or any(
+                (int(z.x) // chunk_size, int(z.y) // chunk_size) not in active_chunk_coords
+                for z in self.zombies
+            )
+            self.rust_bridge.step_zombie_phase_tick(
+                self.survivors,
+                self.zombies,
+                full_roster=need_resync,
+                skip_sync_in=not need_resync,
+                skip_harvest=not zombie_state_changed,
+            )
         else:
+            # Legacy Python zombie-AI fallback operates on the active window.
+            active_zombies: list[Any] = [
+                z for z in self.zombies
+                if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
+            ]
             z_grid: dict[tuple[int, int, int], list[Any]] = {}
             for z in active_zombies:
                 cell = (int(z.x // 6.0), int(z.y // 6.0), z.z)
@@ -407,10 +455,16 @@ class SimulationEngine:
                 zombie.update(self.world, self.survivors, self.vehicles, noise_events=self.noise_events, scent_trails=self.scent_trails, all_zombies=self.zombies, spatial_grid=z_grid)
 
         # Vehicle-Zombie Momentum Collision Processing
+        # (Rust also resolves vehicle collisions internally; this pass keeps
+        # the Python view entities in sync and drives the legacy path.)
+        collision_zombies: list[Any] = [
+            z for z in self.zombies
+            if z.is_alive and (int(z.x) // chunk_size, int(z.y) // chunk_size) in active_chunk_coords
+        ]
         for v in self.vehicles:
             if v.is_occupied() and v.speed > 0.05:
                 v_x, v_y, v_sp = v.x, v.y, v.speed
-                for z in active_zombies:
+                for z in collision_zombies:
                     if z.is_alive and z.z == v.z and (z.x - v_x)**2 + (z.y - v_y)**2 < 1.44:
                         collision_damage: float = v_sp * 250.0 * (v.physics.mass / 1000.0)
                         z.take_targeted_damage(collision_damage)
@@ -418,12 +472,27 @@ class SimulationEngine:
                         v.physics.velocity_y *= 0.85
                         if "bumper" in v.parts:
                             v.parts["bumper"].damage(10.0)
+                        # Python mutated zombie hp/position outside Rust:
+                        # the next bridge crossing must re-push state.
+                        zombie_state_changed = True
 
         for animal in self.animals:
             animal.update(self.world)
 
         self.env_manager.check_dynamic_item_respawn(self.items, self.factory)
         self.state_exchanger.capture_snapshot(self.world, self.survivors, self.zombies, self.vehicles, self.items)
+
+        if (self.rust_bridge.rust_active and zombie_state_changed
+                and self.rust_bridge.full_sim_core):
+            # Python mutated zombie hp/position after the last harvest
+            # (vehicle collision or death cleanup). Push the corrected state
+            # into Rust now so its authoritative roster is never stale —
+            # next tick's fused pipeline starts from consistent data. This
+            # write-only sync runs only on collision ticks, keeping the
+            # steady-state path at one crossing per phase.
+            self.rust_bridge.sync_entities_to_rust(
+                [], self.zombies, full_roster=True, sync_survivors=False
+            )
 
         self.memory_monitor.record_tick_time(time.time() - t0)
 

@@ -1,4 +1,5 @@
 import io
+import logging
 import math
 import os
 import random
@@ -26,7 +27,8 @@ def get_best_device() -> torch.device:
             if hasattr(torch, "set_num_interop_threads"):
                 torch.set_num_interop_threads(max(1, min(num_cores // 2, 8)))
         except Exception:
-            pass
+            logging.getLogger(__name__).debug(
+                "torch thread tuning unsupported on this build", exc_info=True)
         return torch.device("cpu")
 
 
@@ -69,7 +71,8 @@ class BrainNet(nn.Module):
             example_h = torch.zeros(1, self.hidden_size, device=DEVICE)
             return torch.jit.trace(self, (example_input, example_h))
         except Exception:
-            pass
+            logging.getLogger(__name__).warning(
+                "TorchScript tracing failed; running eager mode", exc_info=True)
         return self
 
     def init_hidden(self) -> torch.Tensor:
@@ -85,6 +88,8 @@ class BrainNet(nn.Module):
                 try:
                     inp_tensor = torch.from_numpy(inputs).float().to(DEVICE)
                 except Exception:
+                    logging.getLogger(__name__).warning(
+                        "Zero-copy tensor conversion failed; falling back to list copy", exc_info=True)
                     inp_tensor = torch.tensor(inputs.tolist(), dtype=torch.float32, device=DEVICE)
             else:
                 inp_tensor = torch.tensor(inputs, dtype=torch.float32, device=DEVICE)
@@ -95,7 +100,7 @@ class BrainNet(nn.Module):
             if prev_hidden.device != DEVICE:
                 prev_hidden = prev_hidden.to(DEVICE)
 
-            actions_out, duration_out, value_out, new_hidden = self.forward(inp_tensor, prev_hidden)
+            actions_out, duration_out, _value_out, new_hidden = self.forward(inp_tensor, prev_hidden)
             act_vec = actions_out.squeeze(0).cpu()
             dur_val = float(duration_out.squeeze(0).cpu().item())
 
@@ -103,7 +108,7 @@ class BrainNet(nn.Module):
         dy = float(torch.tanh(act_vec[1]).item())
         action_idx = int(torch.argmax(act_vec[2:]).item())
         # Map duration_out sigmoid/tanh to 1..8 ticks decision hold duration
-        duration_ticks = max(1, min(8, int(round(4.0 + math.tanh(dur_val) * 3.0))))
+        duration_ticks = max(1, min(8, round(4.0 + math.tanh(dur_val) * 3.0)))
 
         return dx, dy, action_idx, new_hidden, duration_ticks
 
@@ -127,7 +132,7 @@ class GeneticEvolutionManager:
     def create_initial_brains(self) -> list:
         return [BrainNet(input_size=57, hidden_size=64, output_size=13) for _ in range(self.population_size)]
 
-    def mutate_net(self, net: BrainNet, current_mutation_rate: float = None) -> BrainNet:
+    def mutate_net(self, net: BrainNet, current_mutation_rate: float | None = None) -> BrainNet:
         rate = current_mutation_rate if current_mutation_rate is not None else self.mutation_rate
         mutated_net = BrainNet(input_size=net.input_size, hidden_size=net.hidden_size, output_size=net.output_size)
         mutated_net.load_state_dict(net.state_dict())

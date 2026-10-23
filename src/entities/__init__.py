@@ -1,4 +1,4 @@
-from src.entities.anatomy import AnatomicalHealth, BodyPart  # noqa: F401 (re-export)
+from src.entities.anatomy import AnatomicalHealth, BodyPart
 
 # NOTE: do NOT import any src.systems.* names at module level here.
 # Some systems modules depend on src.world / src.entities leaves
@@ -8,12 +8,11 @@ from src.entities.anatomy import AnatomicalHealth, BodyPart  # noqa: F401 (re-ex
 #   src.entities.__init__ -> src.systems.X -> src.world... -> src.entities (partial)
 # Consumers must import concrete utility classes from their canonical
 # src.systems.<module> path directly.
-
 from src.entities.animal import Animal, Rat
 from src.entities.crafting import CraftingSystem
+from src.entities.events import NoiseEvent, ScentTrail
 from src.entities.factory import EntityFactory, ObjectPool
 from src.entities.item import ARMOR_STATS, WEAPON_STATS, ItemEntity, ResourceItem
-from src.entities.events import NoiseEvent, ScentTrail
 from src.entities.state_manager import (
     ExtendedItemState,
     FurnitureCondition,

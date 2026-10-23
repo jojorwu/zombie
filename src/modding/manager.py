@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 
 try:
@@ -17,6 +18,8 @@ try:
 except ImportError:
     HAS_LUPA = False
     LuaRuntime = None
+
+logger = logging.getLogger(__name__)
 
 class FallbackLuaRuntime:
     """Fallback engine if lupa is not installed."""
@@ -82,8 +85,8 @@ class LuaModManager:
                         mod_load_fn()
                 self.mods[mod_name] = filepath
                 print(f"[LuaModManager] Loaded Lua mod: {mod_name}")
-            except Exception as e:
-                print(f"[LuaModManager] Failed to load mod {mod_name}: {e}")
+            except Exception:
+                logger.exception("[LuaModManager] Failed to load mod %s", mod_name)
 
     def trigger_event(self, event_name, *args):
         if self.rust_lua and args:

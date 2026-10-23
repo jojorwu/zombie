@@ -4,6 +4,8 @@ from typing import Any
 
 import numpy as np
 
+from src.core.executors import register_executor
+
 # Direct leaf-module imports (bypass the src.entities barrel to avoid cycles).
 from src.entities.state_manager import FurnitureStateManager, ItemStateManager
 from src.world.chunk import ChunkManager
@@ -13,6 +15,7 @@ from src.world.tiles import TILE_SPEED_MODIFIERS, TILE_WALKABLE, TileType
 from src.world.weather import WeatherManager
 
 WORLD_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+register_executor('WORLD_EXECUTOR', WORLD_EXECUTOR)
 
 
 class World:
@@ -288,14 +291,14 @@ class World:
     def is_power_out(self) -> bool:
         if not self.electricity_enabled:
             return True
-        y, m, d, hh, mm = self.get_time_components()
+        y, m, d, _hh, _mm = self.get_time_components()
         current_day_total = (y - 1) * 360 + (m - 1) * 30 + d
         return current_day_total >= self.electricity_cutoff_day
 
     def is_water_out(self) -> bool:
         if not self.water_enabled:
             return True
-        y, m, d, hh, mm = self.get_time_components()
+        y, m, d, _hh, _mm = self.get_time_components()
         current_day_total = (y - 1) * 360 + (m - 1) * 30 + d
         return current_day_total >= self.water_cutoff_day
 

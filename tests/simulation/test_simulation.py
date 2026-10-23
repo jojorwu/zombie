@@ -1,12 +1,20 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import unittest
 import json
-from src.simulation import SimulationEngine, EventBus, GameEvent, NoiseEmittedEvent, DamageDealtEvent, DoubleBufferedStateExchanger, PythonRustEngineBridge
-from src.entities.state_manager import LazyChunkStatePersistence
+import unittest
+
 from src.ai.pathfinding import AStar3D
+from src.entities.state_manager import LazyChunkStatePersistence
+from src.simulation import (
+    DoubleBufferedStateExchanger,
+    EventBus,
+    NoiseEmittedEvent,
+    PythonRustEngineBridge,
+    SimulationEngine,
+)
 from src.world import World
 
 
@@ -139,6 +147,58 @@ class TestSimulation(unittest.TestCase):
         self.assertTrue(persistence.is_inflated(0, 0))
         self.assertEqual(len(deltas), 1)
         self.assertEqual(deltas[0]["data"]["durability"], 50.0)
+
+
+
+class TestRustBridgeFallback(unittest.TestCase):
+    """Plan item 3: both bridge branches (Rust core / Python fallback) must be
+    exercisable and tested in the same environment."""
+
+    def _config(self):
+        with open("config.json", "r") as f:
+            config = json.load(f).copy()
+        config["simulation"]["map_width"] = 30
+        config["simulation"]["map_height"] = 30
+        return config
+
+    def test_forced_fallback_bridge_is_safe_noop(self):
+        from src.simulation.bridge import RUST_ENGINE_AVAILABLE
+        bridge = PythonRustEngineBridge(width=100, height=100, force_python_fallback=True)
+        self.assertFalse(bridge.rust_active)
+        if not RUST_ENGINE_AVAILABLE:
+            self.skipTest("native rust_engine not built; fallback is the default mode")
+
+        survivors = [type("S", (), {"x": 1.0, "y": 2.0, "z": 0, "health": 100.0,
+                                    "hunger": 50.0, "thirst": 50.0, "uid": 1})()]
+        zombies = [type("Z", (), {"x": 3.0, "y": 4.0, "z": 0, "hp": 50.0,
+                                  "speed": 0.08, "uid": 2})()]
+
+        obs = bridge.get_observations()
+        self.assertEqual(obs.shape, (0, 57))
+
+        obs = bridge.step_survivor_tick(survivors, zombies, [0], [(0.0, 0.0)])
+        self.assertEqual(obs.shape, (1, 57))
+
+        # Zombie-phase tick and syncs are safe no-ops without a native core.
+        bridge.step_zombie_phase_tick(survivors, zombies)
+        bridge.sync_entities_to_rust(survivors, zombies, full_roster=True)
+        bridge.sync_rust_to_entities(survivors, zombies)
+        bridge.add_world_items([type("I", (), {"x": 1.0, "y": 1.0, "z": 0,
+                                                "item_type": "medkit", "amount": 1,
+                                                "uid": 3})()])
+        self.assertEqual(bridge.get_fitness_scores().shape[0], 0)
+        self.assertEqual(bridge.get_items_batch().shape, (0, 5))
+
+    def test_engine_accepts_injected_bridge(self):
+        from src.simulation.bridge import RUST_ENGINE_AVAILABLE
+        if not RUST_ENGINE_AVAILABLE:
+            self.skipTest("native rust_engine not built")
+        bridge = PythonRustEngineBridge(width=30, height=30, force_python_fallback=True)
+        sim = SimulationEngine(self._config(), rust_bridge=bridge)
+        self.assertIs(sim.rust_bridge, bridge)
+        for _ in range(5):
+            sim.tick()
+        self.assertEqual(sim.world.current_tick, 5)
 
 
 if __name__ == "__main__":

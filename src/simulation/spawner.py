@@ -81,7 +81,7 @@ class EntitySpawner:
         selected_indices = np.random.choice(len(walkable_coords), size=len(walkable_coords), replace=False, p=probs)
         return [walkable_coords[idx] for idx in selected_indices]
 
-    def spawn_street_corpses_and_loot(self, items_list: list, walkable_coords: list = None, num_corpses: int = 15) -> None:
+    def spawn_street_corpses_and_loot(self, items_list: list, walkable_coords: list | None = None, num_corpses: int = 15) -> None:
         """Spawns lootable dead human corpses on streets and sidewalks containing random gear and ammo."""
         if walkable_coords is None:
             walkable_coords, _, _ = self.scan_walkable_coordinates()

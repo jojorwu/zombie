@@ -1,5 +1,7 @@
 from typing import Any
 
+from src.entities.identifiers import next_uid
+
 
 class MetalQuality:
     SCRAP = "scrap_metal"
@@ -176,6 +178,7 @@ WEAPON_STATS: dict[str, dict[str, Any]] = {
 class ItemEntity:
     """Represents an item or floor container entity spawned in the world grid."""
     def __init__(self, x: float, y: float, item_type: str, amount: int = 1, z: int = 0, contents: dict[str, int] | None = None) -> None:
+        self.uid: int = next_uid()
         self.x: float = float(x)
         self.y: float = float(y)
         self.z: int = int(z)

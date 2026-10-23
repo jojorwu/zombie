@@ -2,7 +2,10 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum, auto
 
+from src.core.executors import register_executor
+
 CHUNK_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+register_executor('CHUNK_EXECUTOR', CHUNK_EXECUTOR)
 
 
 class ChunkState(Enum):
@@ -57,8 +60,8 @@ class ChunkManager:
         self.chunk_size = chunk_size
         self.world_width = world_width
         self.world_height = world_height
-        self.num_chunks_x = int(math.ceil(world_width / chunk_size))
-        self.num_chunks_y = int(math.ceil(world_height / chunk_size))
+        self.num_chunks_x = math.ceil(world_width / chunk_size)
+        self.num_chunks_y = math.ceil(world_height / chunk_size)
         self.chunks = {}
         self.active_chunks = set()
 
@@ -194,9 +197,8 @@ class ChunkManager:
             chunk = self.get_chunk(cx, cy)
             if chunk and chunk.state == ChunkState.ACTIVE:
                 active_zombies.append(z)
-            elif chunk:
-                if z not in chunk.stored_zombies:
-                    chunk.stored_zombies.append(z)
+            elif chunk and z not in chunk.stored_zombies:
+                chunk.stored_zombies.append(z)
         return active_zombies
 
     def rehydrate_zombies_from_active_chunks(self) -> list:
@@ -209,8 +211,10 @@ class ChunkManager:
             chunk = self.get_chunk(coords[0], coords[1])
             if chunk and chunk.stored_zombies:
                 for z in chunk.stored_zombies:
-                    if getattr(z, 'is_alive', True) and id(z) not in seen_ids:
-                        seen_ids.add(id(z))
+                    # Dedupe by stable monotonic uid, not id(): id() values are
+                    # recycled after GC/pooling and can collide across lifetimes.
+                    if getattr(z, 'is_alive', True) and z.uid not in seen_ids:
+                        seen_ids.add(z.uid)
                         rehydrated.append(z)
                 chunk.stored_zombies.clear()
         return rehydrated
@@ -229,9 +233,8 @@ class ChunkManager:
             chunk = self.get_chunk(cx, cy)
             if chunk and chunk.state == ChunkState.ACTIVE:
                 active_vehicles.append(v)
-            elif chunk:
-                if v not in chunk.stored_vehicles:
-                    chunk.stored_vehicles.append(v)
+            elif chunk and v not in chunk.stored_vehicles:
+                chunk.stored_vehicles.append(v)
         return active_vehicles
 
     def rehydrate_vehicles_from_active_chunks(self) -> list:
@@ -244,8 +247,9 @@ class ChunkManager:
             chunk = self.get_chunk(coords[0], coords[1])
             if chunk and chunk.stored_vehicles:
                 for v in chunk.stored_vehicles:
-                    if id(v) not in seen_ids:
-                        seen_ids.add(id(v))
+                    # Dedupe by stable monotonic uid (see zombie rehydrate above).
+                    if v.uid not in seen_ids:
+                        seen_ids.add(v.uid)
                         rehydrated.append(v)
                 chunk.stored_vehicles.clear()
         return rehydrated
@@ -263,9 +267,8 @@ class ChunkManager:
             chunk = self.get_chunk(cx, cy)
             if chunk and chunk.state == ChunkState.ACTIVE:
                 active_items.append(item)
-            elif chunk:
-                if item not in chunk.stored_items:
-                    chunk.stored_items.append(item)
+            elif chunk and item not in chunk.stored_items:
+                chunk.stored_items.append(item)
         return active_items
 
     def rehydrate_items_from_active_chunks(self) -> list:
@@ -278,8 +281,9 @@ class ChunkManager:
             chunk = self.get_chunk(coords[0], coords[1])
             if chunk and chunk.stored_items:
                 for item in chunk.stored_items:
-                    if not getattr(item, 'collected', False) and id(item) not in seen_ids:
-                        seen_ids.add(id(item))
+                    uid = getattr(item, "uid", None) or id(item)
+                    if not getattr(item, 'collected', False) and uid not in seen_ids:
+                        seen_ids.add(uid)
                         rehydrated.append(item)
                 chunk.stored_items.clear()
         return rehydrated

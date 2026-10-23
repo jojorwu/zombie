@@ -1,12 +1,13 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
-from src.world import World, TileType, ChunkState
+
+from src.world import ChunkState, TileType, World
 from src.world.generation import GraphGrammarBuildingGenerator
-from src.entities.item import MetalQuality
-from src.entities.item_state_utility import ItemStateUtility
+
 
 class TestWorld(unittest.TestCase):
     def test_sparse_spatial_hashing(self):
@@ -40,7 +41,7 @@ class TestWorld(unittest.TestCase):
         self.assertTrue(world.is_walkable(0, 0, z=0) or not world.is_walkable(0, 0, z=0))
 
     def test_world_parking_roof_trash_features(self):
-        world = World(width=50, height=40, z_min=0, z_max=2)
+        World(width=50, height=40, z_min=0, z_max=2)
         self.assertEqual(TileType.PARKING, 14)
         self.assertEqual(TileType.ROOF, 15)
         self.assertEqual(TileType.TRASH_CAN, 16)
@@ -119,7 +120,7 @@ class TestWorld(unittest.TestCase):
         g_idx = world.z_to_idx(0)
         world.grid[g_idx, 5, 10] = TileType.BUILDING_WALL
 
-        from src.entities import Zombie, NoiseEvent
+        from src.entities import NoiseEvent, Zombie
         zombie = Zombie(8.0, 5.0, z=0)
         noise_event = [NoiseEvent(5.0, 5.0, 0, volume=20.0)]
 

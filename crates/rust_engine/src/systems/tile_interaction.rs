@@ -20,7 +20,11 @@ impl RustTileInteractionUtility {
     }
 
     #[staticmethod]
-    pub fn attempt_lockpick(lock_difficulty: u32, lockpick_skill: u32, has_bobby_pin: bool) -> (bool, bool) {
+    pub fn attempt_lockpick(
+        lock_difficulty: u32,
+        lockpick_skill: u32,
+        has_bobby_pin: bool,
+    ) -> (bool, bool) {
         if !has_bobby_pin {
             return (false, false);
         }
@@ -38,7 +42,11 @@ impl RustTileInteractionUtility {
     }
 
     #[staticmethod]
-    pub fn siphon_gasoline(vehicle_fuel: f32, canister_capacity: f32, canister_current: f32) -> (f32, f32) {
+    pub fn siphon_gasoline(
+        vehicle_fuel: f32,
+        canister_capacity: f32,
+        canister_current: f32,
+    ) -> (f32, f32) {
         let canister_space = (canister_capacity - canister_current).max(0.0);
         let siphoned = vehicle_fuel.min(canister_space);
 
@@ -49,7 +57,11 @@ impl RustTileInteractionUtility {
     }
 
     #[staticmethod]
-    pub fn evaluate_vehicle_crash_impact(vehicle_mass: f32, speed: f32, tile_type: i64) -> (bool, f32, bool) {
+    pub fn evaluate_vehicle_crash_impact(
+        vehicle_mass: f32,
+        speed: f32,
+        tile_type: i64,
+    ) -> (bool, f32, bool) {
         let momentum = vehicle_mass * speed;
         // Breachable obstacles: WALL (2), DOOR (7), WINDOW (49), SANDBAG (62)
         let is_breachable = matches!(tile_type, 2 | 7 | 49 | 62);
@@ -66,5 +78,11 @@ impl RustTileInteractionUtility {
         // Locked door (7), barricade (62, 63), window (49) breached if >= 3 zombies push
         let is_destructible = matches!(tile_type, 7 | 49 | 62 | 63);
         is_destructible && zombie_count >= 3
+    }
+}
+
+impl Default for RustTileInteractionUtility {
+    fn default() -> Self {
+        Self::new()
     }
 }

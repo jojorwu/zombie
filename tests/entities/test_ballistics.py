@@ -1,6 +1,7 @@
 import unittest
-from src.world import World, TileType
-from src.entities.ballistics_utility import BallisticsUtility, MaterialResistance
+
+from src.entities.ballistics_utility import BallisticsUtility
+from src.world import TileType, World
 
 
 class DummyTarget:

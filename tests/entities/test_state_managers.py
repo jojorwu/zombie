@@ -1,13 +1,19 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
-from src.world import World, TileType, ChunkState
+
 from src.entities import (
-    FurnitureState, FurnitureCondition, FurnitureStateManager,
-    ExtendedItemState, ItemCondition, ItemStateManager, ItemEntity, ResourceItem
+    FurnitureCondition,
+    FurnitureStateManager,
+    ItemCondition,
+    ItemEntity,
+    ItemStateManager,
+    ResourceItem,
 )
+from src.world import TileType, World
 from src.world.tile_interaction_utility import TileInteractionUtility
 
 
@@ -70,7 +76,7 @@ class TestStateManagers(unittest.TestCase):
 
         # Dismantle furniture
         inventory = {}
-        success, wood, metal = TileInteractionUtility.dismantle_furniture(world, 6, 5, 0, inventory)
+        success, _wood, _metal = TileInteractionUtility.dismantle_furniture(world, 6, 5, 0, inventory)
         self.assertTrue(success)
         self.assertGreater(inventory.get(ResourceItem.WOOD, 0), 0)
         self.assertIsNone(world.furniture_state_manager.get_state(6, 5, 0))

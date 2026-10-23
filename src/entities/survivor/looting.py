@@ -1,9 +1,9 @@
 import math
 import random
 
-from src.systems.container import ContainerUtility
-from src.entities.item import ResourceItem
 from src.entities.events import NoiseEvent
+from src.entities.item import ResourceItem
+from src.systems.container import ContainerUtility
 from src.world.tiles import TileType
 
 try:

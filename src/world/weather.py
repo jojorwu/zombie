@@ -63,7 +63,7 @@ class WeatherManager:
         self.update_season(current_tick)
 
         if self.rust_env:
-            light_lvl, rust_temp, wind_sp = self.rust_env.update_weather(current_tick, False)
+            _light_lvl, rust_temp, wind_sp = self.rust_env.update_weather(current_tick, False)
             self.temperature = rust_temp
             self.wind_speed = wind_sp
         else:

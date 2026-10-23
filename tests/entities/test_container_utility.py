@@ -1,9 +1,11 @@
 import unittest
-from src.entities.item import ResourceItem
-from src.world.tiles import TileType
-from src.entities.state_manager import FurnitureState, FurnitureStateManager
+
 from src.entities.container_utility import ContainerUtility
 from src.entities.food_spoilage_utility import FoodSpoilageUtility
+from src.entities.item import ResourceItem
+from src.entities.state_manager import FurnitureState
+from src.world.tiles import TileType
+
 
 class ItemCategory:
     FIREARM = "firearm"

@@ -1,16 +1,15 @@
-import sys
+import gc
+import json
 import os
+import sys
 import time
 import unittest
-import json
-import gc
+
 import psutil
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from src.simulation import SimulationEngine, EventBus, NoiseEmittedEvent, DamageDealtEvent
-from src.entities.state_manager import FurnitureStateManager, ItemStateManager, LazyChunkStatePersistence
-from src.world import World, ChunkManager, TileType
+from src.simulation import DamageDealtEvent, NoiseEmittedEvent, SimulationEngine
 
 
 class TestMaxLoadStress(unittest.TestCase):
@@ -72,8 +71,7 @@ class TestMaxLoadStress(unittest.TestCase):
         for t in range(num_ticks):
             sim.tick()
             curr_mem = self.get_mem_mb()
-            if curr_mem > peak_mem:
-                peak_mem = curr_mem
+            peak_mem = max(peak_mem, curr_mem)
 
             # Periodically move survivors around to force active chunk recalculations
             if t % 10 == 0:

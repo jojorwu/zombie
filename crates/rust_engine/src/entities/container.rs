@@ -23,6 +23,12 @@ impl RustContainerUtility {
     }
 }
 
+impl Default for RustContainerUtility {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Native Food Spoilage Decay Utility in Rust.
 #[pyclass]
 pub struct RustFoodSpoilageUtility;
@@ -55,5 +61,11 @@ impl RustFoodSpoilageUtility {
         let temp_factor = ((ambient_temp_c - 10.0) / 10.0).max(0.1);
         let total_decay = 0.001 * decay_mult * temp_factor;
         (base_freshness - total_decay).max(0.0)
+    }
+}
+
+impl Default for RustFoodSpoilageUtility {
+    fn default() -> Self {
+        Self::new()
     }
 }

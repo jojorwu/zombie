@@ -1,5 +1,5 @@
+use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
-use numpy::{PyArray1, PyArray2, IntoPyArray, PyReadonlyArray1, PyReadonlyArray2};
 
 /// Native High-Speed Neural Network Inference Engine in Rust.
 /// Executes batched forward pass (linear layers, ReLU activations, Softmax, GRU cell recurrence)
@@ -76,8 +76,12 @@ impl RustBrainInference {
         let obs_shape = obs_matrix.shape();
         let batch_size = obs_shape[0];
 
-        let obs_slice = obs_matrix.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
-        let hidden_slice = hidden_states.as_slice().map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+        let obs_slice = obs_matrix
+            .as_slice()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+        let hidden_slice = hidden_states
+            .as_slice()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
 
         let mut next_hidden = vec![0.0f32; batch_size * self.hidden_dim];
         let mut action_probs = vec![0.0f32; batch_size * self.action_dim];
@@ -135,13 +139,21 @@ impl RustBrainInference {
                 }
 
                 for i in 0..self.action_dim {
-                    action_probs[act_offset + i] = if sum_exp > 0.0 { logits[i] / sum_exp } else { 1.0 / self.action_dim as f32 };
+                    action_probs[act_offset + i] = if sum_exp > 0.0 {
+                        logits[i] / sum_exp
+                    } else {
+                        1.0 / self.action_dim as f32
+                    };
                 }
             }
         });
 
-        let probs_arr = numpy::ndarray::Array2::from_shape_vec((batch_size, self.action_dim), action_probs).unwrap();
-        let hid_arr = numpy::ndarray::Array2::from_shape_vec((batch_size, self.hidden_dim), next_hidden).unwrap();
+        let probs_arr =
+            numpy::ndarray::Array2::from_shape_vec((batch_size, self.action_dim), action_probs)
+                .unwrap();
+        let hid_arr =
+            numpy::ndarray::Array2::from_shape_vec((batch_size, self.hidden_dim), next_hidden)
+                .unwrap();
 
         Ok((probs_arr.into_pyarray(py), hid_arr.into_pyarray(py)))
     }

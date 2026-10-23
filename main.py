@@ -1,9 +1,15 @@
-import sys
-import os
-import json
 import argparse
+import atexit
+import json
+import os
+import sys
 
+from src.core.executors import shutdown_all_executors
 from src.simulation import SimulationEngine
+
+# Deterministically join the module-level thread pools (SIM/CHUNK/WORLD
+# executors) on interpreter exit instead of relying on teardown races.
+atexit.register(shutdown_all_executors)
 
 
 def get_resource_path(relative_path):
@@ -90,7 +96,7 @@ def main():
                             sim_engine.tick()
                     renderer_ui.render()
 
-            clock.tick(60)
+            clock.tick(sim_engine.config.get("simulation", {}).get("fps", 60))
 
 
 if __name__ == "__main__":

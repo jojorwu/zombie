@@ -49,8 +49,8 @@ class VehicleData:
 class VehiclePhysicsUtility:
     """Utility allowing developers and modders to inspect, configure, and fine-tune vehicle physics parameters on the fly."""
     @staticmethod
-    def customize_physics(vehicle, mass: float = None, max_speed: float = None, acceleration: float = None,
-                          brake_force: float = None, friction: float = None, steer_rate: float = None, collision_factor: float = None):
+    def customize_physics(vehicle, mass: float | None = None, max_speed: float | None = None, acceleration: float | None = None,
+                          brake_force: float | None = None, friction: float | None = None, steer_rate: float | None = None, collision_factor: float | None = None):
         p = vehicle.physics
         if mass is not None:
             p.mass = mass
@@ -73,7 +73,7 @@ class VehicleRegistry:
     _custom_vehicles = {}
 
     @classmethod
-    def register_vehicle_type(cls, model_id: str, name: str, speed: float, max_fuel: float, trunk_capacity: int, durability: float, noise_level: float = 18.0, physics_cfg: dict = None):
+    def register_vehicle_type(cls, model_id: str, name: str, speed: float, max_fuel: float, trunk_capacity: int, durability: float, noise_level: float = 18.0, physics_cfg: dict | None = None):
         cls._custom_vehicles[model_id] = {
             "name": name,
             "speed": speed,
@@ -91,7 +91,7 @@ class VehicleRegistry:
         return VehicleData.PRESETS.get(model_id, VehicleData.PRESETS[VehicleType.SEDAN])
 
     @classmethod
-    def create_vehicle(cls, model_id: str, x: float, y: float, z: int = 0, fuel: float = None):
+    def create_vehicle(cls, model_id: str, x: float, y: float, z: int = 0, fuel: float | None = None):
         from src.entities.vehicle import Vehicle
         info = cls.get_vehicle_info(model_id)
         if fuel is None:

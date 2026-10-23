@@ -1,5 +1,4 @@
 from src.simulation.bridge import PythonRustEngineBridge
-from src.systems.dev_utility import DevUtility
 from src.simulation.engine import SimulationEngine
 from src.simulation.environment import EnvironmentManager
 from src.simulation.event_bus import (
@@ -20,6 +19,7 @@ from src.simulation.snapshot import (
 )
 from src.simulation.spawner import EntitySpawner
 from src.simulation.systems import AcousticSystem, InfectionSystem, ParticleSystem
+from src.systems.dev_utility import DevUtility
 
 __all__ = [
     "AcousticSystem",

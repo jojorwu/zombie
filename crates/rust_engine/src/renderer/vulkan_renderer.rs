@@ -221,40 +221,73 @@ impl VulkanTileRenderer {
         for (ix, iy) in items {
             let px = (ix * ts as f32) as i32;
             let py = (iy * ts as f32) as i32;
-            Self::draw_filled_circle(&mut buffer, self.pixel_width, self.pixel_height, px, py, 3, (255, 215, 0));
+            Self::draw_filled_circle(
+                &mut buffer,
+                self.pixel_width,
+                self.pixel_height,
+                px,
+                py,
+                3,
+                (255, 215, 0),
+            );
         }
 
         // Draw vehicles
         for (vx, vy) in vehicles {
             let px = (vx * ts as f32) as i32;
             let py = (vy * ts as f32) as i32;
-            Self::draw_filled_rect(&mut buffer, self.pixel_width, self.pixel_height, px - 6, py - 6, 12, 12, (70, 130, 180));
+            Self::draw_filled_rect(
+                &mut buffer,
+                self.pixel_width,
+                self.pixel_height,
+                px - 6,
+                py - 6,
+                12,
+                12,
+                (70, 130, 180),
+            );
         }
 
         // Draw zombies
         for (zx, zy) in zombies {
             let px = (zx * ts as f32) as i32;
             let py = (zy * ts as f32) as i32;
-            Self::draw_filled_circle(&mut buffer, self.pixel_width, self.pixel_height, px, py, 5, (178, 34, 34));
+            Self::draw_filled_circle(
+                &mut buffer,
+                self.pixel_width,
+                self.pixel_height,
+                px,
+                py,
+                5,
+                (178, 34, 34),
+            );
         }
 
         // Draw survivors
         for (sx, sy, is_sel) in survivors {
             let px = (sx * ts as f32) as i32;
             let py = (sy * ts as f32) as i32;
-            let col = if is_sel { (255, 255, 255) } else { (50, 205, 50) };
-            Self::draw_filled_circle(&mut buffer, self.pixel_width, self.pixel_height, px, py, 6, col);
+            let col = if is_sel {
+                (255, 255, 255)
+            } else {
+                (50, 205, 50)
+            };
+            Self::draw_filled_circle(
+                &mut buffer,
+                self.pixel_width,
+                self.pixel_height,
+                px,
+                py,
+                6,
+                col,
+            );
         }
 
         PyBytes::new(py, &buffer)
     }
 
     /// Renders headless PPM image bytes directly for offscreen video/GIF recording without Pygame.
-    pub fn render_offscreen_ppm<'py>(
-        &self,
-        py: Python<'py>,
-        rgba_buffer: &[u8],
-    ) -> &'py PyBytes {
+    pub fn render_offscreen_ppm<'py>(&self, py: Python<'py>, rgba_buffer: &[u8]) -> &'py PyBytes {
         let header = format!("P6\n{} {}\n255\n", self.pixel_width, self.pixel_height);
         let mut ppm_data = header.into_bytes();
         ppm_data.reserve(self.pixel_width * self.pixel_height * 3);

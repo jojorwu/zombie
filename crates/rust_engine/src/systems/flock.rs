@@ -1,5 +1,5 @@
+use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
-use numpy::{PyArray1, PyReadonlyArray1, IntoPyArray};
 
 /// High-performance Rust zombie flocking steering calculation using zero-copy NumPy inputs.
 #[pyfunction]

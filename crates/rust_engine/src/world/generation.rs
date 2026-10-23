@@ -1,7 +1,9 @@
-use pyo3::prelude::*;
+use crate::world::grid::{
+    RustWorldGrid, TILE_BUILDING_WALL, TILE_DOOR, TILE_FLOOR, TILE_ROAD, TILE_WINDOW,
+};
+use numpy::{ndarray::Array3, IntoPyArray, PyArray3};
 use pyo3::exceptions::PyValueError;
-use numpy::{PyArray3, IntoPyArray, ndarray::Array3};
-use crate::world::grid::{RustWorldGrid, TILE_ROAD, TILE_BUILDING_WALL, TILE_FLOOR, TILE_DOOR, TILE_WINDOW};
+use pyo3::prelude::*;
 
 #[pyclass]
 pub struct RustWorldGenerator;
@@ -42,6 +44,12 @@ impl RustWorldGenerator {
         let py_array = Array3::from_shape_vec((z_layers, height, width), arr)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(py_array.into_pyarray(py).to_owned())
+    }
+}
+
+impl Default for RustWorldGenerator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

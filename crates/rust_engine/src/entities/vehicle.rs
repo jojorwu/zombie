@@ -1,5 +1,5 @@
-use pyo3::prelude::*;
 use crate::world::RustWorldGrid;
+use pyo3::prelude::*;
 
 /// Native Vehicle Physics & High-Momentum Wall Breaching in Rust.
 #[pyclass]
@@ -35,7 +35,12 @@ impl RustVehiclePhysics {
         }
     }
 
-    pub fn update_physics(&mut self, throttle: f32, steering_angle: f32, friction: f32) -> (f32, f32, f32) {
+    pub fn update_physics(
+        &mut self,
+        throttle: f32,
+        steering_angle: f32,
+        friction: f32,
+    ) -> (f32, f32, f32) {
         if self.fuel > 0.0 && throttle.abs() > 0.01 {
             let force = throttle * self.engine_power / self.mass.max(100.0);
             self.vx += steering_angle.cos() * force;

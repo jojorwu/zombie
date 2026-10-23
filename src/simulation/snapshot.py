@@ -39,7 +39,7 @@ class DoubleBufferedStateExchanger:
         """Logic Thread: Creates a state snapshot into the back buffer and swaps buffers."""
         surv_snapshots = [
             EntityStateSnapshot(
-                entity_id=id(s), x=s.x, y=s.y, z=s.z,
+                entity_id=s.uid, x=s.x, y=s.y, z=s.z,
                 facing_angle=getattr(s, 'facing_angle', 0.0),
                 entity_type="survivor", is_alive=s.is_alive, health=s.health
             ) for s in survivors
@@ -47,7 +47,7 @@ class DoubleBufferedStateExchanger:
 
         zomb_snapshots = [
             EntityStateSnapshot(
-                entity_id=id(z), x=z.x, y=z.y, z=z.z,
+                entity_id=z.uid, x=z.x, y=z.y, z=z.z,
                 facing_angle=getattr(z, 'facing_angle', 0.0),
                 entity_type="zombie", is_alive=z.is_alive, health=getattr(z, 'health', 100.0)
             ) for z in zombies if z.is_alive
@@ -55,7 +55,7 @@ class DoubleBufferedStateExchanger:
 
         veh_snapshots = [
             EntityStateSnapshot(
-                entity_id=id(v), x=v.x, y=v.y, z=v.z,
+                entity_id=v.uid, x=v.x, y=v.y, z=v.z,
                 facing_angle=getattr(v, 'facing_angle', 0.0),
                 entity_type="vehicle", is_alive=True, health=100.0
             ) for v in vehicles
@@ -63,7 +63,7 @@ class DoubleBufferedStateExchanger:
 
         item_snapshots = [
             EntityStateSnapshot(
-                entity_id=id(i), x=i.x, y=i.y, z=i.z,
+                entity_id=i.uid, x=i.x, y=i.y, z=i.z,
                 facing_angle=0.0, entity_type="item",
                 is_alive=not getattr(i, 'collected', False), health=100.0
             ) for i in items if not getattr(i, 'collected', False)

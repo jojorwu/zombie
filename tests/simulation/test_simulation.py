@@ -1,12 +1,20 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import unittest
 import json
-from src.simulation import SimulationEngine, EventBus, GameEvent, NoiseEmittedEvent, DamageDealtEvent, DoubleBufferedStateExchanger, PythonRustEngineBridge
-from src.entities.state_manager import LazyChunkStatePersistence
+import unittest
+
 from src.ai.pathfinding import AStar3D
+from src.entities.state_manager import LazyChunkStatePersistence
+from src.simulation import (
+    DoubleBufferedStateExchanger,
+    EventBus,
+    NoiseEmittedEvent,
+    PythonRustEngineBridge,
+    SimulationEngine,
+)
 from src.world import World
 
 

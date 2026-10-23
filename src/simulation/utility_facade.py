@@ -1,11 +1,11 @@
 from typing import Any
 
+from src.entities.events import NoiseEvent
 from src.systems.ballistics import BallisticsUtility
 from src.systems.container import ContainerUtility
-from src.entities.events import NoiseEvent
 from src.systems.sound import SoundUtility
-from src.systems.vehicle import VehiclePhysicsUtility
 from src.systems.tile_interaction import TileInteractionUtility
+from src.systems.vehicle import VehiclePhysicsUtility
 
 try:
     from rust_engine import (

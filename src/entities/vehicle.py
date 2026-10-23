@@ -148,9 +148,7 @@ class Vehicle:
             return False
         if engine and engine.hp <= 0.0:
             return False
-        if battery and battery.hp <= 0.0:
-            return False
-        return True
+        return not (battery and battery.hp <= 0.0)
 
     def update_physics(self, throttle: float = 0.0, steer: float = 0.0, brake: bool = False, world=None, noise_events=None):
         """Updates CDDA-style vehicle physics, engine operation, wheel condition, acoustic noise, and driver Z synchronization."""

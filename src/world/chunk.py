@@ -60,8 +60,8 @@ class ChunkManager:
         self.chunk_size = chunk_size
         self.world_width = world_width
         self.world_height = world_height
-        self.num_chunks_x = int(math.ceil(world_width / chunk_size))
-        self.num_chunks_y = int(math.ceil(world_height / chunk_size))
+        self.num_chunks_x = math.ceil(world_width / chunk_size)
+        self.num_chunks_y = math.ceil(world_height / chunk_size)
         self.chunks = {}
         self.active_chunks = set()
 
@@ -197,9 +197,8 @@ class ChunkManager:
             chunk = self.get_chunk(cx, cy)
             if chunk and chunk.state == ChunkState.ACTIVE:
                 active_zombies.append(z)
-            elif chunk:
-                if z not in chunk.stored_zombies:
-                    chunk.stored_zombies.append(z)
+            elif chunk and z not in chunk.stored_zombies:
+                chunk.stored_zombies.append(z)
         return active_zombies
 
     def rehydrate_zombies_from_active_chunks(self) -> list:
@@ -234,9 +233,8 @@ class ChunkManager:
             chunk = self.get_chunk(cx, cy)
             if chunk and chunk.state == ChunkState.ACTIVE:
                 active_vehicles.append(v)
-            elif chunk:
-                if v not in chunk.stored_vehicles:
-                    chunk.stored_vehicles.append(v)
+            elif chunk and v not in chunk.stored_vehicles:
+                chunk.stored_vehicles.append(v)
         return active_vehicles
 
     def rehydrate_vehicles_from_active_chunks(self) -> list:
@@ -269,9 +267,8 @@ class ChunkManager:
             chunk = self.get_chunk(cx, cy)
             if chunk and chunk.state == ChunkState.ACTIVE:
                 active_items.append(item)
-            elif chunk:
-                if item not in chunk.stored_items:
-                    chunk.stored_items.append(item)
+            elif chunk and item not in chunk.stored_items:
+                chunk.stored_items.append(item)
         return active_items
 
     def rehydrate_items_from_active_chunks(self) -> list:

@@ -119,7 +119,7 @@ def batch_get_action_and_movement(
         elif h.dim() == 1:
             h = h.unsqueeze(0)
         if h.device != DEVICE:
-            h = h.to(DEVICE, non_blocking=True if DEVICE.type == "cuda" else False)
+            h = h.to(DEVICE, non_blocking=DEVICE.type == "cuda")
         valid_hiddens.append(h)
 
     h_cat = torch.cat(valid_hiddens, dim=0).to(DEVICE)

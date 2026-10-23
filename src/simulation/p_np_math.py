@@ -57,6 +57,6 @@ class PolynomialKnapsackSolver:
             pnp = RustPNPComplexityEngine(3)
             weights = [getattr(item, 'weight', 1.0) for item in items]
             values = [getattr(item, 'value', 1.0) for item in items]
-            total_val, indices = pnp.solve_polynomial_knapsack(max_capacity, weights, values)
+            _total_val, indices = pnp.solve_polynomial_knapsack(max_capacity, weights, values)
             return [items[i] for i in indices]
         return items

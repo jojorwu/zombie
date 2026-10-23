@@ -34,7 +34,7 @@ class HierarchicalDecisionPlanner:
         self.target_entity = None
         self.target_pos = None
 
-    def evaluate_goal(self, survivor, world, items, vehicles, zombies, animals, action_idx: int = None) -> HighLevelGoal:
+    def evaluate_goal(self, survivor, world, items, vehicles, zombies, animals, action_idx: int | None = None) -> HighLevelGoal:
         """Determines the survivor's current high-level goal based on needs, threats, Line-of-Sight, and spatial memory."""
         self.target_entity = None
         self.target_pos = None

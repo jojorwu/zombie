@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.entities.emotion import EmotionalState
 from src.entities.events import NoiseEvent
@@ -236,7 +236,7 @@ class SurvivorActions:
         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             fx, fy = int(survivor.x + dx), int(survivor.y + dy)
             if hasattr(tile_backend, 'dismantle_furniture'):
-                success, w_amt, m_amt = tile_backend.dismantle_furniture(world, fx, fy, survivor.z, survivor.inventory)
+                success, _w_amt, _m_amt = tile_backend.dismantle_furniture(world, fx, fy, survivor.z, survivor.inventory)
                 if success:
                     survivor.score += 12.0
                     if noise_events is not None:

@@ -28,7 +28,7 @@ class DevUtility:
         start = time.time()
         a = torch.randn(1000, 1000, device=device)
         b = torch.randn(1000, 1000, device=device)
-        c = torch.matmul(a, b)
+        torch.matmul(a, b)
         if device == "cuda":
             torch.cuda.synchronize()
         matrix_time = time.time() - start

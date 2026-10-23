@@ -3,7 +3,7 @@ import threading
 
 from src.entities.anatomy import AnatomicalHealth, BodyPart
 from src.entities.crafting import CraftingSystem
-from src.entities.emotion import EmotionalState  # noqa: F401 (re-export for back-compat)
+from src.entities.emotion import EmotionalState
 from src.entities.events import NoiseEvent
 from src.entities.identifiers import next_uid
 from src.entities.item import ResourceItem
@@ -275,7 +275,7 @@ class Survivor:
 
         nx = self.x + dx * speed
         ny = self.y + dy * speed
-        target_z = max(world.z_min, min(world.z_max, int(round(self.z + dz))))
+        target_z = max(world.z_min, min(world.z_max, round(self.z + dz)))
 
         moved = False
         if world.is_walkable(nx, ny, target_z):

@@ -1,16 +1,22 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
-from src.simulation.dev_utility import PolynomialVerifier, DevUtility
-from src.modding.mod_utility import ModUtility
-from src.ai.pathfinding_utility import PathfindingUtility
-from src.entities.vehicle_utility import VehicleRegistry, VehicleType, VehiclePhysicsUtility
-from src.simulation.p_np_math import PNPComplexityEngine
-from src.world.tile_interaction_utility import TileInteractionUtility
+
 from src.ai.pathfinding import AStar3D
-from src.world import World, TileType, ChunkManager
+from src.ai.pathfinding_utility import PathfindingUtility
+from src.entities.vehicle_utility import (
+    VehiclePhysicsUtility,
+    VehicleRegistry,
+)
+from src.modding.mod_utility import ModUtility
+from src.simulation.dev_utility import DevUtility, PolynomialVerifier
+from src.simulation.p_np_math import PNPComplexityEngine
+from src.world import ChunkManager, TileType, World
+from src.world.tile_interaction_utility import TileInteractionUtility
+
 
 class TestUtilitiesAndMath(unittest.TestCase):
     def test_3d_astar_pathfinding(self):
@@ -77,7 +83,7 @@ class TestUtilitiesAndMath(unittest.TestCase):
         z_idx = world.z_to_idx(0)
         world.grid[z_idx, 5, 5] = TileType.GAS_PUMP
         inventory = {}
-        success, amount = TileInteractionUtility.siphon_fuel_from_pump(world, 5, 5, 0, inventory)
+        success, _amount = TileInteractionUtility.siphon_fuel_from_pump(world, 5, 5, 0, inventory)
         self.assertTrue(success)
         self.assertEqual(inventory.get("fuel", 0), 2)
 

@@ -1,19 +1,30 @@
-import sys
 import os
+import sys
 import tempfile
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
-import torch
+
 import numpy as np
-from src.ai.network import BrainNet, GeneticEvolutionManager, save_zbrain, load_zbrain, DEVICE
-from src.ai.inference import batch_get_action_and_movement, extract_survivor_inputs, check_line_of_sight
-from src.ai.hierarchical_ai import HierarchicalDecisionPlanner, HighLevelGoal
+import torch
+
 from src.ai.gym_env import SurvivorGymEnv
-from src.ai.ppo import PPOActorCritic, PPOAgent
+from src.ai.hierarchical_ai import HierarchicalDecisionPlanner, HighLevelGoal
+from src.ai.inference import (
+    batch_get_action_and_movement,
+    check_line_of_sight,
+    extract_survivor_inputs,
+)
+from src.ai.network import (
+    BrainNet,
+    load_zbrain,
+    save_zbrain,
+)
+from src.ai.ppo import PPOAgent
 from src.entities import Survivor
 from src.entities.zombie import Zombie
-from src.world import World, TileType
+from src.world import TileType, World
 
 
 class TestBrain(unittest.TestCase):
@@ -108,13 +119,13 @@ class TestBrain(unittest.TestCase):
         self.assertEqual(obs.shape, (57,))
 
         agent = PPOAgent(input_dim=57, hidden_dim=64, action_dim=13)
-        action, log_prob, val = agent.model.get_action(obs)
+        action, _log_prob, _val = agent.model.get_action(obs)
 
         self.assertIsInstance(action, int)
         self.assertGreaterEqual(action, 0)
         self.assertLess(action, 13)
 
-        next_obs, reward, terminated, truncated, info = env.step(action)
+        next_obs, reward, _terminated, _truncated, _info = env.step(action)
         self.assertEqual(next_obs.shape, (57,))
         self.assertIsInstance(reward, float)
 

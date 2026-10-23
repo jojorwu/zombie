@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y libsdl2-dev
+          pip install -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check src tests main.py train.py
+      - name: Tests (Python fallback path, no Rust module)
+        run: pytest tests -q
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Format check
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Build release engine
+        run: cargo build --release
+      - name: Rust unit tests
+        run: cargo test --workspace
+
+  integration:
+    # Runs the Python suite against the compiled native engine so the
+    # bridge invariants are exercised on both sides.
+    runs-on: ubuntu-latest
+    needs: [rust]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y libsdl2-dev
+          pip install -r requirements-dev.txt
+      - name: Build Rust engine
+        run: |
+          cargo build --release
+          cp target/release/librust_engine.so ./rust_engine.so
+          python -c "import rust_engine; print('rust engine OK')"
+      - name: Tests (native engine path)
+        run: pytest tests -q

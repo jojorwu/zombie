@@ -93,7 +93,7 @@ class AStar3D:
         nodes_searched = 0
 
         while open_heap and nodes_searched < max_nodes:
-            f, g, x, y, z = heapq.heappop(open_heap)
+            _f, g, x, y, z = heapq.heappop(open_heap)
             pos = (x, y, z)
 
             if pos in closed_set:

@@ -10,7 +10,6 @@ import math
 
 from src.entities.identifiers import next_uid
 
-
 _PROFILE_CACHE = None
 
 

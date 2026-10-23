@@ -13,7 +13,7 @@ def _noise_event_cls():
     import sys
     mod = sys.modules.get("src.entities.events")
     if mod is None:
-        from src.entities import events as mod  # noqa: F811
+        from src.entities import events as mod
     return mod.NoiseEvent
 
 # Rust availability is probed once at import time (cheap), but the Rust
@@ -185,7 +185,7 @@ class BallisticsUtility:
     @classmethod
     def simulate_bullet_flight(cls, world, start_x: float, start_y: float, start_z: int, angle_rad: float, caliber: str = "9mm",
                                wind_speed_kmh: float = 0.0, wind_angle_rad: float = 0.0,
-                               targets: list = None, noise_events: list = None) -> dict:
+                               targets: list | None = None, noise_events: list | None = None) -> dict:
         """
         Executes a step-by-step raycast projectile simulation:
         - Evaluates aerodynamic velocity decay, wind drift, bullet drop
@@ -197,7 +197,7 @@ class BallisticsUtility:
         data = cls.CALIBERS.get(caliber, cls.CALIBERS["9mm"])
         v0 = data["muzzle_velocity"]
         m = data["mass_kg"]
-        cd = data["drag_coeff"]
+        data["drag_coeff"]
         max_dist = data["max_range"]
         base_dmg = data["base_damage"]
 

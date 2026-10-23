@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-import sys
-import os
-import time
 import argparse
+import os
+import sys
+import time
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from src.simulation import SimulationEngine, ReportManager
 from src.ai.network import DEVICE
+from src.simulation import ReportManager, SimulationEngine
 
 try:
     import rust_engine

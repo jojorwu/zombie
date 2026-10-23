@@ -164,7 +164,7 @@ class ContainerUtility:
     def transfer_item(cls, source, target, item_type: str, amount: int = 1) -> int:
         taken = cls.remove_item_from_container(source, item_type, amount)
         if taken > 0:
-            ok, added = cls.add_item_to_container(target, item_type, taken)
+            _ok, added = cls.add_item_to_container(target, item_type, taken)
             if added < taken:
                 cls.add_item_to_container(source, item_type, taken - added)
             return added

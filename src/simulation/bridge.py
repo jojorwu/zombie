@@ -1,6 +1,6 @@
+import logging
 from typing import Any
 
-import logging
 import numpy as np
 
 _logger = logging.getLogger(__name__)

@@ -6,22 +6,22 @@ from typing import Any
 from src.ai.hierarchical_ai import HierarchicalDecisionPlanner
 from src.ai.inference import batch_get_action_and_movement, extract_survivor_inputs
 from src.ai.network import BrainNet, GeneticEvolutionManager
+from src.core.executors import register_executor
+from src.entities.events import NoiseEvent, ScentTrail
 from src.entities.factory import EntityFactory
 from src.entities.item import ResourceItem
-from src.entities.events import NoiseEvent, ScentTrail
 from src.entities.state_manager import LazyChunkStatePersistence
 from src.entities.survivor import Survivor
 from src.entities.vehicle import Vehicle
 from src.modding.manager import LuaModManager
 from src.simulation.bridge import PythonRustEngineBridge
-from src.core.executors import register_executor
 from src.simulation.environment import EnvironmentManager
 from src.simulation.event_bus import DamageDealtEvent, EventBus, NoiseEmittedEvent
 from src.simulation.memory_monitor_utility import MemoryMonitorUtility
 from src.simulation.snapshot import DoubleBufferedStateExchanger
 from src.simulation.spawner import EntitySpawner
-from src.world.grid import World
 from src.systems.electricity import ElectricityUtility
+from src.world.grid import World
 
 SIM_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=4)
 register_executor('SIM_EXECUTOR', SIM_EXECUTOR)

@@ -1,9 +1,9 @@
 import collections
 
-from src.entities.identifiers import next_uid
 from src.entities.animal import Animal
-from src.entities.item import ItemEntity
 from src.entities.events import NoiseEvent, ScentTrail
+from src.entities.identifiers import next_uid
+from src.entities.item import ItemEntity
 from src.entities.zombie.zombie import Zombie, ZombieState
 
 

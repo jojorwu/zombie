@@ -103,7 +103,7 @@ class LightingEngine:
 
         return max(0.08, min(1.0, ambient))
 
-    def compute_fog_of_war(self, x: float, y: float, radius: int = 8, z: int = 0, facing_angle: float = None, fov_degrees: float = 180.0) -> set:
+    def compute_fog_of_war(self, x: float, y: float, radius: int = 8, z: int = 0, facing_angle: float | None = None, fov_degrees: float = 180.0) -> set:
         """
         Dynamic raycasted Fog of War with weather/darkness sight radius constraints and FOV cone filtering.
         """

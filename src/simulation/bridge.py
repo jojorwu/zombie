@@ -108,6 +108,22 @@ class PythonRustEngineBridge:
     _zomb_buf: np.ndarray
     _zomb_uids: np.ndarray
 
+    @staticmethod
+    def _ensure_capacity(buf: np.ndarray | None, n_rows: int, cols: int = 6,
+                         dtype=np.float32) -> np.ndarray:
+        """Return a buffer with at least ``n_rows`` rows, growing geometrically.
+
+        Reallocating on every row-count change (the old behaviour) made roster
+        churn (spawn/death/freeze) an O(n) memcpy per tick.  Capacity doubling
+        amortises reallocation to O(1) per entity while callers keep using
+        only ``buf[:n_rows]`` — stale tail rows are never sent to Rust because
+        we pass a narrowed view.
+        """
+        if buf is None or buf.shape[0] < n_rows or buf.shape[-1] != cols:
+            cap = max(n_rows, 64, (0 if buf is None else buf.shape[0]) * 2)
+            buf = np.zeros((cap, cols), dtype=dtype)
+        return buf
+
     def __init__(
         self,
         width: int = 1000,
@@ -189,9 +205,8 @@ class PythonRustEngineBridge:
             return
         n_s: int = len(survivors)
         if hasattr(self.full_sim_core, "sync_survivors_batch") and n_s:
-            if not hasattr(self, "_surv_buf9") or self._surv_buf9.shape[0] != n_s:
-                self._surv_buf9 = np.zeros((n_s, 9), dtype=np.float32)
-            buf = self._surv_buf9
+            self._surv_buf9 = self._ensure_capacity(getattr(self, "_surv_buf9", None), n_s, cols=9)
+            buf = self._surv_buf9[:n_s]
             buf[:, 6:] = 0.0
             for i, s in enumerate(survivors):
                 buf[i, 0] = float(s.x)
@@ -331,17 +346,17 @@ class PythonRustEngineBridge:
 
         if sync_survivors and hasattr(self.full_sim_core, 'sync_survivors_batch') and survivors:
             n_s: int = len(survivors)
-            if not hasattr(self, '_surv_buf') or self._surv_buf.shape[0] != n_s:
-                self._surv_buf = np.empty((n_s, 6), dtype=np.float32)
+            self._surv_buf = self._ensure_capacity(getattr(self, '_surv_buf', None), n_s, cols=6)
+            buf = self._surv_buf[:n_s]
 
             for i, s in enumerate(survivors):
-                self._surv_buf[i, 0] = float(s.x)
-                self._surv_buf[i, 1] = float(s.y)
-                self._surv_buf[i, 2] = float(s.z)
-                self._surv_buf[i, 3] = float(getattr(s, 'health', 100.0))
-                self._surv_buf[i, 4] = float(getattr(s, 'hunger', 100.0))
-                self._surv_buf[i, 5] = float(getattr(s, 'thirst', 100.0))
-            self.full_sim_core.sync_survivors_batch(self._surv_buf)
+                buf[i, 0] = float(s.x)
+                buf[i, 1] = float(s.y)
+                buf[i, 2] = float(s.z)
+                buf[i, 3] = float(getattr(s, 'health', 100.0))
+                buf[i, 4] = float(getattr(s, 'hunger', 100.0))
+                buf[i, 5] = float(getattr(s, 'thirst', 100.0))
+            self.full_sim_core.sync_survivors_batch(buf)
 
         if (sync_zombies and hasattr(self.full_sim_core, 'sync_zombies_batch')
                 and zombies):
@@ -349,20 +364,19 @@ class PythonRustEngineBridge:
             # Identity travels in a dedicated int64 vector (exact for any uid,
             # no float32 precision ceiling); spatial/vital data stays in a
             # float32 matrix with columns [x, y, z_level, hp, speed].
-            if (not hasattr(self, '_zomb_buf') or self._zomb_buf.shape[0] != n_z
-                    or self._zomb_uids.shape[0] != n_z):
-                self._zomb_buf = np.empty((n_z, 5), dtype=np.float32)
-                self._zomb_uids = np.empty(n_z, dtype=np.int64)
-
-            uids = self._zomb_uids
+            self._zomb_buf = self._ensure_capacity(getattr(self, '_zomb_buf', None), n_z, cols=5)
+            self._zomb_uids = self._ensure_capacity(getattr(self, '_zomb_uids', None), n_z, cols=1,
+                                                    dtype=np.int64)
+            uids = self._zomb_uids[:n_z, 0]
+            zbuf = self._zomb_buf[:n_z]
             for i, z in enumerate(zombies):
                 uids[i] = int(getattr(z, 'uid', 0))
-                self._zomb_buf[i, 0] = float(z.x)
-                self._zomb_buf[i, 1] = float(z.y)
-                self._zomb_buf[i, 2] = float(z.z)
-                self._zomb_buf[i, 3] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
-                self._zomb_buf[i, 4] = float(getattr(z, 'speed', 0.08))
-            self.full_sim_core.sync_zombies_batch(self._zomb_uids, self._zomb_buf, full_roster)
+                zbuf[i, 0] = float(z.x)
+                zbuf[i, 1] = float(z.y)
+                zbuf[i, 2] = float(z.z)
+                zbuf[i, 3] = float(getattr(z, 'hp', getattr(z, 'health', 50.0)))
+                zbuf[i, 4] = float(getattr(z, 'speed', 0.08))
+            self.full_sim_core.sync_zombies_batch(uids, zbuf, full_roster)
 
     def step_full_simulation(self, actions: list[int], movements: list[tuple[float, float]]) -> np.ndarray:
         """Executes full simulation step in Rust and returns 2D observation tensor for PyTorch."""
